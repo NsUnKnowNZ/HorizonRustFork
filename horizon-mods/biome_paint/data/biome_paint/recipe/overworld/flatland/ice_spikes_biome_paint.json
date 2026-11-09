@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:ice",
+    "minecraft:glass_bottle",
+    "minecraft:packed_ice"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 8434839,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:ice_spikes"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.ice_spikes",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

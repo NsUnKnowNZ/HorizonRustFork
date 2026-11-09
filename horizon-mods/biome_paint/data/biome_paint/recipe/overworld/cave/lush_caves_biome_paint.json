@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:moss",
+    "minecraft:glass_bottle",
+    "minecraft:stone"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 9353585,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:lush_caves"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.lush_caves",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

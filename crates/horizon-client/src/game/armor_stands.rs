@@ -226,6 +226,17 @@ impl Game<'_> {
     /// `HumanoidArmorLayer` for the player: (model, texture rect, colour,
     /// overlay) of each worn piece, head to feet.
     pub(super) fn player_armor_layers(&self) -> Vec<(&Part, [f32; 4], u32, u32, bool)> {
+        // Armor Hider: the pieces the player hid are worn but not drawn.
+        let hidden = super::armor_hider::hidden();
+        if hidden.iter().any(|&h| h) {
+            let mut armor = self.armor.clone();
+            for (piece, hide) in armor.iter_mut().zip(hidden) {
+                if hide {
+                    *piece = None;
+                }
+            }
+            return self.stack_armor_layers(&armor);
+        }
         self.stack_armor_layers(&self.armor)
     }
     /// `HumanoidArmorLayer` for worn stacks (head to feet), trims included.

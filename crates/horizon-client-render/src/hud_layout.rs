@@ -273,6 +273,10 @@ pub struct HotbarInputs {
     pub offhand_pop: f32,
     /// `getAttackStrengthScale(0)` when the attack indicator is in HOTBAR mode.
     pub attack: Option<f32>,
+    /// Smooth Scroll: where the selector is drawn, in slots, while it glides
+    /// toward `selected` (-1..9 while it rolls over an edge). None draws it on
+    /// `selected`.
+    pub selected_at: Option<f32>,
 }
 
 /// `Hud.extractItemHotbar`.
@@ -280,13 +284,34 @@ pub fn hotbar(w: i32, h: i32, i: &HotbarInputs) -> Vec<GuiDraw> {
     let mut out = Vec::new();
     let center = w / 2;
     out.push(sprite("hud/hotbar", center - 91, h - 22, 182, 22));
-    out.push(sprite(
-        "hud/hotbar_selection",
-        center - 91 - 1 + i.selected * 20,
-        h - 22 - 1,
-        24,
-        23,
-    ));
+    match i.selected_at {
+        None => out.push(sprite(
+            "hud/hotbar_selection",
+            center - 91 - 1 + i.selected * 20,
+            h - 22 - 1,
+            24,
+            23,
+        )),
+        Some(at) => {
+            // Smooth Scroll: on the glide's position, and once more on the far
+            // side while it rolls over an edge.
+            let mut slots = vec![at];
+            if at > 8.0 {
+                slots.push(at - 9.0);
+            } else if at < 0.0 {
+                slots.push(at + 9.0);
+            }
+            for at in slots {
+                out.push(sprite(
+                    "hud/hotbar_selection",
+                    center - 91 - 1 + (at * 20.0).round() as i32,
+                    h - 22 - 1,
+                    24,
+                    23,
+                ));
+            }
+        }
+    }
     // The off hand is opposite the main arm.
     let offhand_left = i.right_handed;
     if i.offhand {

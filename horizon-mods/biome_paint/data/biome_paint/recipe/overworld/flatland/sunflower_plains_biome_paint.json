@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:short_grass",
+    "minecraft:glass_bottle",
+    "minecraft:sunflower"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 9551193,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:sunflower_plains"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.sunflower_plains",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

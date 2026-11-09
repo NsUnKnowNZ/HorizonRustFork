@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:stone",
+    "minecraft:glass_bottle",
+    "minecraft:diorite"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 10141259,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:stony_peaks"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.stony_peaks",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:soul_soil",
+    "minecraft:glass_bottle",
+    "minecraft:soul_sand"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 1787717,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:soul_sand_valley"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.soul_sand_valley",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

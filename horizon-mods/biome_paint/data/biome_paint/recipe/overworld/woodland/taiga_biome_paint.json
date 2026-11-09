@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:spruce_sapling",
+    "minecraft:glass_bottle",
+    "minecraft:spruce_leaves"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 8828803,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:taiga"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.taiga",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

@@ -1,0 +1,9 @@
+# Biome Paint (FloffyToffyToolBox, CC0-1.0) for Horizon: the Biome Brush and the biome paints,
+# their textures and recipes from biome_paint_1.21-1.21.2_1.0.0.jar. A paint keeps its biome in
+# custom_data and its colour in dyed_color; the brush's behaviour is the native mod biome_paint.
+id = "biome_paint"
+name = "Biome Paint"
+version = "1.0.0"
+api = "0.2"
+side = "both"
+capabilities = ["registries"]

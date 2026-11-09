@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:kelp",
+    "minecraft:glass_bottle",
+    "minecraft:ice",
+    "minecraft:deepslate"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 4020182,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:deep_cold_ocean"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.deep_cold_ocean",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

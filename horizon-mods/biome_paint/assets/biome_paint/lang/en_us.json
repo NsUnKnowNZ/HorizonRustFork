@@ -1,0 +1,9 @@
+{
+  "item.biome_paint.biome_paint": "Biome Paint",
+  "item.biome_paint.biome_brush": "Biome Brush",
+  "biome_paint.first": "First corner set: right click a second block with the same paint to paint the area",
+  "biome_paint.painted": "Painted %s biome cells",
+  "biome_paint.too_big": "That area is too big to paint (%s cells, at most %s)",
+  "biome_paint.cleared": "Brush cleaned",
+  "biome_paint.unloaded": "Part of that area isn't loaded"
+}

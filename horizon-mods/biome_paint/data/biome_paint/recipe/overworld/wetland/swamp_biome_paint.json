@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:vine",
+    "minecraft:glass_bottle",
+    "minecraft:mud"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 6975545,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:swamp"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.swamp",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:oak_log",
+    "minecraft:glass_bottle",
+    "minecraft:terracotta"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 9470285,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:wooded_badlands"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.wooded_badlands",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

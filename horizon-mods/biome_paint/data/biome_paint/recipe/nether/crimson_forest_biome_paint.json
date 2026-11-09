@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:crimson_nylium",
+    "minecraft:glass_bottle",
+    "minecraft:crimson_roots"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 3343107,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:crimson_forest"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.crimson_forest",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

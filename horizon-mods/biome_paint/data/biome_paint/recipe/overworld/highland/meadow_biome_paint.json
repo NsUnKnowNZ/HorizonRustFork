@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "#minecraft:flowers",
+    "minecraft:glass_bottle",
+    "minecraft:bee_nest"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 8633197,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:meadow"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.meadow",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

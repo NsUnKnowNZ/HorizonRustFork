@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:kelp",
+    "minecraft:glass_bottle",
+    "minecraft:sand"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 4445678,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:warm_ocean"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.warm_ocean",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

@@ -344,6 +344,8 @@ impl Settings {
             .unwrap_or_default();
         crate::mipmap::set_dither_cutouts(horizon.dither_cutout_mips);
         if let Some(dir) = path.parent() {
+            // Java Edition's packs come along before the lists are read.
+            crate::java_packs::import(&crate::logging::shared_dir(dir));
             let (key, _) = crate::shader_pack_list::resolve(
                 &crate::logging::shared_dir(dir).join(crate::shader_pack_list::DIR),
                 &horizon.shader_pack,

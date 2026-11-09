@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:end_stone",
+    "minecraft:glass_bottle",
+    "minecraft:end_stone"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 6443678,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:small_end_islands"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.small_end_islands",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

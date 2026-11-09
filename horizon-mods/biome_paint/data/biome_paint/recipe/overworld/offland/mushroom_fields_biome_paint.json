@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:mycelium",
+    "minecraft:glass_bottle",
+    "minecraft:red_mushroom"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 5622079,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:mushroom_fields"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.mushroom_fields",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

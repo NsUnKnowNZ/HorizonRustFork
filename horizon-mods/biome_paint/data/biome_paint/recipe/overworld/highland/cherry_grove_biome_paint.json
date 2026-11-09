@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:pink_petals",
+    "minecraft:glass_bottle",
+    "minecraft:cherry_leaves"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 11983713,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:cherry_grove"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.cherry_grove",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

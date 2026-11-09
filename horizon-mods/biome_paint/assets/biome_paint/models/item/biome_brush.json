@@ -1,0 +1,7 @@
+{
+  "parent": "item/handheld",
+  "textures": {
+    "layer0": "biome_paint:item/biome_brush_overlay",
+    "layer1": "biome_paint:item/biome_brush"
+  }
+}

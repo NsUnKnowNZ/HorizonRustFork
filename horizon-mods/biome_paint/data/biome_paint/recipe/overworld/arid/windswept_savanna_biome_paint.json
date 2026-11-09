@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:acacia_leaves",
+    "minecraft:glass_bottle",
+    "minecraft:grass_block",
+    "minecraft:stone"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 12564309,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:windswept_savanna"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.windswept_savanna",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

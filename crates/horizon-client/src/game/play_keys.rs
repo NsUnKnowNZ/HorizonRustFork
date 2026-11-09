@@ -88,6 +88,10 @@ impl Game<'_> {
                 Screen::Mod => self.close_mod_screen(),
                 Screen::HudEditor => self.close_hud_editor(),
             },
+            // Armor Hider: H over an armour slot shows or hides that piece.
+            KeyCode::KeyH
+                if matches!(self.screen, Screen::Inventory | Screen::Creative)
+                    && self.armor_hider_key() => {}
             // `checkHotbarKeyPressed`: the keys the controls bind to the off
             // hand and the hotbar slots, so a rebound key swaps instead of
             // reaching the screen. The list below keeps Q and the defaults.

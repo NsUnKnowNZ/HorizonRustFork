@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:netherrack",
+    "minecraft:glass_bottle",
+    "minecraft:quartz"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 3344392,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:nether_wastes"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.nether_wastes",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

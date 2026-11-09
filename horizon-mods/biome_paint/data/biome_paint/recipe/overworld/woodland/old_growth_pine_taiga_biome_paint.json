@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:spruce_sapling",
+    "minecraft:glass_bottle",
+    "minecraft:spruce_leaves",
+    "minecraft:coarse_dirt"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 8829055,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:old_growth_pine_taiga"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.old_growth_pine_taiga",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

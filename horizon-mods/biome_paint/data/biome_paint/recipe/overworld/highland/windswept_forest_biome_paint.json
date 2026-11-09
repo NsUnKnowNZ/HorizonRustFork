@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:grass_block",
+    "minecraft:glass_bottle",
+    "minecraft:short_grass",
+    "minecraft:oak_leaves"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 9090697,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:windswept_forest"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.windswept_forest",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

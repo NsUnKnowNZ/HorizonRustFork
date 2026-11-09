@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:dark_oak_sapling",
+    "minecraft:glass_bottle",
+    "minecraft:dark_oak_leaves"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 5274162,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:dark_forest"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.dark_forest",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

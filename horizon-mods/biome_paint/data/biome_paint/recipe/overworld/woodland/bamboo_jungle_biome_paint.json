@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:jungle_sapling",
+    "minecraft:glass_bottle",
+    "minecraft:bamboo"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 6604607,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:bamboo_jungle"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.bamboo_jungle",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

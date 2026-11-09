@@ -129,7 +129,13 @@ impl Game<'_> {
                 0.0,
                 batch.width,
                 batch.height,
-                rgba(16, 16, 16, 160),
+                // Smooth GUI: the dimming fades in over 150 ms, to 0.65.
+                rgba(
+                    16,
+                    16,
+                    16,
+                    (166.0 * (self.smooth_gui_elapsed() / 0.15).clamp(0.0, 1.0)) as u8,
+                ),
             );
         }
     }

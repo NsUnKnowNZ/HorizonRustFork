@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:stone",
+    "minecraft:glass_bottle",
+    "minecraft:snow"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 8434839,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:jagged_peaks"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.jagged_peaks",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

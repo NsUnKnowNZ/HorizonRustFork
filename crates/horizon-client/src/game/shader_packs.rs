@@ -81,7 +81,26 @@ fn dev_pack() -> Option<&'static str> {
         .as_deref()
 }
 
+/// Set once the picked pack's frames lost the graphics device: the pack stays off until Horizon
+/// starts again, so the world comes back without it instead of the game closing.
+static PACK_LOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The device was lost with a pack running: that pack is turned off for this run. Its name, or
+/// None when no pack ran (or one was already turned off).
+pub(super) fn drop_pack_after_device_loss(
+    settings: &horizon_client::settings::Settings,
+) -> Option<String> {
+    let picked = picked_pack(settings).to_owned();
+    if picked.is_empty() || PACK_LOST.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
+    Some(picked)
+}
+
 fn picked_pack(settings: &horizon_client::settings::Settings) -> &str {
+    if PACK_LOST.load(std::sync::atomic::Ordering::Relaxed) {
+        return "";
+    }
     active_pack(
         dev_pack().unwrap_or(&settings.horizon.shader_pack),
         &settings.mods,
@@ -148,6 +167,9 @@ fn active_pack<'a>(picked: &'a str, mods: &horizon_client::mod_list::ModList) ->
 
 /// A selected pack may read resource-pack material maps, whether native or GLSL.
 pub(super) fn picks_material_pack(settings: &horizon_client::settings::Settings) -> bool {
+    if PACK_LOST.load(std::sync::atomic::Ordering::Relaxed) {
+        return false;
+    }
     let dev = std::env::var("HORIZON_SHADER_PACK").ok();
     let picked = active_pack(
         dev.as_deref().unwrap_or(&settings.horizon.shader_pack),

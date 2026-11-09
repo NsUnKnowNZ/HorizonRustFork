@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:terracotta",
+    "minecraft:glass_bottle",
+    "minecraft:dead_bush"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 9470285,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:eroded_badlands"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.eroded_badlands",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

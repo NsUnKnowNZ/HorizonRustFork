@@ -208,6 +208,7 @@ fn decorations(c: &Value, atlas: &HudAtlas) -> Vec<GuiDraw> {
             slots,
             offhand_pop: pop(&c["offhand"]).unwrap_or(0.0),
             attack: (indicator == "HOTBAR").then(|| float("attackScale", 1.0)),
+            selected_at: None,
         };
         draws.extend(hud_layout::hotbar(w, h, &inputs));
     }

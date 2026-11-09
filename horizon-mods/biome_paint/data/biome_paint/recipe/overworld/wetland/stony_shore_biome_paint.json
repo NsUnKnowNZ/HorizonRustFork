@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:stone",
+    "minecraft:glass_bottle",
+    "minecraft:stone"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 4159204,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:stony_shore"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.stony_shore",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

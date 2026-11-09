@@ -312,6 +312,7 @@ impl Game<'_> {
         };
         let state = self.world.block(entry.x, entry.y, entry.z);
         let b = self.res.behaviours();
+        let mut entry_corner = None;
         let (entry_x_axis, offset) = match b.portal_axis(state) {
             Some(x_axis) => {
                 let area = largest_rectangle_around(
@@ -322,6 +323,7 @@ impl Game<'_> {
                     21,
                     |p| self.world.block(p.x, p.y, p.z) == state,
                 );
+                entry_corner = Some(area.min_corner);
                 let mut offset = relative_position(area, x_axis, at, width, height);
                 if reset_forward {
                     offset.z = 0.0;
@@ -336,12 +338,28 @@ impl Game<'_> {
         } else {
             1.0 / 8.0
         };
+        // getPortalDestination clamps to the border of the level it leads to.
+        let mut approximate = self
+            .border_bounds_of(target)
+            .clamp(at.x * scale, at.y, at.z * scale);
+        // NetherPortalFix: a portal that was travelled through before leads
+        // back to the portal at the other end of that trip.
+        if let Some(corner) = entry_corner {
+            let from_nether = self.dim == Dim::Nether;
+            if let Some(back) = portal_links::linked(&self.world_root, from_nether, corner) {
+                approximate = back;
+            }
+            portal_links::departing(
+                &self.world_root,
+                target == Dim::Nether,
+                approximate,
+                from_nether,
+                corner,
+            );
+        }
         Plan {
             dim: target,
-            // getPortalDestination clamps to the border of the level it leads to.
-            approximate: self
-                .border_bounds_of(target)
-                .clamp(at.x * scale, at.y, at.z * scale),
+            approximate,
             entry_x_axis,
             offset,
             width,
@@ -481,6 +499,7 @@ impl Game<'_> {
             // NetherPortalBlock.getExitPortal: the ticket goes on the chunk
             // of the portal found.
             self.place_portal_ticket((found.x >> 4, found.z >> 4));
+            portal_links::arrived(&self.world_root, to_nether, plan.approximate, rectangle.min_corner);
             return Some(rectangle);
         }
         let logical = if to_nether { 128 } else { 384 };
@@ -490,6 +509,7 @@ impl Game<'_> {
         });
         let _ = self.process_level_events();
         if let Some(exit) = created {
+            portal_links::arrived(&self.world_root, to_nether, plan.approximate, exit.min_corner);
             let dim = if to_nether {
                 "minecraft:the_nether"
             } else {
@@ -1471,5 +1491,94 @@ mod tests {
             c.remove(&"end".into());
         }
         assert!(!arrival_from_tag(&old).unwrap().plan.end);
+    }
+}
+
+/// NetherPortalFix (Better OneBlock): each Nether portal trip links the
+/// portal left and the portal reached, both ways, so going back through
+/// either leads to the other instead of the closest portal to the scaled
+/// position. The links are kept in the save (`data/horizon_portal_links.txt`).
+mod portal_links {
+    use horizon_core::position::BlockPos;
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
+
+    type Key = (bool, [i32; 3]);
+    struct Links {
+        root: PathBuf,
+        links: HashMap<Key, Key>,
+        /// Trips planned, by where they head: (to Nether, approximate) to
+        /// the portal they left.
+        pending: HashMap<Key, Key>,
+    }
+    static LINKS: Mutex<Option<Links>> = Mutex::new(None);
+
+    fn key(nether: bool, p: BlockPos) -> Key {
+        (nether, [p.x, p.y, p.z])
+    }
+    fn file(root: &Path) -> PathBuf {
+        root.join("data").join("horizon_portal_links.txt")
+    }
+    fn with<R>(root: &Path, f: impl FnOnce(&mut Links) -> R) -> Option<R> {
+        let mut guard = LINKS.lock().ok()?;
+        if guard.as_ref().is_none_or(|l| l.root != root) {
+            let mut links = HashMap::new();
+            if let Ok(text) = std::fs::read_to_string(file(root)) {
+                for line in text.lines() {
+                    let n: Vec<i32> = line.split_whitespace().filter_map(|w| w.parse().ok()).collect();
+                    if let [a, ax, ay, az, b, bx, by, bz] = n[..] {
+                        links.insert((a != 0, [ax, ay, az]), (b != 0, [bx, by, bz]));
+                    }
+                }
+            }
+            *guard = Some(Links { root: root.to_owned(), links, pending: HashMap::new() });
+        }
+        guard.as_mut().map(f)
+    }
+    /// The portal corner the portal at `corner` leads back to.
+    pub(super) fn linked(root: &Path, nether: bool, corner: BlockPos) -> Option<BlockPos> {
+        with(root, |l| l.links.get(&key(nether, corner)).copied())
+            .flatten()
+            .map(|(_, [x, y, z])| BlockPos::new(x, y, z))
+    }
+    pub(super) fn departing(
+        root: &Path,
+        to_nether: bool,
+        approximate: BlockPos,
+        from_nether: bool,
+        corner: BlockPos,
+    ) {
+        with(root, |l| {
+            l.pending.insert(key(to_nether, approximate), key(from_nether, corner));
+        });
+    }
+    pub(super) fn arrived(root: &Path, to_nether: bool, approximate: BlockPos, exit: BlockPos) {
+        let save = with(root, |l| {
+            let pending = l.pending.remove(&key(to_nether, approximate))?;
+            let here = key(to_nether, exit);
+            if l.links.get(&here) == Some(&pending) && l.links.get(&pending) == Some(&here) {
+                return None;
+            }
+            l.links.insert(here, pending);
+            l.links.insert(pending, here);
+            let mut text = String::new();
+            for ((a, [ax, ay, az]), (b, [bx, by, bz])) in &l.links {
+                text.push_str(&format!(
+                    "{} {ax} {ay} {az} {} {bx} {by} {bz}\n",
+                    u8::from(*a),
+                    u8::from(*b)
+                ));
+            }
+            Some(text)
+        })
+        .flatten();
+        if let Some(text) = save {
+            let path = file(root);
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(path, text);
+        }
     }
 }

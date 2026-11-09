@@ -145,7 +145,41 @@ impl Game<'_> {
         }
         let width = self.native_screen_width().unwrap_or(176.0);
         let (x, y) = batch.centered_origin(width, self.screen_height());
-        (x + self.recipe_book_shift(batch.width), y)
+        (x + self.recipe_book_shift(batch.width), y - self.smooth_gui_offset())
+    }
+    /// Smooth GUI (Better OneBlock: 220 ms, BACK easing, moving DOWN): how far
+    /// above its place a container screen still is while it slides in.
+    pub(super) fn smooth_gui_offset(&self) -> f32 {
+        const TIME: f32 = 0.22;
+        const DISTANCE: f32 = 30.0;
+        let t = (self.smooth_gui_elapsed() / TIME).clamp(0.0, 1.0);
+        // easeOutBack.
+        let (c1, c3) = (1.70158f32, 2.70158f32);
+        let eased = 1.0 + c3 * (t - 1.0).powi(3) + c1 * (t - 1.0).powi(2);
+        (1.0 - eased) * DISTANCE
+    }
+    /// Seconds since the open screen (with its container) was opened: a new
+    /// screen, or the same kind after a frame without one, starts it again.
+    pub(super) fn smooth_gui_elapsed(&self) -> f32 {
+        use std::sync::Mutex;
+        use std::time::{Duration, Instant};
+        static OPENED: Mutex<Option<(&'static str, Option<(i32, i32, i32)>, Instant, Instant)>> =
+            Mutex::new(None);
+        let now = Instant::now();
+        let key = (self.screen.id(), self.container);
+        let Ok(mut opened) = OPENED.lock() else {
+            return 1.0;
+        };
+        let start = match *opened {
+            Some((id, container, start, seen))
+                if (id, container) == key && now.duration_since(seen) < Duration::from_millis(150) =>
+            {
+                start
+            }
+            _ => now,
+        };
+        *opened = Some((key.0, key.1, start, now));
+        now.duration_since(start).as_secs_f32()
     }
 
     /// InventoryMenu / CraftingMenu slot layouts.
@@ -351,6 +385,8 @@ impl Game<'_> {
     }
     pub(super) fn draw_inventory_slots(&mut self, batch: &mut HudBatch, ox: f32, oy: f32) {
         let drag = self.drag_view();
+        let swaps = self.smooth_swaps();
+        let mut hovered: Option<(usize, Option<ItemStack>, f32, f32)> = None;
         for i in self.slots() {
             let (sx, sy) = self.slot_position(i);
             if i == 504 && self.offhand.is_none() {
@@ -370,8 +406,160 @@ impl Game<'_> {
                     oy + sy,
                 );
             }
-            let stack = self.slot_view(i);
-            self.draw_slot_item(batch, drag.as_ref(), i, &stack, ox + sx, oy + sy);
+            let mut stack = self.slot_view(i);
+            // Smooth Swapping: what is still on its way here isn't here yet.
+            if let Some(owed) = swaps.owed(i) {
+                stack = stack.and_then(|s| {
+                    (s.count > owed).then(|| ItemStack {
+                        count: s.count - owed,
+                        ..s
+                    })
+                });
+            }
+            // Immersive UI (Better OneBlock: hovered item 1.4x, matching items
+            // hover 0.8): the hovered stack is drawn last, larger; stacks of
+            // the carried item bob.
+            let (cx, cy) = self.cursor;
+            let (x, y) = (ox + sx, oy + sy);
+            if stack.is_some() && cx >= x - 1.0 && cx < x + 17.0 && cy >= y - 1.0 && cy < y + 17.0 {
+                hovered = Some((i, stack, x, y));
+                continue;
+            }
+            let bob = match (&self.carried, &stack) {
+                (Some(c), Some(s)) if c.item == s.item => {
+                    let t = self.started.elapsed().as_secs_f32();
+                    ((t * 6.0 + i as f32 * 0.7).sin() * 0.8).round()
+                }
+                _ => 0.0,
+            };
+            self.draw_slot_item(batch, drag.as_ref(), i, &stack, x, y + bob);
         }
+        if let Some((i, stack, x, y)) = hovered {
+            let start = batch.vertices.len();
+            self.draw_slot_item(batch, drag.as_ref(), i, &stack, x, y);
+            if drag.is_none() && self.carried.is_none() {
+                batch.scale_since(start, x + 8.0, y + 8.0, 1.4, 1.4);
+            }
+        }
+        // Smooth Swapping: the moving stacks, over the slots.
+        for (stack, x, y) in swaps.flying(ox, oy) {
+            self.draw_item_model(batch, &stack, x, y);
+            self.draw_item_decorations(batch, &stack, x, y, None);
+        }
+    }
+    /// Smooth Swapping: the slots' contents against the last frame's; an item
+    /// that left one slot and arrived in another this frame flies between them.
+    fn smooth_swaps(&mut self) -> SmoothSwaps {
+        use std::sync::Mutex;
+        use std::time::{Duration, Instant};
+        static STATE: Mutex<Option<SwapState>> = Mutex::new(None);
+        let now = Instant::now();
+        let key = (self.screen.id(), self.container);
+        let slots: Vec<usize> = self.slots();
+        let now_slots: Vec<(usize, Option<ItemStack>, (f32, f32))> = slots
+            .into_iter()
+            .map(|i| (i, self.slot_view(i), self.slot_position(i)))
+            .collect();
+        let Ok(mut guard) = STATE.lock() else {
+            return SmoothSwaps::default();
+        };
+        let fresh = !matches!(&*guard, Some(st) if st.key == key
+            && now.duration_since(st.seen) < Duration::from_millis(150));
+        if fresh {
+            *guard = Some(SwapState { key, seen: now, last: Vec::new(), moves: Vec::new() });
+        }
+        let st = guard.as_mut().expect("just set");
+        st.seen = now;
+        st.moves.retain(|m| now.duration_since(m.start).as_secs_f32() < SWAP_TIME);
+        if !fresh && st.last.len() == now_slots.len() {
+            let count = |s: &Option<ItemStack>, item: &str| {
+                s.as_ref().filter(|s| &*s.item == item).map_or(0, |s| s.count)
+            };
+            let mut lost: Vec<(usize, std::sync::Arc<str>, u32, (f32, f32))> = Vec::new();
+            let mut gained: Vec<(usize, ItemStack, u32)> = Vec::new();
+            for ((i, before, at), (_, after, _)) in st.last.iter().zip(&now_slots) {
+                if let Some(b) = before {
+                    let left = count(after, &b.item);
+                    if left < b.count {
+                        lost.push((*i, b.item.clone(), b.count - left, *at));
+                    }
+                }
+                if let Some(a) = after {
+                    let had = count(before, &a.item);
+                    if a.count > had {
+                        gained.push((*i, a.clone(), a.count - had));
+                    }
+                }
+            }
+            for (to, stack, mut n) in gained {
+                for l in lost.iter_mut().filter(|l| l.1 == stack.item && l.2 > 0) {
+                    if n == 0 {
+                        break;
+                    }
+                    let take = n.min(l.2);
+                    l.2 -= take;
+                    n -= take;
+                    st.moves.push(SwapMove {
+                        stack: ItemStack { count: take, ..stack.clone() },
+                        from: l.3,
+                        to,
+                        start: now,
+                    });
+                }
+            }
+        }
+        st.last = now_slots.clone();
+        let positions: std::collections::HashMap<usize, (f32, f32)> =
+            now_slots.iter().map(|(i, _, at)| (*i, *at)).collect();
+        SmoothSwaps {
+            moves: st
+                .moves
+                .iter()
+                .filter_map(|m| {
+                    let to = *positions.get(&m.to)?;
+                    let t = (now.duration_since(m.start).as_secs_f32() / SWAP_TIME).clamp(0.0, 1.0);
+                    // easeOutCubic.
+                    let e = 1.0 - (1.0 - t).powi(3);
+                    let at = (m.from.0 + (to.0 - m.from.0) * e, m.from.1 + (to.1 - m.from.1) * e);
+                    Some((m.to, m.stack.clone(), at))
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Smooth Swapping's flight time (Better OneBlock: animation speed 300).
+const SWAP_TIME: f32 = 0.2;
+
+struct SwapMove {
+    stack: ItemStack,
+    from: (f32, f32),
+    to: usize,
+    start: std::time::Instant,
+}
+
+struct SwapState {
+    key: (&'static str, Option<(i32, i32, i32)>),
+    seen: std::time::Instant,
+    last: Vec<(usize, Option<ItemStack>, (f32, f32))>,
+    moves: Vec<SwapMove>,
+}
+
+/// This frame's flights: (destination slot, stack, slot-space position).
+#[derive(Default)]
+struct SmoothSwaps {
+    moves: Vec<(usize, ItemStack, (f32, f32))>,
+}
+impl SmoothSwaps {
+    /// How many items of the slot's stack are still flying to it.
+    fn owed(&self, slot: usize) -> Option<u32> {
+        let n: u32 = self.moves.iter().filter(|m| m.0 == slot).map(|m| m.1.count).sum();
+        (n > 0).then_some(n)
+    }
+    fn flying(&self, ox: f32, oy: f32) -> Vec<(ItemStack, f32, f32)> {
+        self.moves
+            .iter()
+            .map(|(_, stack, (x, y))| (stack.clone(), ox + x, oy + y))
+            .collect()
     }
 }

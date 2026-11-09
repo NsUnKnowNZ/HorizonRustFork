@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:mangrove_propagule",
+    "minecraft:glass_bottle",
+    "minecraft:mud"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 6975545,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:mangrove_swamp"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.mangrove_swamp",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

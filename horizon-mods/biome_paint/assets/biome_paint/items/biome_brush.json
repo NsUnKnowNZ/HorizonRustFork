@@ -1,0 +1,12 @@
+{
+  "model": {
+    "type": "minecraft:model",
+    "model": "biome_paint:item/biome_brush",
+    "tints": [
+      {
+        "type": "minecraft:dye",
+        "default": -12122
+      }
+    ]
+  }
+}

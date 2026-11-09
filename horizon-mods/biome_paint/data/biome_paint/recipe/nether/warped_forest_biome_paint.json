@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:warped_nylium",
+    "minecraft:glass_bottle",
+    "minecraft:warped_roots"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 1705242,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:warped_forest"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.warped_forest",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

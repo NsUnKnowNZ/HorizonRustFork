@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    "[",
+    "{",
+    "|"
+  ],
+  "key": {
+    "|": "minecraft:stick",
+    "{": "minecraft:netherite_scrap",
+    "[": "minecraft:white_wool"
+  },
+  "result": {
+    "id": "biome_paint:biome_brush",
+    "count": 1
+  }
+}

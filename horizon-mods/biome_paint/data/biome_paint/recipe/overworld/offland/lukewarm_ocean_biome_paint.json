@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:seagrass",
+    "minecraft:glass_bottle",
+    "minecraft:sand"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 4566514,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:lukewarm_ocean"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.lukewarm_ocean",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

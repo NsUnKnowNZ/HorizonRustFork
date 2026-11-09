@@ -447,6 +447,8 @@ mod trial_visuals;
 mod trident;
 mod tutorial;
 mod tweaks;
+mod armor_hider;
+mod crafting_tweaks;
 mod ui_control;
 mod using_item;
 mod vault;
@@ -3515,6 +3517,41 @@ fn ray_box(eye: [f64; 3], dir: [f64; 3], reach: f64, b: Aabb) -> Option<f64> {
 /// `Entity.calculateViewVector`, which `GameRenderer.pick` aims with: float radians through `Mth.sin` and
 /// `Mth.cos`, vanilla's 65536-entry table. A placement's cursor and an interaction's point come from this ray, and
 /// the exact trigonometry below moved them by up to ~1e-4 of a block.
+/// Smooth Scroll (Better OneBlock: hotbar smoothness 0.25, rollover on): the
+/// hotbar selector glides to the selected slot, keeping 0.25 of the way left
+/// every 50 ms, and a step between slot 9 and slot 1 rolls over the edge.
+fn smooth_hotbar_selection(selected: i32) -> f32 {
+    use std::sync::Mutex;
+    use std::time::Instant;
+    const SMOOTHNESS: f64 = 0.25;
+    static STATE: Mutex<Option<(f32, i32, Instant)>> = Mutex::new(None);
+    let now = Instant::now();
+    let Ok(mut state) = STATE.lock() else {
+        return selected as f32;
+    };
+    let (mut at, last, then) = state.unwrap_or((selected as f32, selected, now));
+    if selected != last {
+        if selected - last == -8 {
+            at -= 9.0;
+        } else if selected - last == 8 {
+            at += 9.0;
+        }
+        // Back within the bar once a roll-over has crossed the edge.
+        if at > 8.5 && selected < 4 {
+            at -= 9.0;
+        } else if at < -0.5 && selected > 4 {
+            at += 9.0;
+        }
+    }
+    let dt = now.duration_since(then).as_secs_f64().min(0.5);
+    let target = selected as f32;
+    at = target + (at - target) * SMOOTHNESS.powf(dt * 20.0) as f32;
+    if (at - target).abs() < 0.01 {
+        at = target;
+    }
+    *state = Some((at, selected, now));
+    at
+}
 fn pick_view_vector(yaw: f32, pitch: f32) -> [f64; 3] {
     let v = horizon_world::view_direction::view_vector(pitch, yaw);
     [v.x, v.y, v.z]
@@ -8032,9 +8069,11 @@ impl Game<'_> {
                         }),
                         offhand_pop: (f32::from(g.hotbar_pop[9]) - partial).max(0.0),
                         attack: (indicator == 2).then_some(strength),
+                        selected_at: Some(smooth_hotbar_selection(g.selected as i32)),
                     };
                     let draws = hud_layout::hotbar(wi, hi, &inputs);
                     hud_layout::paint(batch, &g.gui.atlas, &draws);
+                    let selected_at = inputs.selected_at.unwrap_or(inputs.selected as f32);
                     for d in &draws {
                         if let hud_layout::GuiDraw::Item { slot, x, y, .. } = *d {
                             let stack = if slot == 40 {
@@ -8043,7 +8082,18 @@ impl Game<'_> {
                                 g.inventory[slot as usize].as_ref()
                             };
                             if let Some(stack) = stack {
+                                let start = batch.vertices.len();
                                 g.draw_item(batch, stack, x as f32, y as f32);
+                                // Immersive Hotbar (Better OneBlock: selected item 1.2x,
+                                // text scales): the item under the gliding selector grows.
+                                if slot < 9 {
+                                    let near = 1.0 - (slot as f32 - selected_at).abs();
+                                    let grow = 1.0 + 0.2 * near.clamp(0.0, 1.0);
+                                    if grow > 1.0 {
+                                        let (cx, cy) = (x as f32 + 8.0, y as f32 + 8.0);
+                                        batch.scale_since(start, cx, cy, grow, grow);
+                                    }
+                                }
                             }
                         }
                     }
@@ -8586,6 +8636,7 @@ impl Game<'_> {
         self.draw_inventory_slots(batch, ox, oy);
         self.draw_hovered_slot_highlight(batch, true, ox, oy);
         self.draw_sort_buttons(batch, ox, oy);
+        self.draw_crafting_tweaks(batch, ox, oy);
         self.draw_recipe_book(batch);
         let effect_tip = if self.container.is_none() && self.craft_size == 2 && !self.mount_active()
         {
@@ -13039,11 +13090,23 @@ impl Game<'_> {
             return Err("the graphics device was lost during split-screen play".into());
         }
         let now = Instant::now();
-        if self
-            .last_device_recovery
-            .is_some_and(|last| now.duration_since(last) < Duration::from_secs(60))
+        // A shader pack running when the device went is the likeliest cause (a pass that hangs
+        // the GPU): it is turned off for this run, and that recovery may follow a recent one.
+        let dropped_pack = shader_packs::drop_pack_after_device_loss(&self.settings);
+        if dropped_pack.is_none()
+            && self
+                .last_device_recovery
+                .is_some_and(|last| now.duration_since(last) < Duration::from_secs(60))
         {
             return Err("the graphics device was lost again after recovery".into());
+        }
+        if let Some(pack) = &dropped_pack {
+            log::warn!(
+                "Horizon: shader pack {pack} is off until the next start: the graphics device was lost while it ran"
+            );
+            self.system_message(horizon_client::text::Text::literal(format!(
+                "The shader pack {pack} crashed the graphics driver, so it is turned off until you restart. Pick another one in Video Settings > Shader Packs."
+            )));
         }
         self.last_device_recovery = Some(now);
         let window = self

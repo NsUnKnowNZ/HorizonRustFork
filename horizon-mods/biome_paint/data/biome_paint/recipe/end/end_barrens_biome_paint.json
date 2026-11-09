@@ -1,0 +1,25 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:end_stone",
+    "minecraft:glass_bottle"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 6443678,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:end_barrens"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.end_barrens",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

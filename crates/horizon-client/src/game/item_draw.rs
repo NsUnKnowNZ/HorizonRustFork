@@ -619,11 +619,25 @@ impl Game<'_> {
             let age = item.age as f32 + partial;
             let (lo, hi) = state.bounding_box();
             let min_offset_y = -lo.y + 0.0625;
-            let bob = (age / 10.0 + item.bob_offset).sin() * 0.1 + 0.1;
-            let spin = item_render::item_spin(age, item.bob_offset);
-            let pose = glam::Mat4::from_translation(pos.as_vec3())
-                * glam::Mat4::from_translation(glam::Vec3::new(0.0, bob + min_offset_y, 0.0))
-                * glam::Mat4::from_rotation_y(spin);
+            // ItemPhysic (Better OneBlock: new rotation, speed 1): no bobbing or
+            // spinning; a flat item lies on the ground, a block stands on it,
+            // each turned its own way; in the air both tumble as they fall.
+            let yaw = item.bob_offset * 2.0;
+            let flat = hi.z - lo.z < 0.1;
+            let resting = item.on_ground
+                || (entity && (item.position.y - item.previous.y).abs() < 1e-4 && item.velocity.y.abs() < 0.05);
+            let tumble = if resting { 0.0 } else { age * 0.3 };
+            let pose = if flat {
+                glam::Mat4::from_translation(pos.as_vec3())
+                    * glam::Mat4::from_translation(glam::Vec3::new(0.0, -lo.z + 0.01, 0.0))
+                    * glam::Mat4::from_rotation_y(yaw)
+                    * glam::Mat4::from_rotation_x(-std::f32::consts::FRAC_PI_2 + tumble)
+            } else {
+                glam::Mat4::from_translation(pos.as_vec3())
+                    * glam::Mat4::from_translation(glam::Vec3::new(0.0, min_offset_y - 0.0625, 0.0))
+                    * glam::Mat4::from_rotation_y(yaw)
+                    * glam::Mat4::from_rotation_x(tumble)
+            };
             // `EntityRenderer.getPackedLightCoords`: an item entity is lit from
             // the block its light probe (its eye, 0.2125 up) is in, at 15 block
             // light while it burns. A pickup particle is not an entity and keeps

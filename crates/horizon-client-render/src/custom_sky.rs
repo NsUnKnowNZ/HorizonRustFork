@@ -48,7 +48,12 @@ impl CustomSky {
     /// The custom skies of the overlay at `root`. A layer whose texture does not decode is
     /// dropped with a warning.
     pub fn load(root: &Path) -> Self {
-        let skies = Skies::scan(root);
+        let mut skies = Skies::scan(root);
+        // FabricSkyboxes / Nuit skies (`assets/<ns>/sky/*.json`) join the OptiFine ones, after
+        // them, in their priority order.
+        for (world, layer) in fabric_skies(root) {
+            skies.worlds.entry(world).or_default().layers.push(layer);
+        }
         let mut out = Self::default();
         let mut texels = 0u64;
         for (world, sky) in skies.worlds {
@@ -240,4 +245,168 @@ mod tests {
         let up = out[0].rotation.transform_vector3(Vec3::Y);
         assert!((up - Vec3::NEG_X).length() < 1e-5, "{up}");
     }
+}
+
+/// The skies of FabricSkyboxes and its successor Nuit (`assets/fabricskyboxes/sky/*.json`,
+/// `assets/nuit/sky/*.json`), as OptiFine layers: the textured kinds whose six faces are one
+/// 3x2 image (`single-sprite-square-textured`, OptiFine's own layout) or six images
+/// (`square-textured`, joined here into that layout is not done: those are skipped), with their
+/// fade times (ticks), blend, rotation, weathers, worlds, biomes and heights. `monocolor`
+/// layers and the decorations switches (hide the sun, moon or stars) are not read. Written from
+/// the format's public documentation (the FabricSkyboxes wiki, schema version 2).
+pub fn fabric_skies(root: &Path) -> Vec<(i32, SkyLayer)> {
+    use horizon_optifine::matchers::{IdList, RangeList};
+    use horizon_optifine::sky::{Fade, Weather};
+    use serde_json::Value;
+    let mut found: Vec<(i64, String, i32, SkyLayer)> = Vec::new();
+    for ns in ["fabricskyboxes", "nuit"] {
+        let dir = root.join("assets").join(ns).join("sky");
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.ends_with(".json") {
+                continue;
+            }
+            let file = format!("assets/{ns}/sky/{name}");
+            let Some(v) = std::fs::read(entry.path())
+                .ok()
+                .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+            else {
+                log::warn!("{file}: not JSON; skipped");
+                continue;
+            };
+            let kind = v["type"].as_str().unwrap_or("");
+            if kind != "single-sprite-square-textured" {
+                if kind != "monocolor" {
+                    log::info!("{file}: sky type `{kind}` is not read yet; skipped");
+                }
+                continue;
+            }
+            // `namespace:path` of a texture: `assets/<namespace>/<path>`.
+            let Some(texture) = v["texture"].as_str().or_else(|| v["textures"]["texture"].as_str())
+            else {
+                continue;
+            };
+            let (tns, tpath) = texture.split_once(':').unwrap_or(("minecraft", texture));
+            let source = format!("assets/{tns}/{tpath}");
+            if !root.join(&source).is_file() {
+                log::warn!("{file}: no texture {source}");
+                continue;
+            }
+            let props = &v["properties"];
+            let fade = &props["fade"];
+            let tick = |k: &str| fade[k].as_i64().map(|t| t.rem_euclid(24_000));
+            let fade = match (tick("startFadeIn"), tick("endFadeIn"), tick("startFadeOut"), tick("endFadeOut")) {
+                (Some(start_in), Some(end_in), Some(start_out), Some(end_out)) => Some(Fade {
+                    start_in,
+                    end_in,
+                    start_out,
+                    end_out,
+                }),
+                _ if fade["alwaysOn"].as_bool() == Some(true) => None,
+                _ => None,
+            };
+            let blend = match v["blend"]["type"].as_str().unwrap_or("add") {
+                "alpha" | "normal" | "decorations" => Blend::Alpha,
+                "add" => Blend::Add,
+                "subtract" => Blend::Subtract,
+                "multiply" => Blend::Multiply,
+                "screen" | "lighten" => Blend::Screen,
+                "replace" => Blend::Replace,
+                "dodge" => Blend::Dodge,
+                "burn" | "darken" => Blend::Burn,
+                "overlay" => Blend::Overlay,
+                other => {
+                    log::info!("{file}: blend `{other}` drawn as alpha");
+                    Blend::Alpha
+                }
+            };
+            // Turning: with the sun (`skyboxRotation`), and/or at `rotationSpeed{X,Y,Z}` turns a
+            // day around those axes (only the largest is kept).
+            let rot = &props["rotation"];
+            let speeds = ["rotationSpeedX", "rotationSpeedY", "rotationSpeedZ"]
+                .map(|k| rot[k].as_f64().unwrap_or(0.0) as f32);
+            let follows_sun = rot["skyboxRotation"].as_bool().unwrap_or(true);
+            let (axis_i, speed) = speeds
+                .iter()
+                .copied()
+                .enumerate()
+                .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))
+                .unwrap_or((2, 0.0));
+            let (rotate, speed, axis) = if speed != 0.0 {
+                let mut axis = [0.0; 3];
+                axis[axis_i] = 1.0;
+                (true, speed, axis)
+            } else {
+                (follows_sun, 1.0, [0.0, 0.0, 1.0])
+            };
+            let cond = &v["conditions"];
+            let strings = |key: &str| -> Vec<String> {
+                cond[key]
+                    .as_array()
+                    .map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_owned)).collect())
+                    .unwrap_or_default()
+            };
+            let weathers = strings("weather");
+            let weather = if weathers.is_empty() {
+                Weather { clear: true, rain: true, thunder: true }
+            } else {
+                Weather {
+                    clear: weathers.iter().any(|w| w == "clear"),
+                    rain: weathers.iter().any(|w| w == "rain" || w == "snow"),
+                    thunder: weathers.iter().any(|w| w == "thunder"),
+                }
+            };
+            let mut worlds: Vec<i32> = strings("worlds")
+                .iter()
+                .chain(strings("dimensions").iter())
+                .filter_map(|w| match w.as_str() {
+                    "minecraft:overworld" => Some(0),
+                    "minecraft:the_end" => Some(1),
+                    _ => None,
+                })
+                .collect();
+            if worlds.is_empty() {
+                worlds.push(0);
+            }
+            let biomes = strings("biomes");
+            let heights: Vec<String> = cond["yRanges"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|r| Some(format!("{}-{}", r["min"].as_f64()? as i32, r["max"].as_f64()? as i32)))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let transition = v["transitionInDuration"]
+                .as_f64()
+                .map_or(1.0, |ticks| (ticks / 20.0) as f32);
+            let layer = SkyLayer {
+                file: file.clone(),
+                source,
+                fade,
+                blend,
+                rotate,
+                speed,
+                axis,
+                days: None,
+                days_loop: 8,
+                weather,
+                biomes: (!biomes.is_empty()).then(|| IdList::parse(&biomes.join(" "))),
+                heights: (!heights.is_empty()).then(|| RangeList::parse(&heights.join(" "))).flatten(),
+                transition,
+            };
+            let priority = props["priority"].as_i64().unwrap_or(0);
+            for world in worlds {
+                found.push((priority, file.clone(), world, layer.clone()));
+            }
+        }
+    }
+    found.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
+    if !found.is_empty() {
+        log::info!("Horizon: {} FabricSkyboxes/Nuit sky layers", found.len());
+    }
+    found.into_iter().map(|(_, _, w, l)| (w, l)).collect()
 }

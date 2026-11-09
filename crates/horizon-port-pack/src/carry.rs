@@ -184,6 +184,188 @@ pub fn block_template(name: &str, blockstate: &Value) -> Option<&'static str> {
     })
 }
 
+/// A block whose properties no vanilla template has, as a decorative block: placed facing away
+/// from the player (`white_glazed_terracotta`'s placement) when its `facing` is horizontal, else
+/// a plain one (`stone`); its other properties its own (`state_properties`, first value by
+/// default); no occlusion, no tool needed, the sounds and hardness its name suggests, and its
+/// outline and collision from its models' boxes per facing. What the mod's code adds (sitting,
+/// storage, dyeing) is not here. `None` when a property or value isn't a plain state name.
+pub fn fallback_block(inside: &Path, name: &str, blockstate: &Value) -> Option<Value> {
+    let props = properties(blockstate);
+    let horizontal = ["north", "south", "west", "east"];
+    let facing = values(blockstate, "facing");
+    let faces = !facing.is_empty() && facing.iter().all(|f| horizontal.contains(&f.as_str()));
+    let template = if faces {
+        "minecraft:white_glazed_terracotta"
+    } else {
+        "minecraft:stone"
+    };
+    let plain = |s: &str| {
+        !s.is_empty()
+            && s.bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    };
+    let mut own = serde_json::Map::new();
+    let mut default = serde_json::Map::new();
+    for p in &props {
+        if faces && p == "facing" {
+            continue;
+        }
+        let vals: Vec<String> = values(blockstate, p).into_iter().collect();
+        if !plain(p) || vals.is_empty() || !vals.iter().all(|v| plain(v)) {
+            return None;
+        }
+        if vals.iter().all(|v| v == "true" || v == "false") {
+            own.insert(p.clone(), json!({"type": "boolean"}));
+            default.insert(p.clone(), json!("false"));
+            continue;
+        }
+        let mut vals = vals;
+        if vals.iter().all(|v| v.parse::<i64>().is_ok()) {
+            vals.sort_by_key(|v| v.parse::<i64>().unwrap_or(0));
+        }
+        // The first value the blockstate names is the likeliest default (`single`, `none`, `0`...).
+        let first = ["none", "single", "default", "white", "0", "1", "bottom", "floor", "north"]
+            .iter()
+            .find(|d| vals.iter().any(|v| v == *d))
+            .map_or_else(|| vals[0].clone(), |d| (*d).to_owned());
+        default.insert(p.clone(), json!(first));
+        own.insert(p.clone(), json!({"type": "enum", "values": vals}));
+    }
+    // A variant whose properties are the defaults (any facing), for the shape of each facing.
+    let mut shapes = serde_json::Map::new();
+    let mut fallback_shape: Option<Value> = None;
+    let matches_default = |key: &str| {
+        key.split(',').filter(|p| !p.is_empty()).all(|pair| {
+            let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+            k == "facing" || default.get(k).is_none_or(|d| d == v)
+        })
+    };
+    if let Some(variants) = blockstate["variants"].as_object() {
+        for (key, v) in variants {
+            if !matches_default(key) {
+                continue;
+            }
+            let v = if v.is_array() { &v[0] } else { v };
+            let Some(model) = v["model"].as_str() else { continue };
+            let Some(boxes) = model_boxes(inside, model, 0) else { continue };
+            let y = v["y"].as_i64().unwrap_or(0);
+            let x = v["x"].as_i64().unwrap_or(0);
+            let boxes: Vec<[f64; 6]> = if x == 0 {
+                boxes.iter().map(|b| turn_y(*b, y)).collect()
+            } else {
+                vec![[0.0, 0.0, 0.0, 1.0, 1.0, 1.0]]
+            };
+            let face = key
+                .split(',')
+                .find_map(|pair| pair.strip_prefix("facing="))
+                .map(str::to_owned);
+            match face {
+                Some(f) if faces => {
+                    shapes.entry(f).or_insert_with(|| json!(boxes));
+                }
+                _ => {
+                    fallback_shape.get_or_insert_with(|| json!(boxes));
+                }
+            }
+        }
+    }
+    let lower = name.to_ascii_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| lower.contains(w));
+    let (sounds, hardness) = if has(&["glass", "jar", "bottle"]) {
+        ("minecraft:glass", 0.3)
+    } else if has(&["wool", "cushion", "couch", "pillow", "sheet", "carpet", "curtain", "fancy_bed"]) {
+        ("minecraft:white_wool", 0.8)
+    } else if has(&["iron", "copper", "gold", "metal", "lantern", "chain"]) {
+        ("minecraft:iron_block", 2.0)
+    } else if has(&["stone", "brick", "deepslate", "andesite", "diorite", "granite", "terracotta", "quartz", "pot", "statue"]) {
+        ("minecraft:stone", 1.5)
+    } else {
+        ("minecraft:oak_planks", 1.5)
+    };
+    let mut out = json!({
+        "template": template,
+        "properties": {
+            "sounds": sounds,
+            "hardness": hardness,
+            "explosion_resistance": hardness * 2.0,
+            "requires_tool": false,
+            "occludes": false
+        }
+    });
+    if !own.is_empty() {
+        out["state_properties"] = Value::Object(own);
+        out["default_state"] = Value::Object(default);
+    }
+    let full = |s: &Value| s.as_array().is_some_and(|a| a.len() == 1 && a[0] == json!([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]));
+    if faces && shapes.len() == 4 && !shapes.values().all(full) {
+        let first = shapes.get("north").cloned().unwrap_or(json!([[0, 0, 0, 1, 1, 1]]));
+        out["shapes"] = json!({"property": "facing", "values": shapes, "default": first});
+    } else if let Some(s) = fallback_shape.or_else(|| shapes.values().next().cloned())
+        && !full(&s)
+    {
+        out["shapes"] = json!({"default": s});
+    }
+    Some(out)
+}
+
+/// A box turned `degrees` (a multiple of 90) clockwise seen from above, as a blockstate's `y`.
+fn turn_y(b: [f64; 6], degrees: i64) -> [f64; 6] {
+    let mut b = b;
+    for _ in 0..(degrees.rem_euclid(360) / 90) {
+        // (x, z) -> (1 - z, x): east goes to south.
+        b = [1.0 - b[5], b[1], b[0], 1.0 - b[2], b[4], b[3]];
+    }
+    b
+}
+
+/// The boxes of a block model in block units (its elements' `from` and `to` over 16), following
+/// its `parent`s inside the carried assets; a full block for vanilla's cube models and for what
+/// can't be read. At most 32 boxes; none smaller than a pixel in every direction.
+fn model_boxes(inside: &Path, model: &str, depth: u32) -> Option<Vec<[f64; 6]>> {
+    if depth > 8 {
+        return None;
+    }
+    let (ns, path) = model.split_once(':').unwrap_or(("minecraft", model));
+    let file = inside.join(format!("assets/{ns}/models/{path}.json"));
+    let Ok(bytes) = fs::read(&file) else {
+        return Some(vec![[0.0, 0.0, 0.0, 1.0, 1.0, 1.0]]);
+    };
+    let v: Value = serde_json::from_slice(&bytes).ok()?;
+    if let Some(elements) = v["elements"].as_array() {
+        let mut out = Vec::new();
+        for e in elements.iter().take(32) {
+            let (Some(from), Some(to)) = (e["from"].as_array(), e["to"].as_array()) else {
+                continue;
+            };
+            let f: Vec<f64> = from.iter().filter_map(Value::as_f64).collect();
+            let t: Vec<f64> = to.iter().filter_map(Value::as_f64).collect();
+            if f.len() != 3 || t.len() != 3 {
+                continue;
+            }
+            let c = |a: f64| (a / 16.0).clamp(0.0, 1.0);
+            let b = [
+                c(f[0].min(t[0])),
+                c(f[1].min(t[1])),
+                c(f[2].min(t[2])),
+                c(f[0].max(t[0])),
+                c(f[1].max(t[1])),
+                c(f[2].max(t[2])),
+            ];
+            // Flat planes (a leaf, a label) give no collision.
+            if (0..3).filter(|&i| b[i + 3] - b[i] < 1.0 / 32.0).count() > 0 {
+                continue;
+            }
+            out.push(b);
+        }
+        return (!out.is_empty()).then_some(out).or(Some(vec![[0.0, 0.0, 0.0, 1.0, 1.0, 1.0]]));
+    }
+    match v["parent"].as_str() {
+        Some(parent) => model_boxes(inside, parent, depth + 1),
+        None => Some(vec![[0.0, 0.0, 0.0, 1.0, 1.0, 1.0]]),
+    }
+}
+
 /// The values a blockstate file tests a property for.
 fn values(blockstate: &Value, property: &str) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
@@ -1381,14 +1563,32 @@ pub fn carry(
         for (b, state) in &blockstates {
             match block_template(b, state) {
                 Some(t) => {
-                    write_decl("block", b, &json!({"template": t}))?;
+                    let mut v = json!({"template": t});
+                    // A plain template for a block that isn't a full cube (a jar, a globe): its
+                    // models' boxes, and no occlusion, so it neither hides nor darkens what is
+                    // next to it.
+                    if t == "minecraft:stone"
+                        && let Some(f) = fallback_block(&inside, b, state)
+                        && f.get("shapes").is_some()
+                    {
+                        v["shapes"] = f["shapes"].clone();
+                        v["properties"] = json!({"occludes": false});
+                    }
+                    write_decl("block", b, &v)?;
                     report.blocks.insert(b.clone(), t.to_owned());
                 }
-                None => {
-                    let props: Vec<String> = properties(state).into_iter().collect();
-                    let why = format!("no template for properties [{}]", props.join(", "));
-                    report.blocks_unknown.insert(b.clone(), why);
-                }
+                None => match fallback_block(&inside, b, state) {
+                    Some(v) => {
+                        let t = v["template"].as_str().unwrap_or_default().to_owned();
+                        write_decl("block", b, &v)?;
+                        report.blocks.insert(b.clone(), format!("{t} (decorative)"));
+                    }
+                    None => {
+                        let props: Vec<String> = properties(state).into_iter().collect();
+                        let why = format!("no template for properties [{}]", props.join(", "));
+                        report.blocks_unknown.insert(b.clone(), why);
+                    }
+                },
             }
         }
         for m in item_models.iter().filter(|m| !blockstates.contains_key(*m)) {

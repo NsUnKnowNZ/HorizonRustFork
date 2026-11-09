@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "equipment",
+  "ingredients": [
+    "minecraft:birch_sapling",
+    "minecraft:glass_bottle",
+    "minecraft:birch_leaves"
+  ],
+  "result": {
+    "id": "biome_paint:biome_paint",
+    "components": {
+      "minecraft:dyed_color": 8960871,
+      "minecraft:custom_data": {
+        "biome_paint": "minecraft:birch_forest"
+      },
+      "minecraft:lore": [
+        {
+          "translate": "biome.minecraft.birch_forest",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    },
+    "count": 1
+  }
+}

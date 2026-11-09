@@ -106,6 +106,9 @@ impl Game<'_> {
         if !right && self.sort_press() {
             return;
         }
+        if !right && self.crafting_tweaks_press() {
+            return;
+        }
         if self.native_screen_press(right) {
             self.inv_clicks.skip_release();
             return;
