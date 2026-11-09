@@ -4,7 +4,10 @@
 #  - arthropods (spiders, cave spiders, silverfish, endermites, bees) take no fall damage;
 #  - evokers stop arrows;
 #  - undead heal by the damage they deal;
-#  - an enderman's hit can blind (a third of the time, 5 seconds).
+#  - an enderman's hit can blind (a third of the time, 5 seconds);
+#  - ghasts spawn with 20 health, evokers with 30, withers with 360; zombies (husks, drowned,
+#    zombie villagers, zombified piglins) with more knockback resistance and a speed that
+#    varies a little; half the vindicators a little faster.
 # Server side: in single player, on a LAN host and on a dedicated server.
 [mod]
 id = "sihywtcamd"
@@ -38,4 +41,15 @@ helper = "tick.rs"
 bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
   { name = "dimension", ty = "&str", value = "dimension" },
+]
+
+[[injection]]
+id = "spawned"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mob_spawned"
+helper = "spawned.rs"
+bindings = [
+  { name = "dimension", ty = "&str", value = "dimension" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "pos", ty = "[f64; 3]", value = "pos" },
 ]

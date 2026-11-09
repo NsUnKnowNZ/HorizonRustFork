@@ -1,0 +1,25 @@
+# VisualKeys (DimasKama, ARR) for Horizon, written from its documented behaviour: an on-screen
+# keyboard of all the key bindings. On Options > Controls > Key Binds, hold Left Alt: a keyboard
+# shows every key, bound keys in green, keys with more than one binding in red, free keys grey;
+# point at a key to read what it does. Drawing only.
+[mod]
+id = "visualkeys"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "visualkeys"
+source = "visualkeys.rs"
+
+[[injection]]
+id = "draw"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_screen_render_post"
+helper = "draw.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" },
+]

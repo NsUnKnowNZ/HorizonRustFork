@@ -1,0 +1,39 @@
+Launch
+Platform
+C command "gamemode survival"
+C command "time set 6000"
+C command "clear @s"
+C command "fill 198 146 198 202 148 202 minecraft:iron_ore"
+C command "fill 198 149 198 202 149 202 minecraft:stone"
+C command "item replace entity @s hotbar.0 with minecraft:diamond_pickaxe[enchantments={'bitsandbalance:cascading':2}]"
+C command "item replace entity @s hotbar.1 with minecraft:oak_planks 1"
+C command "item replace entity @s inventory.5 with minecraft:oak_planks 20"
+C command "tp @s 200.5 150 197.5 0 60"
+C select 1
+C wait 10
+C break 200 149 199
+C break 200 148 199
+C wait 40
+C command "execute if blocks 198 146 198 202 148 202 198 146 198 all run say all-ore"
+C blocks 198 146 198 202 148 202
+C select 2
+C command "tp @s 203.5 150 196.5 0 40"
+C wait 5
+C place 203 150 198
+C wait 5
+C inventory
+C command "item replace entity @s hotbar.3 with minecraft:bundle[enchantments={'diversity:vacuum':1}]"
+C command "summon minecraft:item 203.5 150 196.5 {Item:{id:\"minecraft:cobblestone\",count:10}}"
+C wait 20
+C inventory
+C command "summon minecraft:ghast 220 170 220"
+C wait 5
+C command "execute as @e[type=minecraft:ghast,limit=1,sort=nearest] run attribute @s minecraft:max_health get"
+C command "kill @e[type=minecraft:ghast]"
+C command "gamemode creative"
+C command "tp @s 203.5 152 195.5 0 5"
+C command "execute in minecraft:overworld run tp @s 1000 120 1000"
+C wait 100
+C screenshot "$shots\biome-title.png"
+C command "tp @s 203.5 152 195.5 0 5"
+C logs

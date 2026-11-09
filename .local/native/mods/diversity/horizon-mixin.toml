@@ -1,0 +1,48 @@
+# Faewuf's Diversity (CC-BY-NC-SA, local use) for Horizon, written from its documented behaviour:
+# what its bundle enchantments do (the enchantments themselves, and its four Backup Protections,
+# which work from their data alone, are the content mod horizon-mods/diversity).
+#  - Vacuum: items you pick up go into the bundle, while it has room.
+#  - Selective Vacuum: only the kinds of item already in the bundle.
+#  - Refill: when the last block of a stack in your hand is placed, the bundle hands you more of
+#    it.
+# Capacity's bigger bundle isn't here (the bundle's room is the game's). Server side.
+[mod]
+id = "diversity"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "diversity"
+source = "diversity.rs"
+
+[[injection]]
+id = "pickup"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_item_picked_up_v2"
+helper = "pickup.rs"
+bindings = [
+  { name = "player", ty = "u128", value = "player" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "place"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_place_block"
+helper = "place.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+]
+
+[[injection]]
+id = "player_tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_player_tick"
+helper = "player_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]

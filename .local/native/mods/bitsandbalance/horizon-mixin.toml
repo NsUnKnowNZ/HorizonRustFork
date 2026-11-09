@@ -1,0 +1,79 @@
+# Bits and Balance (ARR) for Horizon, written from its documented behaviour, a part of its
+# gameplay (its blocks, items and enchantments are the content mod horizon-mods/bitsandbalance):
+#  - Automatic restock: when the last block of a stack is placed, or the tool in hand breaks,
+#    the same item from the rest of the inventory takes its place.
+#  - Biome titles: entering a new biome shows its name across the screen for a moment.
+#  - Cascading (pickaxes, I to III): mining an ore mines the ores joined to it, one at a time
+#    (8 a level); crouch to mine just the one.
+#  - Aerodynamic (elytra): less air drag while gliding, full strength at cloud height.
+[mod]
+id = "bitsandbalance"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "bitsandbalance"
+source = "bitsandbalance.rs"
+
+[[injection]]
+id = "place"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_place_block"
+helper = "place.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+]
+
+[[injection]]
+id = "player_tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_player_tick"
+helper = "player_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "destroy"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_destroy_block"
+helper = "destroy.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "state", ty = "horizon_world::registry::BlockStateId", value = "state" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "level_tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_level_tick_post"
+helper = "level_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "client_tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_pre"
+helper = "client_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "draw"
+kind = "HEAD"
+hook = "gui_layer_post"
+hook_version = 1
+helper = "draw.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "layer", ty = "&str", value = "layer" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+]

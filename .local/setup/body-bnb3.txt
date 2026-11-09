@@ -1,0 +1,16 @@
+Launch
+Platform
+C command "gamemode survival"
+C command "time set 6000"
+C command "clear @s"
+C command "fill 204 150 199 208 152 201 minecraft:iron_ore"
+C command "setblock 206 150 198 minecraft:air"
+C command "item replace entity @s hotbar.0 with minecraft:diamond_pickaxe[enchantments={'bitsandbalance:cascading':2}]"
+C command "tp @s 206.5 150 196.5 0 20"
+C select 1
+C wait 10
+C break 206 150 199
+C wait 40
+C blocks 204 150 199 208 152 201
+C inventory
+C logs

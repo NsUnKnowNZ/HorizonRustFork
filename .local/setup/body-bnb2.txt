@@ -1,0 +1,35 @@
+Launch
+Platform
+C command "gamemode survival"
+C command "time set 6000"
+C command "clear @s"
+C command "fill 198 146 198 202 148 202 minecraft:iron_ore"
+C command "fill 198 149 198 202 149 202 minecraft:air"
+C command "item replace entity @s hotbar.0 with minecraft:diamond_pickaxe[enchantments={'bitsandbalance:cascading':2}]"
+C command "tp @s 200.5 150 196.5 0 60"
+C select 1
+C wait 10
+C break 200 148 198
+C wait 40
+C blocks 198 146 198 202 148 202
+C inventory
+C command "clear @s"
+C command "item replace entity @s hotbar.3 with minecraft:bundle[enchantments={'diversity:vacuum':1}]"
+C command "summon minecraft:item 200.5 150 196.5 {Item:{id:'minecraft:cobblestone',count:10}}"
+C wait 30
+C inventory
+C command "gamemode creative"
+C command "tp @s 2000 150 2000"
+C wait 30
+C command "tp @s 2000 ~ 2000"
+C wait 30
+C screenshot "$shots\biome-title.png"
+C wait 300
+C options keybinds
+C wait 10
+C key key.keyboard.left.alt down
+C wait 10
+C screenshot "$shots\visualkeys.png"
+C key key.keyboard.left.alt up
+C close
+C logs

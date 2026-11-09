@@ -1,0 +1,30 @@
+# AmbientSounds (CreativeMD, LGPL-3.0) for Horizon: its ambience engine, written from the mod's
+# documented behaviour and read from its own region files. Its sounds and regions are the client
+# content mod horizon-mods/ambientsounds (built by .local/setup/ambientsounds_build.py).
+# Every two seconds the place you stand in is weighed: the biome, its temperature, the height
+# over the ground and above sea, the sky over you, rain and storms, being underwater; each region
+# (forest, plains, desert, ocean, cave, rain, storm, sky...) gets a volume from 0 to 1, its bad
+# regions taking theirs away. Each region's sounds then play while it is heard: birds by day and
+# owls by night (the time curves of its sound categories), crickets, cicadas, wind, waves, cave
+# drips and rumbles, rain and storm loops, each again when the last ends or after its pause, and
+# they stop when their region goes quiet. The Overworld only; the block scans for features are
+# left out (a region's biomes decide). Sounds play in the Ambient/Environment volume.
+[mod]
+id = "ambientsounds"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "ambientsounds"
+source = "ambientsounds.rs"
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]

@@ -7,25 +7,26 @@ if (Test-Path server-oneblock\engine) {
   Copy-Item .local\native\target\fast\horizon-client.exe server-oneblock\engine\horizon-client.exe -Force
   "engine copied"
 }
-foreach ($m in 'bedrockify','biome_paint','bitsandbalance','charm','chipped','handcrafted','horizonportals','more_babies','puddleflood','supplementaries','suppsquared','yo_hooks') {
+foreach ($m in 'bedrockify','biome_paint','bitsandbalance','charm','chipped','handcrafted','diversity','horizonportals','more_babies','puddleflood','supplementaries','suppsquared','yo_hooks') {
   & robocopy "horizon-mods\$m" "server-oneblock\horizon-mods\$m" /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
 }
 Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
-(Get-Content server-oneblock\horizon-mods.txt) | Where-Object { $_ -notmatch "^mod.beb:" } | Set-Content server-oneblock\horizon-mods.txt
+(Get-Content server-oneblock\horizon-mods.txt) | Where-Object { $_ -notmatch "^mod.(beb|ambientsounds):" } | Set-Content server-oneblock\horizon-mods.txt
 "server mods synced"
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates 2>&1 | ForEach-Object { "$_" }
-git add -f .local/native/mods/handcrafted .local/native/mods/charm_tweaks .local/native/mods/yo_hooks .local/native/mods/more_babies .local/native/mods/punchy .local/setup/body-joins.txt .local/setup/body-hooks.txt .local/setup/body-babies.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
+git add -f .local/native/mods/bitsandbalance .local/native/mods/diversity .local/native/mods/ambientsounds .local/native/mods/visualkeys .local/native/mods/sihywtcamd .local/setup/ambientsounds_build.py .local/setup/body-bnb.txt .local/setup/body-bnb2.txt .local/setup/body-bnb3.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | ForEach-Object { "$_" }
 $msg = @"
-Furniture joining, Grappling Hooks, More Babies, Punchy, more of Charm
+AmbientSounds, Bits and Balance's gameplay, Diversity's bundles, VisualKeys, more of the Difficulty mod
 
-- handcrafted: tables join tables round them (16 shapes); couches, benches, shelves and fancy
-  beds join their kind beside them facing the same way, on placement and on shape updates
-- yo_hooks: cast, hang, swing, climb and jump off a grappling hook, its chain drawn
-- more_babies: babies of mobs vanilla has none of (scale attribute), Cursed Clock On A Stick
-- punchy: first-person hands lag, bob, sprint, fall and punch
-- charm_tweaks: crop replanting, doors open together, chairs on stairs, anvils last longer
+- ambientsounds: its ambience engine from its own region files (biomes, temperature, sky, height,
+  rain, storms, underwater, block features sampled round the player, day/night curves); sounds
+  from a client content mod built locally by ambientsounds_build.py
+- bitsandbalance: automatic restock, biome titles, Cascading, Aerodynamic
+- diversity: Vacuum, Selective Vacuum and Refill bundles
+- visualkeys: a keyboard of the key bindings on the Key Binds page (hold Left Alt)
+- sihywtcamd: spawn-time health and attributes
 - ledger updated
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
