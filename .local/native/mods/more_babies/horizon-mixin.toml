@@ -1,0 +1,51 @@
+# More Babies (mammut53, ARR) for Horizon, written from its documented behaviour: mobs that have
+# no babies in vanilla (creepers, skeletons, spiders, endermen, witches, pillagers, golems,
+# guardians, ghasts, blazes, breezes, the warden and more) now and then spawn as babies: half the
+# size and a little quicker. The Cursed Clock On A Stick (content mod horizon-mods/more_babies,
+# carried by horizon-port-pack) turns a grown mob into a baby, or a baby back. Babies are drawn
+# with the game's `scale` attribute, so they keep the grown mob's look. Server side.
+[mod]
+id = "more_babies"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "more_babies"
+source = "more_babies.rs"
+
+[[injection]]
+id = "spawned"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mob_spawned"
+helper = "spawned.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "pos", ty = "[f64; 3]", value = "pos" },
+  { name = "natural", ty = "bool", value = "natural" },
+]
+
+[[injection]]
+id = "interact"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_interact_entity"
+helper = "interact.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "entity", ty = "i32", value = "entity" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "stack", ty = "Option<&horizon_client::items::ItemStack>", value = "stack" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" },
+]
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_level_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]

@@ -7,23 +7,25 @@ if (Test-Path server-oneblock\engine) {
   Copy-Item .local\native\target\fast\horizon-client.exe server-oneblock\engine\horizon-client.exe -Force
   "engine copied"
 }
-foreach ($m in 'bedrockify','biome_paint','bitsandbalance','charm','chipped','handcrafted','horizonportals','puddleflood','supplementaries','suppsquared') {
+foreach ($m in 'bedrockify','biome_paint','bitsandbalance','charm','chipped','handcrafted','horizonportals','more_babies','puddleflood','supplementaries','suppsquared','yo_hooks') {
   & robocopy "horizon-mods\$m" "server-oneblock\horizon-mods\$m" /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
 }
+Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
+(Get-Content server-oneblock\horizon-mods.txt) | Where-Object { $_ -notmatch "^mod.beb:" } | Set-Content server-oneblock\horizon-mods.txt
 "server mods synced"
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates 2>&1 | ForEach-Object { "$_" }
-git add -f .local/native/mods/effectual .local/native/mods/sihywtcamd .local/native/mods/fog .local/setup/body-effectual.txt .local/setup/body-grass.txt .local/setup/body-difficulty.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
+git add -f .local/native/mods/handcrafted .local/native/mods/charm_tweaks .local/native/mods/yo_hooks .local/native/mods/more_babies .local/native/mods/punchy .local/setup/body-joins.txt .local/setup/body-hooks.txt .local/setup/body-babies.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | ForEach-Object { "$_" }
 $msg = @"
-LambdaBetterGrass in the mesher, Effectual, and part of So I Heard You Want To Customize Mob Difficulty
+Furniture joining, Grappling Hooks, More Babies, Punchy, more of Charm
 
-- mesher: a grass block's (mycelium's, podzol's, nylium's) side shows its top where the block
-  under that side is the same block (LambdaBetterGrass's fancy mode), grass keeping its colour
-- effectual: breath steam in the cold, breath bubbles under water, dripping after the water,
-  wither smoke, cave dust; kept out of the first-person view
-- sihywtcamd: husks fire-proof, arthropods no fall damage, evokers stop arrows, undead heal by
-  their hits, endermen can blind
+- handcrafted: tables join tables round them (16 shapes); couches, benches, shelves and fancy
+  beds join their kind beside them facing the same way, on placement and on shape updates
+- yo_hooks: cast, hang, swing, climb and jump off a grappling hook, its chain drawn
+- more_babies: babies of mobs vanilla has none of (scale attribute), Cursed Clock On A Stick
+- punchy: first-person hands lag, bob, sprint, fall and punch
+- charm_tweaks: crop replanting, doors open together, chairs on stairs, anvils last longer
 - ledger updated
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

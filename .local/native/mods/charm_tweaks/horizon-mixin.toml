@@ -4,6 +4,12 @@
 #    doesn't fit drops as usual.
 #  - Aerial Affinity (boots): no slower digging while off the ground (vanilla's fivefold
 #    slowdown is undone; the one under water stays, as Aqua Affinity's job).
+#  - Crop replanting: right click a grown crop (wheat, carrots, potatoes, beetroots, nether
+#    wart) to harvest it into your inventory; it is planted
+#    again.
+#  - Doors open together: a double door's other half opens and shuts with the one used.
+#  - Anvils last longer: half the anvil wear is undone.
+#  - Chairs: right click a bottom stair with an empty hand to sit on it.
 [mod]
 id = "charm_tweaks"
 version = "0.1.0"
@@ -35,4 +41,26 @@ bindings = [
   { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
   { name = "original", ty = "f32", value = "original" },
   { name = "speed", ty = "&mut f32", value = "&mut *speed" },
+]
+
+[[injection]]
+id = "click"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_right_click_block"
+helper = "click.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "anvil"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_anvil_damaged"
+helper = "anvil.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "from", ty = "&str", value = "from" },
 ]

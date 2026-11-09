@@ -1,0 +1,77 @@
+Launch
+Platform
+C command "gamemode creative"
+C command "time set 6000"
+C command "kill @e[type=!player]"
+C command "fill 196 150 199 210 152 207 air"
+C command "setblock 198 150 202 handcrafted:oak_table"
+C command "setblock 199 150 202 handcrafted:oak_table"
+C command "setblock 198 150 203 handcrafted:oak_table"
+C command "setblock 199 150 203 handcrafted:oak_table"
+C command "setblock 200 150 202 handcrafted:oak_table"
+C command "item replace entity @s hotbar.0 with handcrafted:oak_couch"
+C command "item replace entity @s hotbar.1 with handcrafted:oak_table"
+C command "item replace entity @s hotbar.2 with handcrafted:oak_shelf"
+C command "tp @s 204.5 150 200.5 180 40"
+C select 1
+C wait 10
+C place 203 150 202
+C place 204 150 202
+C place 205 150 202
+C select 2
+C command "tp @s 199.5 150 199.5 180 40"
+C wait 5
+C place 200 150 203
+C select 3
+C command "tp @s 208.5 150 200.5 180 20"
+C wait 5
+C place 207 150 203
+C place 208 150 203
+C place 209 150 203
+C command "tp @s 201.5 154 197.5 0 45"
+C wait 30
+C screenshot "$shots\joins.png"
+C block 198 150 202
+C block 199 150 202
+C block 200 150 202
+C block 198 150 203
+C block 199 150 203
+C block 200 150 203
+C block 203 150 202
+C block 204 150 202
+C block 205 150 202
+C block 207 150 203
+C block 208 150 203
+C block 209 150 203
+C command "fill 196 150 199 210 152 207 air"
+C command "setblock 200 149 200 minecraft:farmland"
+C command "setblock 200 150 200 minecraft:wheat[age=7]"
+C command "setblock 202 150 200 minecraft:oak_door[facing=south,hinge=left,half=lower]"
+C command "setblock 202 151 200 minecraft:oak_door[facing=south,hinge=left,half=upper]"
+C command "setblock 201 150 200 minecraft:oak_door[facing=south,hinge=right,half=lower]"
+C command "setblock 201 151 200 minecraft:oak_door[facing=south,hinge=right,half=upper]"
+C command "clear @s"
+C command "tp @s 201.5 150 197.5 0 30"
+C select 9
+C wait 10
+C interact 200 150 200 north
+C wait 5
+C block 200 150 200
+C entities 4
+C interact 202 150 200 north
+C wait 5
+C block 202 150 200
+C block 201 150 200
+C block 201 151 200
+C command "item replace entity @s hotbar.0 with yo_hooks:iron_grappling_hook"
+C command "setblock 203 165 205 minecraft:stone"
+C command "tp @s 203.5 150 198.5 0 -65"
+C select 1
+C wait 10
+C use-item
+C wait 20
+C screenshot "$shots\hook.png"
+C state
+C key space
+C wait 5
+C logs

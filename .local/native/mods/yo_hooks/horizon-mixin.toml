@@ -1,0 +1,54 @@
+# Yori3o's Grappling Hooks (MIT) for Horizon, written from the mod's documented behaviour. The
+# hooks, hook heads, recipes and sounds are the content mod horizon-mods/yo_hooks (carried by
+# horizon-port-pack).
+#  - Right click with a grappling hook: the hook flies to the block you look at, within its
+#    range (copper 16, iron 24, gold 28, diamond 32, netherite 40 blocks; Long Reach +8 a
+#    level), and holds there on its chain.
+#  - On the chain you swing under the hook. Jump climbs up the chain, sneak lets you down
+#    (Agility climbs faster).
+#  - Right click again lets go with a jump off the chain; the hook also lets go if its block is
+#    broken, you put the hook away or you go too far.
+#  - No fall damage builds up while you hang.
+# The player's own movement, so client side (single player and any server's player).
+[mod]
+id = "yo_hooks"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "yo_hooks"
+source = "yo_hooks.rs"
+
+[[injection]]
+id = "use"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_interaction_key"
+helper = "use.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "swing_hand", ty = "&mut bool", value = "&mut *swing_hand" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_pre"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "draw"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_primitives"
+helper = "draw.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "partial", ty = "f32", value = "partial" },
+  { name = "primitives", ty = "&mut horizon_client::world_primitives::WorldPrimitives", value = "&mut *primitives" },
+]

@@ -151,7 +151,7 @@ fn seat(kind: &str) -> bool {
 
 /// Right click with an empty hand on a seat: sit down on it (an invisible silverfish in the seat,
 /// which the rider sits on; it goes when they get up).
-fn sit(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut bool) {
+pub(super) fn sit(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut bool) {
     let player = game.native_acting_entity();
     if player == 0 && game.lan_acting.is_some() {
         return;
@@ -237,9 +237,130 @@ pub(super) fn empty_hand(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut bool
 
 /// Handcrafted's storage furniture is a barrel underneath, which would face up or down when
 /// placed looking at the floor: it faces the player, level, as the furniture does.
+/// Furniture that joins its neighbours, and how.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Joins {
+    /// A table: joins tables on any side (16 shapes).
+    Table,
+    /// A couch, bench, shelf or fancy bed: joins its own kind beside it facing the same way.
+    Row(&'static str),
+}
+
+fn joins(block: &str) -> Option<Joins> {
+    let path = block.strip_prefix("handcrafted:")?;
+    if path.ends_with("_table") && !path.ends_with("_side_table") {
+        return Some(Joins::Table);
+    }
+    ["couch", "bench", "shelf", "fancy_bed"]
+        .into_iter()
+        .find(|k| path.ends_with(&format!("_{k}")) && !path.ends_with("dining_bench"))
+        .map(Joins::Row)
+}
+
+const SIDES: [(&str, [i32; 2]); 4] = [("north", [0, -1]), ("east", [1, 0]), ("south", [0, 1]), ("west", [-1, 0])];
+
+fn side(dir: &str) -> usize {
+    SIDES.iter().position(|s| s.0 == dir).unwrap_or(0)
+}
+
+fn property<'a>(level: &'a super::GameLevel<'_>, state: horizon_world::registry::BlockStateId, key: &str) -> Option<&'a str> {
+    level.registry.state(state)?.properties.get(key).map(String::as_str)
+}
+
+/// The state `state` (at `pos`) takes beside its neighbours: its `shape`. `known` is a neighbour
+/// already known (a shape update's), else the level is read.
+fn joined(
+    level: &super::GameLevel<'_>,
+    pos: horizon_core::position::BlockPos,
+    state: horizon_world::registry::BlockStateId,
+    known: Option<(horizon_core::position::BlockPos, horizon_world::registry::BlockStateId)>,
+) -> Option<horizon_world::registry::BlockStateId> {
+    use horizon_world::level::LevelAccess;
+    let block = level.native_state_block(state)?;
+    let kind = joins(block)?;
+    let at = |i: usize| {
+        let d = SIDES[i].1;
+        let p = horizon_core::position::BlockPos::new(pos.x + d[0], pos.y, pos.z + d[1]);
+        match known {
+            Some((k, s)) if k == p => s,
+            _ => level.block_state(p),
+        }
+    };
+    let shape = match kind {
+        Joins::Table => {
+            let c: Vec<bool> = (0..4)
+                .map(|i| level.native_state_block(at(i)).and_then(joins) == Some(Joins::Table))
+                .collect();
+            let (n, e, s, w) = (c[0], c[1], c[2], c[3]);
+            match (n, e, s, w) {
+                (false, false, false, false) => "single",
+                (true, true, true, true) => "center",
+                // An end: joined on one side only.
+                (true, false, false, false) => "north_side",
+                (false, true, false, false) => "east_side",
+                (false, false, true, false) => "south_side",
+                (false, false, false, true) => "west_side",
+                (true, false, true, false) => "north_south_center",
+                (false, true, false, true) => "east_west_center",
+                // A corner of a group: the two sides it isn't joined on.
+                (false, false, true, true) => "north_east_corner",
+                (false, true, true, false) => "north_west_corner",
+                (true, false, false, true) => "south_east_corner",
+                (true, true, false, false) => "south_west_corner",
+                // An edge of a group: the side it isn't joined on.
+                (false, true, true, true) => "north_center",
+                (true, false, true, true) => "east_center",
+                (true, true, false, true) => "south_center",
+                (true, true, true, false) => "west_center",
+            }
+        }
+        Joins::Row(_) => {
+            let facing = property(level, state, "facing")?;
+            let f = side(facing);
+            let part = property(level, state, "part");
+            let same = |i: usize| {
+                let other = at(i);
+                level.native_state_block(other).and_then(joins) == Some(kind)
+                    && property(level, other, "facing") == Some(facing)
+                    && property(level, other, "part") == part
+            };
+            // Seen from the seat (a couch facing north is sat on looking north): its left is
+            // the side a quarter turn anticlockwise.
+            let (left, right) = (same((f + 3) % 4), same((f + 1) % 4));
+            match (left, right) {
+                (true, true) => "middle",
+                (true, false) => "left",
+                (false, true) => "right",
+                (false, false) => "single",
+            }
+        }
+    };
+    level.native_state_with_property(state, "shape", shape)
+}
+
+/// A neighbour of joining furniture changed: its shape follows (`updateShape`).
+pub(super) fn update_shape(
+    level: &super::GameLevel<'_>,
+    pos: horizon_core::position::BlockPos,
+    state: horizon_world::registry::BlockStateId,
+    neighbour_pos: horizon_core::position::BlockPos,
+    neighbour: horizon_world::registry::BlockStateId,
+    new: &mut Option<horizon_world::registry::BlockStateId>,
+) {
+    if new.is_some() || neighbour_pos.y != pos.y {
+        return;
+    }
+    if let Some(s) = joined(level, pos, state, Some((neighbour_pos, neighbour)))
+        && s != state
+    {
+        *new = Some(s);
+    }
+}
+
 pub(super) fn state_for_placement(
     level: &super::GameLevel<'_>,
     state: horizon_world::registry::BlockStateId,
+    pos: horizon_core::position::BlockPos,
     yaw: f32,
     answer: &mut Option<Option<horizon_world::registry::BlockStateId>>,
 ) {
@@ -249,7 +370,8 @@ pub(super) fn state_for_placement(
     let Some(block) = level.native_state_block(state) else {
         return;
     };
-    if !block.starts_with("handcrafted:") || level.native_state_with_property(state, "open", "false").is_none() {
+    let barrel = level.native_state_with_property(state, "open", "false").is_some();
+    if !block.starts_with("handcrafted:") || !(barrel || joins(block).is_some()) {
         return;
     }
     // The player's horizontal direction (yaw 0 looks south), turned to face them.
@@ -259,7 +381,9 @@ pub(super) fn state_for_placement(
         2 => "south",
         _ => "west",
     };
-    if let Some(s) = level.native_state_with_property(state, "facing", toward) {
-        *answer = Some(Some(s));
+    let faced = level.native_state_with_property(state, "facing", toward).unwrap_or(state);
+    let placed = joined(level, pos, faced, None).unwrap_or(faced);
+    if placed != state {
+        *answer = Some(Some(placed));
     }
 }

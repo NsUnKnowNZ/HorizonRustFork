@@ -1,0 +1,30 @@
+# Punchy! (first-person animations, ARR) for Horizon, written from its documented behaviour, a
+# part of it: the first-person hands are alive. They lag behind the camera as you turn and look
+# up or down, swing from side to side as you walk, drop and tilt forward as you sprint, rise as
+# you fall, and punch forward with each swing. Client side, drawing only.
+[mod]
+id = "punchy"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "punchy"
+source = "punchy.rs"
+
+[[injection]]
+id = "pose"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_render_hand_pose"
+helper = "pose.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "hand", ty = "horizon_client::first_person::Hand", value = "hand" },
+  { name = "swing", ty = "f32", value = "swing" },
+  { name = "x", ty = "&mut f32", value = "&mut *x" },
+  { name = "y", ty = "&mut f32", value = "&mut *y" },
+  { name = "z", ty = "&mut f32", value = "&mut *z" },
+  { name = "pitch", ty = "&mut f32", value = "&mut *pitch" },
+  { name = "roll", ty = "&mut f32", value = "&mut *roll" },
+]

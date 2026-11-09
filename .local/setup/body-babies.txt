@@ -1,0 +1,20 @@
+Launch
+Platform
+C command "gamemode creative"
+C command "time set 6000"
+C command "kill @e[type=minecraft:creeper,distance=..30]"
+C command "summon minecraft:creeper 206.5 150 200.5 {NoAI:1b}"
+C command "item replace entity @s hotbar.1 with more_babies:cursed_clock_on_a_stick"
+C command "tp @s 206.5 150 198.5 0 10"
+C select 2
+C wait 10
+C use-item
+C wait 10
+C command "execute as @e[type=minecraft:creeper,distance=..10] run attribute @s minecraft:scale get"
+C screenshot "$shots\babies.png"
+C command "tp @s 206.5 150 199.0 0 40"
+C wait 5
+C use-item
+C wait 10
+C command "execute as @e[type=minecraft:creeper,distance=..10] run attribute @s minecraft:scale get"
+C logs

@@ -1,0 +1,58 @@
+Launch
+Platform
+C command "gamemode creative"
+C command "time set 6000"
+C command "kill @e[type=!player]"
+C command "setblock 200 149 200 minecraft:farmland"
+C command "setblock 200 150 200 minecraft:wheat[age=7]"
+C command "setblock 199 150 197 minecraft:oak_stairs[facing=north,half=bottom]"
+C command "tp @s 201.5 150 197.5 0 30"
+C command "gamemode survival"
+C command "clear @s"
+C select 9
+C wait 10
+C interact 200 150 200 north
+C wait 10
+C block 200 150 200
+C entities 5
+C inventory
+C command "tp @s 199.5 150 195.5 0 30"
+C wait 5
+C interact 199 150 197 north
+C wait 5
+C state
+C command "gamemode creative"
+C command "kill @e[type=minecraft:creeper]"
+C command "summon minecraft:creeper 206.5 150 200.5 {NoAI:1b}"
+C command "item replace entity @s hotbar.1 with more_babies:cursed_clock_on_a_stick"
+C command "tp @s 206.5 150 198.5 0 10"
+C select 2
+C wait 10
+C use-item
+C wait 10
+C command "execute as @e[type=minecraft:creeper] run attribute @s minecraft:scale get"
+C screenshot "$shots\babies.png"
+C use-item
+C wait 5
+C command "execute as @e[type=minecraft:creeper] run attribute @s minecraft:scale get"
+C entities 6
+C command "kill @e[type=minecraft:creeper]"
+C command "item replace entity @s hotbar.0 with yo_hooks:iron_grappling_hook"
+C command "setblock 203 165 205 minecraft:stone"
+C command "tp @s 203.5 150 198.5 0 -65"
+C command "gamemode survival"
+C select 1
+C wait 10
+C use-item
+C wait 10
+C jump
+C wait 10
+C state
+C screenshot "$shots\hook.png"
+C wait 40
+C state
+C use-item
+C wait 20
+C state
+C command "gamemode creative"
+C logs
