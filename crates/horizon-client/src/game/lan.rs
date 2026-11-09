@@ -367,7 +367,8 @@ fn mob_variant_meta(
     meta: &mut Vec<(u8, i32, Value)>,
     defaults: &mut Vec<(u8, i32, Value)>,
 ) {
-    let (kind, e) = (m.kind.id.as_str(), &m.extra);
+    // The class's entries: a content mod's living type has its template's.
+    let (kind, e) = (m.kind.class_id(), &m.extra);
     let id = |registry: &str, name: &str| hub.registry_id(registry, &format!("minecraft:{name}"));
     match kind {
         // Axolotl.DATA_VARIANT (after AgeableMob's two).
@@ -1432,7 +1433,7 @@ impl Game<'_> {
             .then(|| horizon_client::lod_net::Service::new(net.lod_distance, biome_names.clone()));
         let lan = Lan::start_with(sync.clone(), net)?;
         let mut hub = Hub::new(lan, sync, encoder, config);
-        hub.sync_attachments = !crate::mod_api::mods().is_empty();
+        hub.sync_attachments = crate::mod_api::listening();
         hub.flat_world = self.world_flat;
         hub.debug_world = self.world_debug;
         let port = hub.lan.port;
@@ -2415,7 +2416,7 @@ impl Game<'_> {
                 self.ui.rules.bool("player_movement_check"),
                 self.ui.rules.bool("elytra_movement_check"),
             );
-            host.hub.mods_loaded = !horizon_client::mod_api::mods().is_empty();
+            host.hub.mods_loaded = horizon_client::mod_api::listening();
             let pass = self.level_pass;
             let mut events = if pass.first {
                 horizon_client::spans::time("lan_poll", || host.hub.poll(&mut ctx))
@@ -2765,7 +2766,7 @@ impl Game<'_> {
                 // (`tick_server`): the network is read once, before the first.
                 // Player packets may already have been drained before
                 // scheduled block ticks (`tick_lan_packets`).
-                host.hub.mods_loaded = !horizon_client::mod_api::mods().is_empty();
+                host.hub.mods_loaded = horizon_client::mod_api::listening();
                 let pass = self.level_pass;
                 let mut events = if pass.first && !pass.packets_drained {
                     host.hub.poll(&mut ctx)

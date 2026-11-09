@@ -1,0 +1,9 @@
+{
+  "hooks": [
+    {"name": "mob_voice", "target": "horizon_client_lib::mobs::ai::native_mob_voice", "neoforge": "Mob.getAmbientSound/getHurtSound/getDeathSound", "side": "server"},
+    {"name": "mob_step_sound", "target": "horizon_client_lib::mobs::ai::native_mob_step_sound", "neoforge": "Entity.playStepSound", "side": "server"}
+  ],
+  "rust_summary": "a mob's ambient, hurt, death and step sounds as a mod has them (`native_mob_voice`, `native_mob_step_sound`).",
+  "doc_summary": "a mob's own sounds: `native_mob_voice(m, sounds)` puts a mod's ambient, hurt and death sounds in place of the species' (`getAmbientSound`, `getHurtSound`, `getDeathSound`), `native_mob_step_sound(m, sound)` its footfall (`playStepSound`); a namespaced id plays the mod's own sound event. Bundles need \"hooks\": @API:mob_sounds@.",
+  "comments": ["crates/horizon-client/src/mobs/ai.rs"]
+}

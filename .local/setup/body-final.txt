@@ -1,0 +1,67 @@
+Launch
+Platform
+C command "kill @e[type=!minecraft:player]"
+C command "clear @s"
+# --- Underlay: sneak + use puts a carpet under a chest, sneak + attack takes it back
+C command "setblock 203 150 200 minecraft:chest[facing=north]"
+C command "item replace entity @s hotbar.0 with minecraft:red_carpet 8"
+C command "tp @s 203.5 150 197.5 0 20"
+C select 1
+C wait 20
+C key key.keyboard.left.shift down
+C wait 5
+C use-item
+C wait 5
+C key key.keyboard.left.shift up
+C wait 20
+C screenshot "$shots\final-ul-placed.png"
+C command "gamemode survival"
+C wait 5
+C key key.keyboard.left.shift down
+C wait 5
+C attack
+C wait 10
+C key key.keyboard.left.shift up
+C wait 20
+C command "execute if block 203 150 200 minecraft:chest run say chest-stays"
+C command "execute if entity @e[type=minecraft:item,nbt={Item:{id:\"minecraft:red_carpet\"}}] run say carpet-dropped"
+C screenshot "$shots\final-ul-taken.png"
+C command "gamemode creative"
+C command "setblock 203 150 200 minecraft:air"
+C command "kill @e[type=minecraft:item]"
+# --- Hulk hammer: a seismic wave along the ground hurts the zombie ahead
+C command "summon minecraft:zombie 203.5 150 200.5 {NoAI:1b,PersistenceRequired:1b}"
+C command "item replace entity @s hotbar.1 with mutantmonsters:hulk_hammer"
+C command "tp @s 203.5 150 196.5 0 35"
+C select 2
+C wait 20
+C use-item
+C wait 40
+C command "execute as @e[type=minecraft:zombie] run data get entity @s Health"
+C screenshot "$shots\final-hammer.png"
+C command "kill @e[type=!minecraft:player]"
+# --- A live mutant zombie against a survival player for a few seconds (no crash, attacks happen)
+C command "effect give @s minecraft:resistance 60 4 true"
+C command "gamemode survival"
+C command "summon mutantmonsters:mutant_zombie 203.5 150 204.5"
+C wait 120
+C screenshot "$shots\final-fight1.png"
+C wait 100
+C screenshot "$shots\final-fight2.png"
+C command "gamemode creative"
+C command "kill @e[type=!minecraft:player]"
+C command "tp @s 203.5 152 195.5 0 25"
+C wait 260
+C logs --lines 60
+# --- Seamless Loading Screen: quit, open the world again, shoot the loading screen
+C quit
+Start-Sleep 8
+C launch --world NativeTest --wait
+C screenshot "$shots\final-seamless-1.png"
+Start-Sleep -Milliseconds 600
+C screenshot "$shots\final-seamless-2.png"
+Start-Sleep -Milliseconds 900
+C screenshot "$shots\final-seamless-3.png"
+Start-Sleep 2
+C screenshot "$shots\final-seamless-4.png"
+Start-Sleep 25

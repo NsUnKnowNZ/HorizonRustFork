@@ -12398,21 +12398,24 @@ fn hdr10_to_rgb16(pixels: &[[u8; 4]]) -> Vec<u8> {
     }
     out
 }
-/// Centre-crop the frame to a square and average it down to `size`.
+/// Centre-crop the frame to `size`'s shape (a square for the world icon, the window's for the
+/// loading screen's picture) and average it down to `size`.
 pub(crate) fn square_downscale(pixels: &[u8], width: u32, height: u32, size: [u32; 2]) -> Vec<u8> {
-    let (side, cx, cy) = if width > height {
-        (height, (width - height) / 2, 0)
-    } else {
-        (width, 0, (height - width) / 2)
-    };
     let [tw, th] = size;
+    let (cw, ch) = if u64::from(width) * u64::from(th) > u64::from(height) * u64::from(tw) {
+        ((u64::from(height) * u64::from(tw) / u64::from(th)) as u32, height)
+    } else {
+        (width, (u64::from(width) * u64::from(th) / u64::from(tw)) as u32)
+    };
+    let (cw, ch) = (cw.clamp(1, width), ch.clamp(1, height));
+    let (cx, cy) = ((width - cw) / 2, (height - ch) / 2);
     let mut out = vec![0u8; (tw * th * 4) as usize];
     for ty in 0..th {
-        let y0 = cy + ty * side / th;
-        let y1 = cy + (ty + 1) * side / th;
+        let y0 = cy + ty * ch / th;
+        let y1 = (cy + (ty + 1) * ch / th).max(y0 + 1).min(height);
         for tx in 0..tw {
-            let x0 = cx + tx * side / tw;
-            let x1 = cx + (tx + 1) * side / tw;
+            let x0 = cx + tx * cw / tw;
+            let x1 = (cx + (tx + 1) * cw / tw).max(x0 + 1).min(width);
             let (mut r, mut g, mut b) = (0u32, 0u32, 0u32);
             for y in y0..y1 {
                 for x in x0..x1 {

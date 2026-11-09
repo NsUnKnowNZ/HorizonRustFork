@@ -18,7 +18,7 @@ thread_local! {
 /// Notes that the player with entity id `entity` is `uuid` (a guest whose turn starts), while
 /// a native mod is loaded: a hit on them or by them is named by it from then on.
 pub(super) fn note_player(entity: i32, uuid: u128) {
-    if horizon_client::mod_api::mods().is_empty() {
+    if !horizon_client::mod_api::listening() {
         return;
     }
     PLAYERS.with(|players| {

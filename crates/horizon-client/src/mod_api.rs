@@ -864,6 +864,24 @@ pub fn mods() -> &'static [Box<dyn Hooks>] {
     MODS.get().map_or(&[], |mods| mods.as_ref())
 }
 
+/// A mixin bundle said it listens ([`set_native_listening`]).
+static NATIVE_LISTENING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether a native mod listens to the hooks whose work costs when nobody does: a trait mod
+/// ([`mods`]), or a mixin bundle, which adds no entry there, that said so
+/// ([`set_native_listening`]). It gates naming a hit's parties
+/// (`native_living_incoming_damage_v3`), asking `native_living_death` and syncing synced
+/// attachments to clients.
+pub fn listening() -> bool {
+    !mods().is_empty() || NATIVE_LISTENING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// A mixin bundle (a HEAD injection's helper, at start: `native_layer_definitions` or
+/// `native_register_goals`) asks for the hooks and attachment syncing [`listening`] gates.
+pub fn set_native_listening() {
+    NATIVE_LISTENING.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// The bundles' `[mod] id`s, one a [`mods`] entry in the same order.
 static MOD_IDS: OnceLock<&'static [&'static str]> = OnceLock::new();
 

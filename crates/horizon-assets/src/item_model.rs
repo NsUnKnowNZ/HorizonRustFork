@@ -540,12 +540,13 @@ impl ItemModelNode {
                 }
             }
             "minecraft:special" if SpecialModel::is_foreign(required(m, "model")?) => {
-                // The mod's own renderer is not run: the base model stands in.
-                Self::Model(ModelLeaf {
-                    model: ident(required(m, "base")?)?,
+                // A mod's own renderer: a native mod may draw it, else the base model stands
+                // in (`Resolve::node`).
+                Self::Special {
+                    base: ident(required(m, "base")?)?,
                     transformation: optional_transformation(m)?,
-                    tints: Vec::new(),
-                })
+                    model: SpecialModel::native(required(m, "model")?)?,
+                }
             }
             "minecraft:special" => Self::Special {
                 base: ident(required(m, "base")?)?,
@@ -1056,6 +1057,11 @@ pub trait ItemEnv {
     fn enchantment_in_tag(&self, _enchantment: &str, _tag: &str) -> bool {
         false
     }
+    /// Whether a native mod draws special models of its own type `kind`
+    /// (`camerapture:picture`): one nobody draws resolves to its base model.
+    fn native_special_model(&self, _kind: &str) -> bool {
+        false
+    }
     fn is_keybind_down(&self, _keybind: &str) -> bool {
         false
     }
@@ -1350,6 +1356,35 @@ impl Resolve<'_> {
                 model,
             } => {
                 let transform = compose(parent, transformation);
+                if let Some(kind) = model.native_kind() {
+                    if !self.env.native_special_model(kind) {
+                        // Nobody draws a mod's own type: its base model stands in.
+                        let base = ItemModelNode::Model(ModelLeaf {
+                            model: base.clone(),
+                            transformation: None,
+                            tints: Vec::new(),
+                        });
+                        self.node(out, &base, &transform);
+                        return;
+                    }
+                    // `extractArgument` of a mod's renderer may read any component: it gets
+                    // them all, the stack's patch over the item's defaults.
+                    out.layers.push(Layer {
+                        content: LayerContent::Special {
+                            base: base.clone(),
+                            model: model.clone(),
+                            argument: Value::Object(self.components.to_map().into_iter().collect()),
+                        },
+                        tints: Vec::new(),
+                        foil: if self.has_foil() {
+                            FoilType::Standard
+                        } else {
+                            FoilType::None
+                        },
+                        transform,
+                    });
+                    return;
+                }
                 out.layers.push(Layer {
                     content: LayerContent::Special {
                         base: base.clone(),

@@ -256,6 +256,40 @@ impl BlockEntityDraw {
     }
     /// A quad of `corners` (blocks, under the pose) with unit UVs, shaded as
     /// vanilla's block entity models are (`Lighting`'s two lights).
+    /// [`Self::quad`] painted as `paint` says: its alpha, overlay, light,
+    /// translucency or energy swirl.
+    fn quad_painted(
+        &mut self,
+        corners: [[f32; 3]; 4],
+        uv: [[f32; 2]; 4],
+        sprite: Rect,
+        paint: &NativeModelPaint,
+    ) {
+        let start = self.vertices.len();
+        self.quad(corners, uv, sprite, paint.color & 0xFF_FFFF);
+        let alpha = paint.color >> 24;
+        for (v, local) in self.vertices[start..].iter_mut().zip(uv) {
+            if let Some([du, dv]) = paint.swirl {
+                // `RenderTypes.energySwirl`: the sprite-local UV moved by the offset, the
+                // colour carrying the sprite's size and the light its corner
+                // (fs_energy_swirl wraps it inside the sprite), unlit.
+                v.uv = [local[0] + du % 1.0, local[1] + dv % 1.0];
+                v.color = horizon_client::breaking::stage_light([sprite.u1 - sprite.u0, sprite.v1 - sprite.v0]);
+                v.light = horizon_client::breaking::stage_light([sprite.u0, sprite.v0]);
+                v.layer = horizon_client::gfx::ENERGY_SWIRL_OVERLAY;
+                v.normal = [0; 4];
+                continue;
+            }
+            v.color = (v.color & 0x00FF_FFFF) | (alpha << 24);
+            v.layer = paint.overlay;
+            if let Some(light) = paint.light {
+                v.light = light;
+            }
+            if paint.translucent {
+                v.layer |= horizon_client::gfx::OIT_ENTITY;
+            }
+        }
+    }
     fn quad(&mut self, corners: [[f32; 3]; 4], uv: [[f32; 2]; 4], sprite: Rect, tint: u32) {
         let pose = self.pose();
         let at = corners.map(|c| pose.transform_point3(Vec3::from_array(c)));
@@ -290,6 +324,44 @@ impl BlockEntityDraw {
 pub struct CubeFace<'a> {
     pub sprite: &'a str,
     pub uv: Option<[f32; 4]>,
+}
+
+/// How `native_draw_model_part_with` paints a model: the arguments of
+/// `Model.renderToBuffer(poseStack, buffer, packedLight, packedOverlay, color)`
+/// and the render type the model is drawn with.
+// Native mods build it; nothing in Horizon does.
+#[allow(dead_code, reason = "native mod API (docs/native-mods.md)")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NativeModelPaint {
+    /// The 0xAARRGGBB colour the texture is multiplied by (`ARGB.colorFromFloat`);
+    /// its alpha shows only on a `translucent` paint.
+    pub color: u32,
+    /// The overlay (`OverlayTexture.pack`): 0 for none,
+    /// `horizon_client::overlay::living(white_progress, hurt)` for a mob's red hurt flash and a
+    /// creeper's white swelling flash (`LivingEntityRenderer.getOverlayCoords`).
+    pub overlay: u32,
+    /// The packed light: None draws with the frame's (`draw.light`); a full bright
+    /// `0xF0_00F0` is an eyes or emissive layer's.
+    pub light: Option<u32>,
+    /// `RenderTypes.entityTranslucent` (and `eyes`): blended in the translucent pass.
+    pub translucent: bool,
+    /// `RenderTypes.energySwirl(texture, u, v)`: the texture scrolled by `[u, v]` (in
+    /// texture widths), drawn additive and unlit, as a charged creeper's power layer.
+    pub swirl: Option<[f32; 2]>,
+}
+
+impl NativeModelPaint {
+    /// An opaque model in the frame's light, as `native_draw_model_part` draws it.
+    #[allow(dead_code, reason = "native mod API (docs/native-mods.md)")]
+    pub const fn tinted(tint: u32) -> Self {
+        Self {
+            color: 0xFF00_0000 | (tint & 0xFF_FFFF),
+            overlay: 0,
+            light: None,
+            translucent: false,
+            swirl: None,
+        }
+    }
 }
 
 /// 0xRRGGBB `tint` times `brightness`, as an opaque vertex colour.
@@ -738,6 +810,28 @@ impl Game<'_> {
         true
     }
 
+    /// [`Self::native_draw_model_part`] painted as `paint` says
+    /// (`Model.renderToBuffer` with a light, an overlay and an ARGB colour, under the
+    /// render type a renderer picks): a mob fading away (`entityTranslucent` with an
+    /// alpha), its hurt red or a creeper's white flash (`overlay`), full bright eyes or
+    /// a glow (`light`), or a charged creeper's scrolling power layer (`swirl`). A
+    /// mob's frame only (`native_mob_submit`, `native_mob_layer`): the overlay,
+    /// translucency and swirl are the entity pass's. False for an unknown sprite. API
+    /// @API:model_paint@.
+    pub(super) fn native_draw_model_part_with(
+        &self,
+        draw: &mut BlockEntityDraw,
+        part: &ModelPart,
+        sprite: &str,
+        paint: &NativeModelPaint,
+    ) -> bool {
+        let Some(rect) = self.gui.atlas.sprites.get(sprite).copied() else {
+            return false;
+        };
+        draw_model_part_painted(draw, part, rect, paint);
+        true
+    }
+
     /// Entity model layer `layer` baked into its `ModelPart` tree, each part
     /// at its pose, as `EntityModelSet.bakeLayer` bakes it: one a native mod
     /// registered (`native_layer_definitions`), or vanilla's, by the name
@@ -833,6 +927,26 @@ fn draw_model_part(draw: &mut BlockEntityDraw, part: &ModelPart, sprite: Rect, t
     }
     for (_, child) in part.children() {
         draw_model_part(draw, child, sprite, tint);
+    }
+    draw.pop();
+}
+
+/// `draw_model_part` with a [`NativeModelPaint`].
+fn draw_model_part_painted(draw: &mut BlockEntityDraw, part: &ModelPart, sprite: Rect, paint: &NativeModelPaint) {
+    if !part.visible || (part.is_empty() && part.children().next().is_none()) {
+        return;
+    }
+    draw.push();
+    draw.apply(part_transform(part));
+    if !part.skip_draw {
+        for polygon in &part.polygons {
+            let corners = polygon.vertices.map(|v| v.pos.map(|c| c / 16.0));
+            let uv = polygon.vertices.map(|v| [v.u, v.v]);
+            draw.quad_painted(corners, uv, sprite, paint);
+        }
+    }
+    for (_, child) in part.children() {
+        draw_model_part_painted(draw, child, sprite, paint);
     }
     draw.pop();
 }

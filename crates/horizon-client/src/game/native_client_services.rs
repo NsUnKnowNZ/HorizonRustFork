@@ -235,6 +235,44 @@ impl Game<'_> {
             .map(|path| path.to_string_lossy().into_owned())
             .ok_or_else(|| "the screenshots folder can't be made".into())
     }
+    /// A picture of the world alone, as a mod's camera takes one: the next frame's world and
+    /// first-person hand, before the post effects, the HUD and any screen draw over them (the
+    /// grab the world icon takes, `tryTakeScreenshotIfNeeded`; Camerapture hides the HUD for
+    /// one frame and reads `ScreenshotRecorder.takeScreenshot` for the same picture). Written
+    /// as a PNG at `path` once that frame is drawn, at the frame's size scaled down to fit
+    /// `max_side` pixels (never up), without the chat line F2's has. Returns that size.
+    /// Nothing is written while no world is drawn (the title screen); the request waits for
+    /// one. An error without a window to draw, while another screenshot waits for the frame
+    /// (call it again next frame), or for a folder that can't be made. Poll for the file from
+    /// a later tick or frame: it is complete once it exists.
+    #[allow(dead_code, reason = "native mod API (docs/native-mods.md)")]
+    pub(super) fn native_grab_world(
+        &mut self,
+        path: &std::path::Path,
+        max_side: u32,
+    ) -> Result<[u32; 2], String> {
+        let Some(renderer) = self.renderer.as_mut() else {
+            return Err("no window to take it from".into());
+        };
+        if renderer.screenshot.is_some() {
+            return Err("another screenshot is waiting for the frame".into());
+        }
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        let (w, h) = (renderer.config.width.max(1), renderer.config.height.max(1));
+        let scale = (f64::from(max_side.max(1)) / f64::from(w.max(h))).min(1.0);
+        let size = [
+            ((f64::from(w) * scale).round() as u32).max(1),
+            ((f64::from(h) * scale).round() as u32).max(1),
+        ];
+        renderer.screenshot = Some(horizon_client::gfx::ScreenshotRequest {
+            path: path.to_owned(),
+            size: Some(size),
+            scaled: false,
+        });
+        Ok(size)
+    }
     /// Client/window/connection state, including when menus cover the world.
     pub(super) fn native_client_state(&self) -> Option<NativeClientState> {
         if !self.native_window() {

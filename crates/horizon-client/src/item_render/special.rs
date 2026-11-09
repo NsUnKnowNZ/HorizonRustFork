@@ -352,6 +352,17 @@ pub(super) fn extents(renderer: &ItemRenderer, model: &SpecialModel) -> Vec<Vec3
         SpecialKind::ShulkerBox { openness, .. } => add("shulker_box", &shulker_pose(*openness)),
         SpecialKind::Shield => add("shield", &none),
         SpecialKind::Trident => add("trident", &none),
+        // A mod's own renderer draws inside the item's block-space cube, as
+        // a `BlockEntityWithoutLevelRenderer` did: its corners bound it.
+        SpecialKind::Native { .. } => {
+            for i in 0..8 {
+                out.push(Vec3::new(
+                    (i & 1) as f32,
+                    (i >> 1 & 1) as f32,
+                    (i >> 2 & 1) as f32,
+                ));
+            }
+        }
     }
     out
 }
@@ -654,6 +665,9 @@ pub(super) fn submit(
         // `EndCubeSpecialRenderer` draws the end portal/gateway effect; no
         // bundled item uses it.
         SpecialKind::EndCube { .. } => {}
+        SpecialKind::Native { kind, model } => {
+            host.native_special(kind, model, argument, has_foil, pose, sink);
+        }
     }
 }
 

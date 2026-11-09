@@ -1710,6 +1710,9 @@ fn a_living_mod_types_row_is_its_templates_with_its_attributes() {
             .iter()
             .map(|(a, v)| (a.to_string(), *v))
             .collect(),
+        width: None,
+        height: None,
+        eye_height: None,
     };
     let written = mod_entity_row(&row, &ghoul(&[("minecraft:max_health", 40.0)])).unwrap();
     let written: serde_json::Value = serde_json::from_slice(&written).unwrap();

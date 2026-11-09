@@ -1,0 +1,9 @@
+{
+  "hooks": [],
+  "helpers": [
+    {"name": "draw_model_part_with", "target": "horizon_client::game::native_block_entity_draw::Game<'_>::native_draw_model_part_with"}
+  ],
+  "rust_summary": "a model part drawn with an alpha, an overlay, a light and a render type (`native_draw_model_part_with`).",
+  "doc_summary": "`native_draw_model_part_with(draw, part, sprite, paint)` draws a model as `native_draw_model_part` does, painted by a `NativeModelPaint`: an ARGB colour (a fading mob, `entityTranslucent`), the overlay (the hurt red, a creeper's white flash), a light (full bright eyes) or an energy swirl (a charged creeper). Bundles need \"hooks\": @API:model_paint@.",
+  "comments": ["crates/horizon-client/src/game/native_block_entity_draw.rs"]
+}

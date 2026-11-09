@@ -159,6 +159,24 @@ impl Game<'_> {
             .copied()
             .is_some_and(|sprite| draw.quad(sprite, corners, uv, color))
     }
+    /// [`Self::native_world_quad`] of a mod's registered image `key`
+    /// (`native_mod_texture_set`) instead of an atlas sprite: `uv` spans the
+    /// image from 0 to 1 (`[u0, v0, u1, v1]`, v down; the corners take
+    /// `(u0, v0)`, `(u0, v1)`, `(u1, v1)`, `(u1, v0)` in order), as a picture
+    /// or a painting entity draws its own texture (`RenderType.entityCutout`).
+    /// False when the image can't be drawn this frame (`native_mod_texture`)
+    /// or for non-finite geometry.
+    pub(super) fn native_world_mod_texture_quad(
+        &self,
+        draw: &mut NativeWorldDraw,
+        key: &str,
+        corners: [[f32; 3]; 4],
+        uv: [f32; 4],
+        color: [u8; 4],
+    ) -> bool {
+        self.native_mod_texture(key)
+            .is_some_and(|rect| draw.quad(rect, corners, uv.map(|v| v * 16.0), color))
+    }
     /// Actual styled world font at (0,0), with ARGB default color and optional
     /// eight-offset ARGB outline. Returns the text advance in font pixels.
     /// The front of outlined text uses POLYGON_OFFSET. API @API:world_canvas@.

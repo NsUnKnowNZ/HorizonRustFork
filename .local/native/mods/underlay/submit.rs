@@ -1,0 +1,3 @@
+fn underlay_submit(game: &crate::game::Game<'_>, draw: &mut crate::game::native_world_draw::NativeWorldDraw) {
+    crate::game::underlay::submit(game, draw);
+}

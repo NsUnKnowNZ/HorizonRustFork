@@ -50,6 +50,10 @@ pub struct NativeMobRender<'a> {
     /// Ticks since it died, 0 while alive (vanilla tips the body over 20).
     pub death_time: i32,
     pub on_ground: bool,
+    /// `attackAnim`: how far its arm swing has gone, 0 to 1 (0 when not swinging).
+    pub swing: f32,
+    /// `Mob.isAggressive`: it is after a target (a zombie raises its arms).
+    pub aggressive: bool,
 }
 
 impl<'a> NativeMobRender<'a> {
@@ -75,6 +79,8 @@ impl<'a> NativeMobRender<'a> {
             hurt_time: m.hurt_time,
             death_time: m.death_time,
             on_ground: m.on_ground,
+            swing: pose.swing,
+            aggressive: m.ai.aggressive,
         }
     }
 }

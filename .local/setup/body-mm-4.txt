@@ -1,0 +1,54 @@
+Launch
+Platform
+C command "time set 6000"
+C command "kill @e[type=!minecraft:player]"
+C command "tp @s 197.5 151 196.5 -90 10"
+C wait 60
+C command "summon mutantmonsters:mutant_creeper 203.5 150 196.5 {NoAI:1b,Rotation:[90f,0f],Tags:['mutantmonsters.charged']}"
+C wait 10
+C screenshot "$shots\mm-cc1.png"
+C command "damage @e[type=mutantmonsters:mutant_creeper,limit=1] 300 minecraft:player_attack"
+C wait 50
+C screenshot "$shots\mm-cc2.png"
+C wait 70
+C screenshot "$shots\mm-cc3.png"
+C command "kill @e[type=!minecraft:player]"
+C command "fill 190 150 190 216 156 216 minecraft:air"
+C command "fill 190 149 190 216 149 216 minecraft:grass_block"
+C command "summon mutantmonsters:mutant_enderman 203.5 150 196.5 {NoAI:1b,Rotation:[90f,0f],Tags:['mutantmonsters.hold']}"
+C wait 25
+C screenshot "$shots\mm-e0.png"
+C command "tag @e[type=mutantmonsters:mutant_enderman] add mutantmonsters.anim.1"
+C wait 4
+C screenshot "$shots\mm-e1.png"
+C wait 12
+C command "tag @e[type=mutantmonsters:mutant_enderman] add mutantmonsters.anim.3"
+C wait 60
+C screenshot "$shots\mm-e3.png"
+C wait 110
+C command "tag @e[type=mutantmonsters:mutant_enderman] add mutantmonsters.anim.4"
+C wait 10
+C screenshot "$shots\mm-e4.png"
+C wait 25
+C command "tag @e[type=mutantmonsters:mutant_enderman] add mutantmonsters.anim.6"
+C wait 30
+C screenshot "$shots\mm-e6.png"
+C wait 75
+C command "kill @e[type=!minecraft:player]"
+C command "summon mutantmonsters:creeper_minion 200.5 150 196.5 {NoAI:1b,Rotation:[90f,0f]}"
+C command "summon mutantmonsters:spider_pig 201.5 150 194.5 {NoAI:1b,Rotation:[90f,0f]}"
+C wait 20
+C screenshot "$shots\mm-m1.png"
+C command "kill @e[type=!minecraft:player]"
+C command "effect give @s minecraft:resistance 600 4 true"
+C command "summon mutantmonsters:mutant_zombie 205.5 150 196.5 {Rotation:[90f,0f]}"
+C command "gamemode survival"
+C wait 60
+C screenshot "$shots\mm-za1.png"
+C wait 60
+C screenshot "$shots\mm-za2.png"
+C wait 60
+C screenshot "$shots\mm-za3.png"
+C command "gamemode creative"
+C command "kill @e[type=!minecraft:player]"
+C logs --lines 80

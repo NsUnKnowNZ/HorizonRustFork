@@ -1,0 +1,20 @@
+Launch
+Platform
+C command "time set 6000"
+C command "kill @e[type=!minecraft:player]"
+C command "tp @s 197.5 151 196.5 -90 15"
+C wait 60
+C command "summon mutantmonsters:mutant_creeper 203.5 150 196.5 {NoAI:1b,Rotation:[90f,0f]}"
+C command "summon mutantmonsters:creeper_minion 199.5 150 196.5 {NoAI:1b,Rotation:[90f,0f]}"
+C wait 5
+C command "tag @e[type=mutantmonsters:mutant_creeper] add mutantmonsters.charged"
+C wait 30
+C screenshot "$shots\mm-cc1.png"
+C command "kill @e[type=!minecraft:player]"
+C wait 5
+C command "summon mutantmonsters:mutant_enderman 205.5 150 196.5 {NoAI:1b,Rotation:[90f,0f]}"
+C wait 5
+C command "tag @e[type=mutantmonsters:mutant_enderman] add mutantmonsters.anim.3"
+C wait 60
+C screenshot "$shots\mm-e3.png"
+C logs --lines 30

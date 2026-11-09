@@ -1,0 +1,415 @@
+# Camerapture (chrrs, MIT) for Horizon: cameras, pictures, picture frames and albums.
+#  - Right-click a camera to raise it (viewfinder, scroll to zoom); left-click takes a picture
+#    for a sheet of paper. The picture uploads to the server in parts and comes back as a
+#    `camerapture:picture` item, drawn with its picture in hand, in slots and full screen.
+#  - Sneak + use a picture on a wall hangs it in a frame (use turns it, sneak + use resizes it,
+#    attack breaks it). Albums hold 36 pictures and lie on lecterns.
+# Its content (items, models, textures, sounds, lang, recipes) is horizon-mods/camerapture.
+# Engine support it uses: mod textures (game/mod_textures.rs), mods' special item models
+# (game/item_draw.rs), native_grab_world and hud::encode_webp (docs/native-mods.md).
+[mod]
+id = "camerapture"
+version = "1.10.12"
+priority = 100
+
+[[module]]
+id = "common"
+file = "crates/horizon-client/src/game.rs"
+name = "camerapture"
+source = "camerapture.rs"
+
+[[module]]
+id = "client"
+file = "crates/horizon-client/src/game.rs"
+name = "camerapture_client"
+source = "camerapture_client.rs"
+
+[[module]]
+id = "frames"
+file = "crates/horizon-client/src/game.rs"
+name = "camerapture_frames"
+source = "camerapture_frames.rs"
+
+[[injection]]
+id = "component-types"
+kind = "HEAD"
+hook = "component_types"
+hook_version = 1
+helper = "component-types.rs"
+bindings = [
+  { name = "types", ty = "&mut Vec<String>", value = "&mut *types" }
+]
+
+[[injection]]
+id = "use-item"
+kind = "HEAD"
+hook = "use_item"
+hook_version = 1
+helper = "use-item.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" }
+]
+
+[[injection]]
+id = "use-item-on"
+kind = "HEAD"
+hook = "use_item_on"
+hook_version = 1
+helper = "use-item-on.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "face", ty = "[i32; 3]", value = "face" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" }
+]
+
+[[injection]]
+id = "right-click-block"
+kind = "HEAD"
+hook = "right_click_block"
+hook_version = 1
+helper = "right-click-block.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "face", ty = "[i32; 3]", value = "face" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "left-click-block"
+kind = "HEAD"
+hook = "left_click_block"
+hook_version = 1
+helper = "left-click-block.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "face", ty = "[i32; 3]", value = "face" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "inventory-tick"
+kind = "HEAD"
+hook = "inventory_tick"
+hook_version = 1
+helper = "inventory-tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "slot", ty = "i32", value = "slot" },
+  { name = "selected", ty = "bool", value = "selected" }
+]
+
+[[injection]]
+id = "net-from-client"
+kind = "HEAD"
+hook = "net_from_client"
+hook_version = 1
+helper = "net-from-client.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "u128", value = "player" },
+  { name = "channel", ty = "&str", value = "channel" },
+  { name = "data", ty = "&[u8]", value = "data" }
+]
+
+[[injection]]
+id = "player-tick"
+kind = "HEAD"
+hook = "player_tick"
+hook_version = 1
+helper = "player-tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }
+]
+
+[[injection]]
+id = "server-tick"
+kind = "HEAD"
+hook = "server_tick"
+hook_version = 1
+helper = "server-tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "phase", ty = "&horizon_client::mod_api::ServerTickPhase", value = "&phase" }
+]
+
+[[injection]]
+id = "logged-in"
+kind = "HEAD"
+hook = "player_logged_in"
+hook_version = 1
+helper = "logged-in.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "u128", value = "player" }
+]
+
+[[injection]]
+id = "logged-out"
+kind = "HEAD"
+hook = "player_logged_out"
+hook_version = 1
+helper = "logged-out.rs"
+bindings = [
+  { name = "player", ty = "u128", value = "player" }
+]
+
+[[injection]]
+id = "menu-clicked"
+kind = "HEAD"
+hook = "menu_clicked"
+hook_version = 1
+helper = "menu-clicked.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "uuid", ty = "u128", value = "uuid" },
+  { name = "window", ty = "i32", value = "window" },
+  { name = "slot", ty = "i32", value = "slot" }
+]
+
+[[injection]]
+id = "menu-closed"
+kind = "HEAD"
+hook = "menu_closed"
+hook_version = 1
+helper = "menu-closed.rs"
+bindings = [
+  { name = "uuid", ty = "u128", value = "uuid" },
+  { name = "window", ty = "i32", value = "window" }
+]
+
+[[injection]]
+id = "tooltip"
+kind = "HEAD"
+hook = "tooltip"
+hook_version = 1
+helper = "tooltip.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+  { name = "lines", ty = "&mut Vec<(horizon_client::text::Text, u32)>", value = "&mut *lines" }
+]
+
+[[injection]]
+id = "client-tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_post"
+helper = "client-tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }
+]
+
+[[injection]]
+id = "frame"
+kind = "HEAD"
+hook = "frame"
+hook_version = 1
+helper = "frame.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }
+]
+
+[[injection]]
+id = "interaction-key"
+kind = "HEAD"
+hook = "interaction_key"
+hook_version = 1
+helper = "interaction-key.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "swing_hand", ty = "&mut bool", value = "&mut *swing_hand" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "zoom"
+kind = "HEAD"
+hook = "zoom"
+hook_version = 1
+helper = "zoom.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "zoom", ty = "&mut Option<horizon_client::mod_api::NativeZoom>", value = "&mut *zoom" }
+]
+
+[[injection]]
+id = "wheel"
+kind = "HEAD"
+hook = "wheel"
+hook_version = 1
+helper = "wheel.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "steps", ty = "f32", value = "steps" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" }
+]
+
+[[injection]]
+id = "gui-layer"
+kind = "HEAD"
+hook = "gui_layer_pre"
+hook_version = 1
+helper = "gui-layer.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "hud"
+kind = "HEAD"
+hook = "hud"
+hook_version = 1
+helper = "hud.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" }
+]
+
+[[injection]]
+id = "render-hand"
+kind = "HEAD"
+hook = "render_hand"
+hook_version = 1
+helper = "render-hand.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "block-highlight"
+kind = "HEAD"
+hook = "block_highlight"
+hook_version = 1
+helper = "block-highlight.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "item-model-property"
+kind = "HEAD"
+hook = "item_model_property"
+hook_version = 1
+helper = "item-model-property.rs"
+bindings = [
+  { name = "property", ty = "&str", value = "property" },
+  { name = "stack", ty = "&horizon_assets::item_model::StackView", value = "stack" },
+  { name = "value", ty = "&mut bool", value = "&mut *value" }
+]
+
+[[injection]]
+id = "net-from-server"
+kind = "HEAD"
+hook = "net_from_server"
+hook_version = 1
+helper = "net-from-server.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "channel", ty = "&str", value = "channel" },
+  { name = "data", ty = "&[u8]", value = "data" }
+]
+
+[[injection]]
+id = "screen-render-post"
+kind = "HEAD"
+hook = "screen_render_post"
+hook_version = 1
+helper = "screen-render-post.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" }
+]
+
+[[injection]]
+id = "screen-press"
+kind = "HEAD"
+hook = "screen_mouse_button_pressed_pre"
+hook_version = 1
+helper = "screen-press.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "screen-scroll"
+kind = "HEAD"
+hook = "screen_mouse_scrolled_pre"
+hook_version = 1
+helper = "screen-scroll.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" },
+  { name = "scroll", ty = "[f64; 2]", value = "scroll" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "screen-key"
+kind = "HEAD"
+hook = "screen_key_pressed_pre"
+hook_version = 1
+helper = "screen-key.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "modifiers", ty = "u32", value = "modifiers" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "world-submit"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_submit"
+helper = "world-submit.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "draw", ty = "&mut crate::game::native_world_draw::NativeWorldDraw", value = "&mut *draw" }
+]
+
+[[injection]]
+id = "world-primitives"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_primitives"
+helper = "world-primitives.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "primitives", ty = "&mut horizon_client::world_primitives::WorldPrimitives", value = "&mut *primitives" }
+]
+
+[[injection]]
+id = "special-claimed"
+kind = "HEAD"
+target = "horizon_client::game::item_draw::Game<'_>::native_special_item_model_claimed"
+helper = "special-claimed.rs"
+bindings = [
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" }
+]
+
+[[injection]]
+id = "special-model"
+kind = "HEAD"
+target = "horizon_client::game::item_draw::Game<'_>::native_special_item_model"
+helper = "special-model.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "argument", ty = "&serde_json::Value", value = "argument" },
+  { name = "pose", ty = "glam::Mat4", value = "pose" },
+  { name = "sink", ty = "&mut dyn horizon_client::item_render::ItemSink", value = "&mut *sink" }
+]

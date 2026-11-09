@@ -1598,7 +1598,7 @@ impl Game<'_> {
     /// `LivingDeathEvent` for a mob whose health ran out: whether a native
     /// mod canceled the death. A canceled mob stays alive at 1 health.
     fn mob_death_canceled(&mut self, m: &Mob) -> bool {
-        if horizon_client::mod_api::mods().is_empty() {
+        if !horizon_client::mod_api::listening() {
             return false;
         }
         let (damage_type, attacker) = match m.last_damage {
@@ -2061,8 +2061,7 @@ impl Game<'_> {
                 for event in std::mem::take(&mut t.outbox) {
                     match event {
                         MobEvent::Sound(s, _, volume, pitch) => {
-                            self.audio
-                                .play(&format!("minecraft:{s}"), Some(center), volume, pitch);
+                            self.audio.play(&sound_id(s), Some(center), volume, pitch);
                         }
                         MobEvent::Infested { at, velocities } => infested.push((at, velocities)),
                         other => {
@@ -2359,7 +2358,7 @@ impl Game<'_> {
                         .is_some_and(|m| m.silent);
                     let entity = horizon_client::sound_engine::SoundEntity::new(mob, at, silent);
                     self.audio.play_bound(
-                        &format!("minecraft:{name}"),
+                        &sound_id(name),
                         source,
                         volume,
                         pitch,
@@ -2368,13 +2367,12 @@ impl Game<'_> {
                     );
                 }
                 MobEvent::Sound(name, at, volume, pitch) => {
-                    self.audio
-                        .play(&format!("minecraft:{name}"), Some(at), volume, pitch)
+                    self.audio.play(&sound_id(name), Some(at), volume, pitch)
                 }
                 MobEvent::LocalSound(name, at, volume, pitch) => {
                     // Level.playLocalSound: play locally without broadcasting.
                     self.audio
-                        .play_unshared(&format!("minecraft:{name}"), Some(at), volume, pitch)
+                        .play_unshared(&sound_id(name), Some(at), volume, pitch)
                 }
                 MobEvent::LevelEventSound {
                     sound,
@@ -8523,6 +8521,17 @@ mod local_sound_event_tests {
     }
 }
 
+/// A mob sound's event id: vanilla's sounds go without their namespace
+/// (`entity.zombie.hurt`), a mod's with its own (`mymod:entity.golem.hurt`,
+/// from `native_mob_voice` or `native_mob_step_sound`).
+pub(super) fn sound_id(name: &str) -> std::borrow::Cow<'_, str> {
+    if name.contains(':') {
+        std::borrow::Cow::Borrowed(name)
+    } else {
+        std::borrow::Cow::Owned(format!("minecraft:{name}"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::perspective::CameraType;
@@ -10095,3 +10104,4 @@ mod loaded_arrow_shot_tests {
         });
     }
 }
+

@@ -165,6 +165,23 @@ pub trait SpecialHost {
     fn player_skin(&self, _profile: &Value) -> Option<String> {
         None
     }
+    /// A mod's own special model of type `kind` (`SpecialKind::Native`):
+    /// `SpecialModelRenderer.submit` of the renderer a mod registered, under
+    /// `pose` (the item's block-space cube, 0 to 1 on each axis, with its
+    /// display transform applied), from `argument` (the stack's components,
+    /// its `extractArgument`). Quads go to `sink`, their UVs in the shared
+    /// atlas. The game asks native mods (`native_special_item_model`); a host
+    /// with no mods draws nothing.
+    fn native_special(
+        &self,
+        _kind: &str,
+        _model: &Value,
+        _argument: &Value,
+        _has_foil: bool,
+        _pose: Mat4,
+        _sink: &mut dyn ItemSink,
+    ) {
+    }
 }
 /// A host with no registries: patterns and skins fall back to defaults.
 pub struct NoHost;

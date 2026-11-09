@@ -1,0 +1,208 @@
+# Mutant Monsters (Fuzs, AGPL-3.0, local use) for Horizon. The content (items, textures, sounds,
+# loot, lang, damage types, the mobs' entity types) is the content mod horizon-mods/mutantmonsters.
+#  - ai (horizon-client's library, `horizon_client::mutantmonsters_ai`): each mutant's goals, as
+#    its Java `registerGoals` (`native_register_goals`), its sounds (`native_mob_voice`,
+#    `native_mob_step_sound`) and the state its goals and the game half share.
+#  - game: what needs the world each level tick (attacks' blocks, explosions, damage, spawns),
+#    their own deaths (`native_living_death`, canceled while they lie, revive or implode),
+#    their hurt rules, the state synced to clients (`mutantmonsters:state`), the renderers, and
+#    the items, spawn eggs, natural spawns and Chemical X.
+#  - models: the layers and animations generated from the jar's model classes.
+[mod]
+id = "mutantmonsters"
+version = "0.2.0"
+priority = 100
+
+[[module]]
+id = "ai"
+file = "crates/horizon-client/src/client_lib.rs"
+name = "mutantmonsters_ai"
+source = "ai.rs"
+visibility = "pub"
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "mutantmonsters"
+source = "mutantmonsters.rs"
+
+[[module]]
+id = "models"
+file = "crates/horizon-client/src/game.rs"
+name = "mutantmonsters_models"
+source = "models.rs"
+
+[[injection]]
+id = "goals"
+kind = "HEAD"
+target = "horizon_client_lib::mobs::ai::native_register_goals"
+helper = "goals.rs"
+bindings = [
+  { name = "mob", ty = "&mut crate::mobs::Mob", value = "&mut *mob" },
+]
+
+[[injection]]
+id = "voice"
+kind = "HEAD"
+target = "horizon_client_lib::mobs::ai::native_mob_voice"
+helper = "voice.rs"
+bindings = [
+  { name = "m", ty = "&crate::mobs::Mob", value = "m" },
+  { name = "sounds", ty = "&mut [&'static str; 3]", value = "&mut *sounds" },
+]
+
+[[injection]]
+id = "step"
+kind = "HEAD"
+target = "horizon_client_lib::mobs::ai::native_mob_step_sound"
+helper = "step.rs"
+bindings = [
+  { name = "m", ty = "&crate::mobs::Mob", value = "m" },
+  { name = "sound", ty = "&mut Option<(&'static str, f32, f32)>", value = "&mut *sound" },
+]
+
+[[injection]]
+id = "layers"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_layer_definitions"
+helper = "layers.rs"
+bindings = [
+  { name = "layers", ty = "&mut Vec<(String, horizon_client::mobs::model_layers::LayerDefinition)>", value = "&mut *layers" },
+]
+
+[[injection]]
+id = "submit"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mob_submit"
+helper = "submit.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "mob", ty = "&crate::game::native_mob_draw::NativeMobRender<'_>", value = "mob" },
+  { name = "draw", ty = "&mut crate::game::native_block_entity_draw::BlockEntityDraw", value = "&mut *draw" },
+  { name = "drawn", ty = "&mut bool", value = "&mut *drawn" },
+]
+
+[[injection]]
+id = "client_tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_post"
+helper = "client_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "use_on"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_use_item_on"
+helper = "use_on.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "face", ty = "[i32; 3]", value = "face" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" },
+]
+
+[[injection]]
+id = "use"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_use_item"
+helper = "use.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" },
+]
+
+[[injection]]
+id = "interact"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_entity_interact_specific"
+helper = "interact.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "entity", ty = "i32", value = "entity" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "stack", ty = "Option<&horizon_client::items::ItemStack>", value = "stack" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" },
+]
+
+[[injection]]
+id = "spawned"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mob_spawned"
+helper = "spawned.rs"
+bindings = [
+  { name = "dimension", ty = "&str", value = "dimension" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "pos", ty = "[f64; 3]", value = "pos" },
+  { name = "natural", ty = "bool", value = "natural" },
+]
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_level_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+]
+
+[[injection]]
+id = "damage"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_living_incoming_damage_v3"
+helper = "damage.rs"
+bindings = [
+  { name = "victim", ty = "u32", value = "victim" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "attacker", ty = "Option<u32>", value = "attacker" },
+  { name = "damage_type", ty = "&str", value = "damage_type" },
+  { name = "amount", ty = "&mut f32", value = "&mut *amount" },
+  { name = "cancel", ty = "&mut bool", value = "&mut *cancel" },
+]
+
+[[injection]]
+id = "damage_post"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_living_damage_post"
+helper = "damage_post.rs"
+bindings = [
+  { name = "entity", ty = "i32", value = "entity" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "amount", ty = "f32", value = "amount" },
+]
+
+[[injection]]
+id = "death"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_living_death"
+helper = "death.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "entity", ty = "u32", value = "entity" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "cancel", ty = "&mut bool", value = "&mut *cancel" },
+]
+
+[[injection]]
+id = "hears"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_hears_projectile_impacts"
+helper = "hears.rs"
+bindings = [
+  { name = "hears", ty = "&mut bool", value = "&mut *hears" },
+]
+
+[[injection]]
+id = "impact"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_projectile_impact"
+helper = "impact.rs"
+bindings = [
+  { name = "dimension", ty = "&str", value = "dimension" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "at", ty = "[f64; 3]", value = "at" },
+]

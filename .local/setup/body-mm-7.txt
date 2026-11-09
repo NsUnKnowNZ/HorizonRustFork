@@ -1,0 +1,11 @@
+Launch
+Platform
+C command "time set 6000"
+C command "kill @e[type=!minecraft:player]"
+C command "tp @s 197.5 151 196.5 -90 25"
+C wait 60
+C command "summon mutantmonsters:creeper_minion 200.5 150 196.5 {NoAI:1b,Rotation:[90f,0f]}"
+C command "summon mutantmonsters:spider_pig 202.5 150 194.5 {NoAI:1b,Rotation:[90f,0f]}"
+C wait 20
+C screenshot "$shots\mm-m1.png"
+C logs --lines 20

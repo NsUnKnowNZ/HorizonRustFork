@@ -832,12 +832,13 @@ impl Game<'_> {
             return false;
         }
         let has_book = matches!(self.world.block_entities.get(&key), Some(BlockEntity::Lectern(l)) if l.book.is_some());
-        let Some(book) = held.filter(|h| {
-            matches!(
-                &*h.item,
-                "minecraft:writable_book" | "minecraft:written_book"
-            )
-        }) else {
+        // `itemStack.is(ItemTags.LECTERN_BOOKS)`: a mod's books too (an album). Without the
+        // tag's table, vanilla's two books.
+        let lectern_book = |item: &str| match self.res.items().item_tags.get("minecraft:lectern_books") {
+            Some(tag) => tag.contains(item),
+            None => matches!(item, "minecraft:writable_book" | "minecraft:written_book"),
+        };
+        let Some(book) = held.filter(|h| lectern_book(&*h.item)) else {
             return false;
         };
         if has_book {
@@ -929,7 +930,8 @@ impl Game<'_> {
     /// LecternScreen's Take Book: the menu's button 3. The book leaves the
     /// lectern, so the screen closes (the server closes the menu once the
     /// book is gone; a server's client closes at once rather than wait).
-    fn take_lectern_book(&mut self, key: (i32, i32, i32)) {
+    /// Also a mod's own lectern screen's Take Book (Camerapture's album), for the acting player.
+    pub(super) fn take_lectern_book(&mut self, key: (i32, i32, i32)) {
         let before = match self.world.block_entities.get(&key) {
             Some(BlockEntity::Lectern(l)) => l.book.clone(),
             _ => None,

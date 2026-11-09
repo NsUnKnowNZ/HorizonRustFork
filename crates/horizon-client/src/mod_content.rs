@@ -893,6 +893,17 @@ fn mod_entity_row(
             to_raw_value(&attributes).map_err(fail)?,
         );
     }
+    // `EntityType.Builder.sized`: a size of its own, the eye at 0.85 of its
+    // height unless it names one (`EntityDimensions.scalable`).
+    if let Some(width) = t.width {
+        fields.insert("width".into(), to_raw_value(&width).map_err(fail)?);
+    }
+    if let Some(height) = t.height {
+        fields.insert("height".into(), to_raw_value(&height).map_err(fail)?);
+    }
+    if let Some(eye) = t.eye_height.or(t.height.map(|h| h * 0.85)) {
+        fields.insert("eye_height".into(), to_raw_value(&eye).map_err(fail)?);
+    }
     fields.insert("template".into(), to_raw_value(&t.template).map_err(fail)?);
     serde_json::to_vec(&fields).map_err(fail)
 }

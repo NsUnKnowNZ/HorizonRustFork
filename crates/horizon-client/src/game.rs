@@ -443,6 +443,8 @@ mod totem;
 mod trading;
 mod transient_blocks;
 mod place_animations;
+mod seamless_loading;
+mod mod_textures;
 mod trial_spawner;
 mod trial_visuals;
 mod trident;
@@ -2887,6 +2889,11 @@ struct Game<'a> {
     transient_blocks: transient_blocks::TransientBlocks,
     /// Blocks the player just placed, settling into place (A Good Place).
     place_animations: place_animations::PlaceAnimations,
+    /// The loading screen's picture of the world (Seamless Loading Screen).
+    seamless: seamless_loading::SeamlessLoading,
+    /// The textures native mods register at run time (`native_mod_texture_set`) and the
+    /// atlas slots showing them.
+    mod_textures: RefCell<mod_textures::ModTextures>,
     paintings: Vec<horizon_client::entities::Painting>,
     painting_variants: paintings::PaintingVariants,
     item_frames: Vec<horizon_client::entities::ItemFrame>,
@@ -13081,6 +13088,7 @@ impl Game<'_> {
         self.skin_slots.forget();
         self.maps.slots.forget();
         self.trim_slots.forget();
+        self.mod_textures.get_mut().forget();
         self.map_patches.clear();
         self.kept_block_entities.get_mut().clear();
         horizon_client::ui_theme::reset_atlas();
@@ -14419,7 +14427,9 @@ impl Game<'_> {
             .map(screenshot_sequence::Sequence::timing);
         // Map textures and font glyphs changed while building this frame's
         // geometry (game/maps.rs, world text) upload with this batch; draining
-        // map_patches any earlier leaves them a frame behind.
+        // map_patches any earlier leaves them a frame behind. The mods' textures drawn in
+        // this frame upload with them too.
+        self.upload_mod_textures();
         hud.patches.append(&mut self.map_patches);
         let entity_spans = std::mem::take(self.entity_spans.get_mut());
         let entity_motion = std::mem::take(self.entity_motion.get_mut());
@@ -16384,6 +16394,7 @@ impl Game<'_> {
                     self.pad_look(elapsed.as_secs_f32());
                     self.advance_flight();
                     self.tick_world_icon();
+                    self.tick_seamless_capture();
                     let ticked = Instant::now();
                     let rendered = match self.render() {
                         // The callback can fire during this frame; rebuild on
@@ -16942,6 +16953,8 @@ impl<'a> Game<'a> {
             falling: Default::default(),
             transient_blocks: Default::default(),
             place_animations: Default::default(),
+            seamless: Default::default(),
+            mod_textures: Default::default(),
             paintings: Vec::new(),
             painting_variants: prepared.painting_variants,
             item_frames: Vec::new(),

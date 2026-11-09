@@ -27,7 +27,8 @@ pub(super) struct Env<'a, 'g> {
 }
 impl ItemEnv for Env<'_, '_> {
     fn item_model_property(&self, property: &str, stack: &StackView) -> bool {
-        if horizon_client::mod_api::mods().is_empty() {
+        // A bundle that said it listens answers too (`mod_api::set_native_listening`).
+        if !horizon_client::mod_api::listening() {
             return false;
         }
         let mut value = false;
@@ -37,6 +38,12 @@ impl ItemEnv for Env<'_, '_> {
     }
     fn enchantment_in_tag(&self, enchantment: &str, tag: &str) -> bool {
         self.game.stations().enchantments.in_tag(tag, enchantment)
+    }
+    fn native_special_model(&self, kind: &str) -> bool {
+        let mut claimed = false;
+        self.game
+            .native_special_item_model_claimed(kind, &mut claimed);
+        claimed
     }
     fn potion_effect_color(&self, contents: &Value) -> Option<i32> {
         // `PotionContents.getColorOr`: the effect mix when any effect is visible.
@@ -146,14 +153,16 @@ pub(super) fn local_time(pattern: &str) -> String {
     out
 }
 
-/// Banner and shield pattern textures from the banner pattern registry.
-pub(super) struct Host<'a> {
+/// Banner and shield pattern textures from the banner pattern registry, and
+/// the native mods' own special models.
+pub(super) struct Host<'a, 'g> {
+    game: &'a Game<'g>,
     banners: &'a horizon_client::banner::Banners,
     sprites: &'a HashMap<String, Rect>,
     skins: &'a RefCell<horizon_client::skins::Downloader>,
     profiles: &'a RefCell<horizon_client::skins::Resolver>,
 }
-impl SpecialHost for Host<'_> {
+impl SpecialHost for Host<'_, '_> {
     fn banner_texture(&self, pattern: &str) -> Option<String> {
         self.banners
             .pattern(pattern)
@@ -175,6 +184,18 @@ impl SpecialHost for Host<'_> {
             &mut self.skins.borrow_mut(),
             |location| self.sprites.contains_key(location),
         ))
+    }
+    fn native_special(
+        &self,
+        kind: &str,
+        model: &Value,
+        argument: &Value,
+        has_foil: bool,
+        pose: glam::Mat4,
+        sink: &mut dyn item_render::ItemSink,
+    ) {
+        self.game
+            .native_special_item_model(kind, model, argument, has_foil, pose, sink);
     }
 }
 
@@ -215,17 +236,51 @@ fn use_duration(components: ComponentsView<'_>) -> i32 {
     }
 }
 
-impl Game<'_> {
-    pub(super) fn item_env(&self) -> Env<'_, '_> {
-        Env { game: self }
-    }
-    pub(super) fn item_host(&self) -> Host<'_> {
+impl<'g> Game<'g> {
+    pub(super) fn item_host(&self) -> Host<'_, 'g> {
         Host {
+            game: self,
             banners: &self.stations().banners,
             sprites: &self.gui.atlas.sprites,
             skins: &self.skin_downloads,
             profiles: &self.skin_profiles,
         }
+    }
+}
+
+impl Game<'_> {
+    pub(super) fn item_env(&self) -> Env<'_, '_> {
+        Env { game: self }
+    }
+    /// Whether a native mod draws the special item models of its own type `kind`
+    /// (`camerapture:picture`, the `type` of a `minecraft:special` node's `model`): Fabric's
+    /// `SpecialModelRenderers.ID_MAPPER.put` and NeoForge's
+    /// `RegisterSpecialModelRendererEvent`. Set `claimed` for your type; a type nobody claims
+    /// draws the node's `base` model, as before. Asked as each item resolves its model, so
+    /// answer from `kind` alone. Client-side, not part of the generated `mod_api`: bundles
+    /// target it by path (`horizon_client::game::item_draw::Game<'_>::...`).
+    pub(super) fn native_special_item_model_claimed(&self, kind: &str, claimed: &mut bool) {
+        let _ = (kind, claimed);
+    }
+    /// Draws a special item model of a type a native mod claimed
+    /// (`native_special_item_model_claimed`): `SpecialModelRenderer.submit`, wherever the
+    /// item shows (GUI slots, hands in first and third person, dropped, in item frames, on
+    /// armour stands). `pose` maps the item's block-space cube (0 to 1 on each axis, as a
+    /// `BlockEntityWithoutLevelRenderer` drew in) with its `base` model's display transform
+    /// for where it is drawn; `model` is the node's `model` object and `argument` the stack's
+    /// components (its `extractArgument`). Push quads to `sink` with UVs in the shared atlas:
+    /// a mod's registered image (`native_mod_texture`) or any sprite. `has_foil` says the
+    /// stack has a glint. Light, shading and the glint are the sink's. Client-side, by path.
+    pub(super) fn native_special_item_model(
+        &self,
+        kind: &str,
+        model: &Value,
+        argument: &Value,
+        has_foil: bool,
+        pose: glam::Mat4,
+        sink: &mut dyn item_render::ItemSink,
+    ) {
+        let _ = (kind, model, argument, has_foil, pose, sink);
     }
     /// The client level as item models read it: worked out once a frame (a
     /// screen of items read the same level, its sky sampled once).

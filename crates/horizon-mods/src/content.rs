@@ -411,7 +411,13 @@ pub struct MobEffect {
 /// the vanilla entity types a mod's type may copy: thrown item
 /// projectiles (`ThrowableItemProjectile`), then living mobs
 /// ([`LIVING_TEMPLATES`]).
-pub const ENTITY_TEMPLATES: [&str; 4] = [
+pub const ENTITY_TEMPLATES: [&str; 10] = [
+    "minecraft:creeper",
+    "minecraft:enderman",
+    "minecraft:giant",
+    "minecraft:pig",
+    "minecraft:skeleton",
+    "minecraft:snow_golem",
     "minecraft:snowball",
     "minecraft:villager",
     "minecraft:wandering_trader",
@@ -423,8 +429,17 @@ pub const ENTITY_TEMPLATES: [&str; 4] = [
 /// ...)`), with its own default attributes (`EntityAttributeCreationEvent`).
 /// The wandering trader is the neutral one whose behaviour is all goals,
 /// which a native mod can replace (`register_goals`); a villager's is its
-/// brain.
-pub const LIVING_TEMPLATES: [&str; 3] = [
+/// brain. The creeper, enderman, pig, skeleton and snow golem give a mod's
+/// bigger cousins of theirs their class's behaviour; the giant is a plain
+/// `Monster` with no goals of its own, for a monster whose goals are all the
+/// mod's (Mutant Monsters' `AbstractMutantMonster`).
+pub const LIVING_TEMPLATES: [&str; 9] = [
+    "minecraft:creeper",
+    "minecraft:enderman",
+    "minecraft:giant",
+    "minecraft:pig",
+    "minecraft:skeleton",
+    "minecraft:snow_golem",
     "minecraft:villager",
     "minecraft:wandering_trader",
     "minecraft:zombie",
@@ -454,6 +469,15 @@ pub struct EntityType {
     /// when the content root builds.
     #[serde(default)]
     pub attributes: BTreeMap<String, f64>,
+    /// a living type's own size in blocks, when it differs from its
+    /// template's (`EntityType.Builder.sized(width, height)`), and its eye
+    /// height (`eyeHeight`, 0.85 of `height` when only that is given).
+    #[serde(default)]
+    pub width: Option<f64>,
+    #[serde(default)]
+    pub height: Option<f64>,
+    #[serde(default)]
+    pub eye_height: Option<f64>,
 }
 
 impl EntityType {
@@ -926,6 +950,11 @@ impl Content {
                         file.template
                     ));
                 }
+                for (what, size) in [("width", file.width), ("height", file.height), ("eye_height", file.eye_height)] {
+                    if size.is_some_and(|v| !v.is_finite() || v <= 0.0 || v > 64.0) {
+                        return Err(format!("{name}: {what} is a size above 0, up to 64 blocks"));
+                    }
+                }
                 for (attribute, value) in &file.attributes {
                     let id_like = attribute
                         .split_once(':')
@@ -941,6 +970,12 @@ impl Content {
                 }
                 self.entity_types.push(EntityType { id: kind, ..file });
                 continue;
+            }
+            if file.width.is_some() || file.height.is_some() || file.eye_height.is_some() {
+                return Err(format!(
+                    "{name}: only a living type has a size of its own (its template is {})",
+                    file.template
+                ));
             }
             if !file.attributes.is_empty() {
                 return Err(format!(

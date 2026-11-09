@@ -346,7 +346,9 @@ it. A world opened without the
 mod keeps the saved ones as they are, frozen in place. Not yet: a dispenser doesn't throw it, and a vanilla client on a
 server with it may be disconnected when one spawns.
 
-A living type copies a mob, `minecraft:zombie`, `minecraft:villager` or `minecraft:wandering_trader`, the way NeoForge's
+A living type copies a mob, `minecraft:zombie`, `minecraft:skeleton`, `minecraft:creeper`, `minecraft:enderman`,
+`minecraft:snow_golem`, `minecraft:pig`, `minecraft:giant` (a plain monster with no goals, for one whose goals are all a
+native mod's), `minecraft:villager` or `minecraft:wandering_trader`, the way NeoForge's
 `EntityType.Builder.of(Zombie::new, ...)` makes a type of a vanilla class. The wandering trader is the neutral one whose
 behaviour is all goals, so a native mod's [`register_goals`](native-mods.md#mob-goals) can replace all of it (a citizen,
 a guard, an NPC); its trades on a right click are still a wandering trader's until a native mod answers the
@@ -358,7 +360,14 @@ only for attributes the template has; one it lacks stops the content root's buil
 { "template": "minecraft:zombie", "attributes": { "minecraft:max_health": 40.0, "minecraft:movement_speed": 0.3 } }
 ```
 
-It is a mob of its template's class under its own id, `<id>:<name>`: the template's size, model, texture, sounds and
+`width` and `height` (blocks) give it a size of its own (`EntityType.Builder.sized`), with its eye at 0.85 of its height
+unless `eye_height` says otherwise; a thrown type has none:
+
+```json
+{ "template": "minecraft:zombie", "width": 1.8, "height": 3.2, "eye_height": 2.8 }
+```
+
+It is a mob of its template's class under its own id, `<id>:<name>`: the template's size (unless it has its own), model, texture, sounds and
 behaviour, with its own attributes. It saves what its template's class saves under its own id (a zombie's `IsBaby`,
 `CanBreakDoors` and conversion times) and loads back as itself. Its entity data is its template's class's. Its loot
 table is its own, `<id>:entities/<name>` (vanilla's `EntityType.getDefaultLootTable`). It is not in vanilla's entity type

@@ -136,6 +136,25 @@ pub const MINIMAP_SPRITE: &str = "horizon/minimap";
 /// enough for a world map's 1024 blocks at a block a pixel.
 pub const MOD_IMAGE_SPRITE: &str = "horizon/modimage";
 pub const MOD_IMAGE_SIZE: u32 = 1024;
+/// Atlas slots for the textures native mods register at run time
+/// (`native_mod_texture_set`), vanilla's `TextureManager.register` of a
+/// `DynamicTexture` (Fabric mods' `NativeImageBackedTexture`): a picture a
+/// mod downloaded, a painting a player drew. Vanilla gives each its own
+/// texture; here they share these slots (`game::mod_textures`), the least
+/// recently drawn giving up its slot, as maps and skins do. Only built when a
+/// native mod is (like [`MOD_IMAGE_SPRITE`]): they cost 24 MiB of atlas.
+pub const MOD_TEXTURE_SLOTS: usize = 24;
+/// A mod texture slot's side: an image larger than it is scaled down to fit.
+pub const MOD_TEXTURE_SIZE: u32 = 512;
+/// The atlas sprite of mod texture slot `slot` (`horizon/modtexture{slot}`).
+pub fn mod_texture_sprite(slot: usize) -> Option<&'static str> {
+    static NAMES: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| {
+        (0..MOD_TEXTURE_SLOTS)
+            .map(|i| format!("horizon/modtexture{i}"))
+            .collect()
+    });
+    NAMES.get(slot).map(String::as_str)
+}
 /// Atlas slots for downloaded player skins (`skins/<sha1>`), 64x64 each.
 /// Vanilla registers a texture per skin. Here the slots are shared
 /// (`skins::SkinSlots`): skins drawn in the last frame keep theirs, and a
@@ -224,6 +243,34 @@ fn decode_webp(data: &[u8]) -> Result<(u32, u32, Vec<u8>)> {
         }
     }
     Ok((width, height, rgba))
+}
+
+/// RGBA8 pixels as a lossless WebP file (what a mod stores or sends, as
+/// Camerapture's `WebPCodec.encodeImage`, which can also go lossy: image-webp
+/// writes lossless VP8L only). Opaque images are written without alpha.
+pub fn encode_webp(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>> {
+    if width == 0 || height == 0 || rgba.len() != (width as usize) * (height as usize) * 4 {
+        return Err("the pixels are not width x height RGBA".into());
+    }
+    let mut out = Vec::new();
+    let opaque = rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 255);
+    let encoder = image_webp::WebPEncoder::new(&mut out);
+    if opaque {
+        let rgb: Vec<u8> = rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[1], p[2]])
+            .collect();
+        encoder
+            .encode(&rgb, width, height, image_webp::ColorType::Rgb8)
+            .map_err(|e| e.to_string())?;
+    } else {
+        encoder
+            .encode(rgba, width, height, image_webp::ColorType::Rgba8)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(out)
 }
 
 /// A JPEG image as RGBA8. JPEG has no alpha, so every pixel is opaque.
@@ -923,6 +970,16 @@ impl HudAtlas {
                 MOD_IMAGE_SIZE,
                 vec![0; (MOD_IMAGE_SIZE * MOD_IMAGE_SIZE * 4) as usize],
             ));
+            // The textures mods register at run time (game/mod_textures.rs).
+            let side = MOD_TEXTURE_SIZE as usize;
+            for i in 0..MOD_TEXTURE_SLOTS {
+                images.push((
+                    mod_texture_sprite(i).unwrap_or_default().into(),
+                    MOD_TEXTURE_SIZE,
+                    MOD_TEXTURE_SIZE,
+                    vec![0; side * side * 4],
+                ));
+            }
         }
         // Downloaded skins (game/scoreboard.rs).
         for i in 0..SKIN_SLOTS {
@@ -3073,6 +3130,18 @@ mod coverage_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn encoded_webp_decodes_to_the_same_pixels() {
+        // Opaque (written as RGB) and translucent (RGBA) images both come back exactly.
+        let opaque: Vec<u8> = (0..6u8).flat_map(|i| [i * 40, 255 - i * 30, i * 7, 255]).collect();
+        let bytes = encode_webp(3, 2, &opaque).unwrap();
+        assert_eq!(decode_image_bytes(&bytes).unwrap(), (3, 2, opaque));
+        let clear: Vec<u8> = (0..4u8).flat_map(|i| [10, 20 * i, 30, 60 * i + 15]).collect();
+        let bytes = encode_webp(2, 2, &clear).unwrap();
+        assert_eq!(decode_image_bytes(&bytes).unwrap(), (2, 2, clear));
+        assert!(encode_webp(2, 2, &[0; 12]).is_err());
+    }
 
     #[test]
     fn object_skin_revision_tracks_changes_and_capacity_clear() {

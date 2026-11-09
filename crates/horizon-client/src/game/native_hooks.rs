@@ -9674,7 +9674,7 @@ pub(super) fn block_contact(
 /// it canceled the hit. Its one caller.
 pub(super) fn hurt_server(hurting: Hurting<'_>, amount: &mut f32) -> bool {
     // Who the hit names, for v3: only while a native mod listens.
-    let parties = if mod_api::mods().is_empty() {
+    let parties = if !mod_api::listening() {
         None
     } else {
         Some(super::native_damage::parties(&hurting))
@@ -11455,7 +11455,11 @@ impl Game<'_> {
 
 /// A mob's kind as the hook points name it (`minecraft:zombie`).
 pub(super) fn mob_kind(mob: &horizon_client::mobs::Mob) -> String {
-    ["minecraft:", mob.kind.id.trim_start_matches("minecraft:")].concat()
+    // A mod's type keeps its own namespace (`mymod:golem`); vanilla's may be stored without.
+    match mob.kind.id.split_once(':') {
+        Some(("minecraft", _)) | None => ["minecraft:", mob.kind.id.trim_start_matches("minecraft:")].concat(),
+        Some(_) => mob.kind.id.to_string(),
+    }
 }
 
 /// Where the game calls the hook points.
@@ -11597,7 +11601,7 @@ impl Game<'_> {
     /// The acting player's hit landed on mob `index`, holding `stack`.
     pub(super) fn native_hurt_enemy_event(&mut self, stack: &ItemStack, index: usize) {
         let mob = &self.mobs[index];
-        let kind = ["minecraft:", mob.kind.id.trim_start_matches("minecraft:")].concat();
+        let kind = mob_kind(mob);
         self.native_hurt_enemy(stack, mob.id, &kind);
     }
     /// `Inventory.tick` for the acting player: each carried stack goes through

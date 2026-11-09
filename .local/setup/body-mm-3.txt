@@ -1,0 +1,94 @@
+Launch
+Platform
+C command "time set 6000"
+C command "kill @e[type=!minecraft:player]"
+C command "tp @s 197.5 151 196.5 -90 10"
+C wait 60
+C command "summon mutantmonsters:mutant_zombie 203.5 150 196.5 {Rotation:[90f,0f]}"
+C wait 10
+C command "damage @e[type=mutantmonsters:mutant_zombie,limit=1] 300 minecraft:player_attack"
+C wait 15
+C screenshot "$shots\mm-zd1.png"
+C command "data get entity @e[type=mutantmonsters:mutant_zombie,limit=1] Health"
+C wait 110
+C screenshot "$shots\mm-zd2.png"
+C wait 30
+C command "data get entity @e[type=mutantmonsters:mutant_zombie,limit=1] Health"
+C screenshot "$shots\mm-zd3.png"
+C command "kill @e[type=mutantmonsters:mutant_zombie]"
+C wait 50
+C screenshot "$shots\mm-zd4.png"
+C wait 70
+C screenshot "$shots\mm-zd5.png"
+C command "kill @e[type=!minecraft:player]"
+C command "fill 190 150 190 216 156 216 minecraft:air"
+C command "summon mutantmonsters:mutant_creeper 203.5 150 196.5 {NoAI:1b,Rotation:[90f,0f],Tags:[\"mutantmonsters.charged\"]}"
+C wait 10
+C screenshot "$shots\mm-cc1.png"
+C command "damage @e[type=mutantmonsters:mutant_creeper,limit=1] 300 minecraft:player_attack"
+C wait 50
+C screenshot "$shots\mm-cc2.png"
+C wait 70
+C screenshot "$shots\mm-cc3.png"
+C command "kill @e[type=!minecraft:player]"
+C command "fill 190 150 190 216 156 216 minecraft:air"
+C command "fill 190 149 190 216 149 216 minecraft:grass_block"
+C command "summon mutantmonsters:mutant_skeleton 203.5 150 196.5 {Rotation:[90f,0f]}"
+C wait 10
+C command "damage @e[type=mutantmonsters:mutant_skeleton,limit=1] 300 minecraft:player_attack"
+C wait 5
+C screenshot "$shots\mm-s6.png"
+C wait 30
+C screenshot "$shots\mm-s7.png"
+C command "kill @e[type=!minecraft:player]"
+C command "summon mutantmonsters:mutant_enderman 203.5 150 196.5 {NoAI:1b,Rotation:[90f,0f],Tags:[\"mutantmonsters.hold\"]}"
+C wait 25
+C screenshot "$shots\mm-e0.png"
+C command "tag @e[type=mutantmonsters:mutant_enderman] add mutantmonsters.anim.1"
+C wait 4
+C screenshot "$shots\mm-e1.png"
+C wait 12
+C command "tag @e[type=mutantmonsters:mutant_enderman] add mutantmonsters.anim.3"
+C wait 60
+C screenshot "$shots\mm-e3.png"
+C wait 110
+C command "tag @e[type=mutantmonsters:mutant_enderman] add mutantmonsters.anim.4"
+C wait 10
+C screenshot "$shots\mm-e4.png"
+C wait 25
+C command "tag @e[type=mutantmonsters:mutant_enderman] add mutantmonsters.anim.6"
+C wait 30
+C screenshot "$shots\mm-e6.png"
+C wait 75
+C command "kill @e[type=!minecraft:player]"
+C command "summon mutantmonsters:mutant_enderman 203.5 150 196.5 {Rotation:[90f,0f]}"
+C wait 10
+C command "damage @e[type=mutantmonsters:mutant_enderman,limit=1] 400 minecraft:player_attack"
+C wait 60
+C screenshot "$shots\mm-e7.png"
+C wait 90
+C screenshot "$shots\mm-e8.png"
+C wait 140
+C command "kill @e[type=!minecraft:player]"
+C command "summon mutantmonsters:mutant_snow_golem 200.5 150 192.5 {Rotation:[0f,0f]}"
+C command "summon minecraft:zombie 200.5 150 202.5 {NoAI:1b}"
+C wait 30
+C screenshot "$shots\mm-g1.png"
+C wait 6
+C screenshot "$shots\mm-g2.png"
+C wait 6
+C screenshot "$shots\mm-g3.png"
+C wait 40
+C screenshot "$shots\mm-g4.png"
+C command "kill @e[type=!minecraft:player]"
+C command "summon mutantmonsters:spider_pig 203.5 150 196.5 {Rotation:[90f,0f]}"
+C command "summon minecraft:pig 200.5 150 199.5 {NoAI:1b}"
+C wait 30
+C screenshot "$shots\mm-p1.png"
+C wait 30
+C screenshot "$shots\mm-p2.png"
+C command "kill @e[type=!minecraft:player]"
+C command "summon mutantmonsters:creeper_minion 200.5 150 196.5 {Rotation:[90f,0f]}"
+C wait 20
+C screenshot "$shots\mm-m1.png"
+C logs --lines 120

@@ -3647,6 +3647,22 @@ impl Hooks for Guards {
 }
 ```
 
+A mod's own type sounds as its template does unless the mod says otherwise:
+`horizon_client_lib::mobs::ai::native_mob_voice(m, sounds)` (a Java mod's `getAmbientSound`, `getHurtSound` and
+`getDeathSound`) is asked for the ambient, hurt and death sounds each time one is about to play, with the species' in
+`sounds`, and `native_mob_step_sound(m, sound)` (`playStepSound`) for each footfall, with the species' or its block's
+sound, volume and pitch. Put a namespaced id (`mymod:entity.golem.hurt`, a content mod's `sounds.json` event) or
+vanilla's without the namespace (`entity.zombie.step`) in place; an empty one, or `None` for a step, plays nothing. Both
+are free functions of the library, so a HEAD injection's helper there names the mob as `crate::mobs::Mob` and reaches
+a `[[module]]` placed in `crates/horizon-client/src/client_lib.rs` as `crate::<name>`. API @API:mob_sounds@.
+
+A mixin bundle adds no entry to the trait mods' list (`mod_api::mods()`), which the game reads as "a native mod
+listens" before work that costs when nobody does: naming a hit's parties for `native_living_incoming_damage_v3`,
+asking `native_living_death` (so a cancel takes) and sending synced attachments to clients. A bundle that hooks those
+calls `horizon_client::mod_api::set_native_listening()` once at start (from its `native_layer_definitions` helper,
+say); `mod_api::listening()` is then true. The hooks name a mod's type by its own id (`mymod:golem`, not
+`minecraft:mymod:golem`).
+
 From a goal, `mob.nav_move_to(cx.w, [x, y, z], speed)` walks the mob with the engine's pathfinding (`create_path_to` and
 `nav_move_to_path` to check a path first), and `mob.ai.mov.set_wanted(x, y, z, speed)` steps it toward a point, for a mod with
 pathfinding of its own. `goals::Float` keeps the navigation floating, as FloatGoal's constructor does. Each mob gets its own
@@ -3840,7 +3856,7 @@ items are left out (NeoForge's `RenderLivingEvent.Pre`, cancelled); its name tag
 - `mob` (`NativeMobRender`) is the frame's `LivingEntityRenderState`: the id, kind, custom name and `baby`, the partial tick,
   `age` (ticks lived plus the partial tick), `body_yaw`, `head_yaw` (from the body) and `pitch` in degrees, the walk cycle
   (`walk_position`, `walk_speed`: a vanilla quadruped's legs swing `cos(walk_position * 0.6662) * 1.4 * walk_speed` radians), `hurt_time`,
-  `death_time` and `on_ground`.
+  `death_time`, `on_ground`, `swing` (`attackAnim`, 0 to 1 through an arm swing) and `aggressive` (`Mob.isAggressive`).
 - `draw` is a block entity's frame (`native_block_entity_submit`): draw with `native_draw_cube`, `native_draw_quad`,
   `native_draw_block` and `native_draw_item` under its pose stack, which starts at the mob's feet turned with its body: +z
   is the way it faces, +x its left, +y up, in blocks. Turn a head or swing a leg with `rotate_about` and a pivot. It holds
@@ -3881,6 +3897,15 @@ items are left out (NeoForge's `RenderLivingEvent.Pre`, cancelled); its name tag
   draw.translate([0.0, -1.501, 0.0]);
   host.draw_model_part(draw, &model, "mymod:entity/golem", 0xFFFFFF);
   ```
+
+- `native_draw_model_part_with(draw, part, sprite, &paint)` (API @API:model_paint@) draws a model as
+  `native_draw_model_part` does, painted by a `NativeModelPaint` (`Model.renderToBuffer`'s light, overlay and ARGB
+  colour, and the render type): `color` with an alpha below 255 and `translucent` fades it (`entityTranslucent`, a
+  mob vanishing); `overlay` is `horizon_client::overlay::living(white_progress, hurt)`, the hurt red and a creeper's
+  white flash (`LivingEntityRenderer.getOverlayCoords`); `light: Some(0xF0_00F0)` draws it full bright (eyes, a
+  glow); `swirl: Some([u, v])` scrolls the texture over it additively and unlit, as `RenderTypes.energySwirl` does a
+  charged creeper's power layer. `NativeModelPaint::tinted(rgb)` is the plain opaque paint. It works in a mob's frame
+  (`native_mob_submit`, `native_mob_layer`), whose vertices go through the entity pass.
 
 ### Advancement triggers
 
@@ -4367,6 +4392,67 @@ screenshot as F2 does (`ScreenShot.grab`): of the next frame, at the game's reso
 write, which exists once that frame is drawn. It is an error without a window to draw (a server, an offscreen run with
 no renderer), and while another screenshot waits for the frame (F2's, an agent's or the world icon's): call it again
 next frame. A timed or repeated screenshot mod calls it from its tick. Bundles need `"hooks": @API:take_screenshot@`.
+
+### Pictures of the world a client mod takes
+
+`native_grab_world(path, max_side)` (`crates/horizon-client/src/game/native_client_services.rs`) takes a picture of the
+world alone, as a camera mod does (Camerapture hides the HUD for a frame and reads `ScreenshotRecorder.takeScreenshot`):
+the next frame's world and first-person hand, before the post effects, the HUD and any screen, written as a PNG at
+`path` at the frame's size scaled down to fit `max_side` pixels. It returns that size; the file exists once the frame is
+drawn (poll for it from a later tick), with no chat line. It is the grab the world icon uses, so it waits while no world
+is drawn, and it is an error without a window or while another screenshot waits for its frame. Read the file with
+`horizon_client::hud::decode_bytes`; `horizon_client::hud::encode_webp(width, height, rgba)` writes RGBA pixels as a
+lossless WebP (image-webp has no lossy encoder) and `decode_image_bytes` reads PNG, WebP and JPEG back.
+
+### Textures a mod registers
+
+`crates/horizon-client/src/game/mod_textures.rs`: images a mod makes at run time (a downloaded picture, a painted
+canvas), vanilla's `TextureManager.register(id, new DynamicTexture(image))` and `release`. Native mods only; they are
+`Game` helpers, not hook points.
+
+- `native_mod_texture_set(key, width, height, rgba)` registers or replaces image `key` (`mod_id:path`), each side at most
+  `hud::MOD_TEXTURE_SIZE` (512): scale a larger one down first. `native_mod_texture_remove(key)` forgets it and
+  `native_mod_texture_size(key)` reads its size.
+- `native_mod_texture(key)` is its rectangle in the shared atlas this frame (`hud::Rect`, cut to the image), the one the
+  HUD, world quads and items sample: `HudBatch::rect_uv` it, or `native_mod_texture_draw(batch, key, dst, argb)`.
+  `native_world_mod_texture_quad(draw, key, corners, uv, color)` draws it as a world quad in `native_world_submit`, its
+  `uv` from 0 to 1 across the image, and a special item model (below) pushes `ItemQuad`s with its UVs.
+- The atlas holds `hud::MOD_TEXTURE_SLOTS` (24) of them at once (`horizon/modtexture<n>`, built with native mods only, as
+  `horizon/modimage` is): an image takes a slot the first time it is drawn, uploads with that frame's atlas patches,
+  again after each replacement, and gives the slot up when it is the least recently drawn and another image needs one, as
+  map textures do. With every slot drawn this frame `native_mod_texture` is None: draw a stand-in. A resource reload
+  blanks the slots and the images upload again as they are drawn.
+
+### Special item models of a mod's own
+
+A `minecraft:special` item model node whose `model.type` is another namespace's (`camerapture:picture`), which Fabric
+and NeoForge mods register a `SpecialModelRenderer` for, decodes to `SpecialKind::Native`. A native mod draws it from two
+`Game` methods in `crates/horizon-client/src/game/item_draw.rs`, targeted by path (they are not in the hook catalog):
+`native_special_item_model_claimed(kind, claimed)` claims the type (asked as the item resolves its model; a type nobody
+claims draws the node's `base` model, as such a node always did), and `native_special_item_model(kind, model, argument,
+has_foil, pose, sink)` draws it wherever the item shows (GUI slots, both hands, dropped, item frames, armour stands):
+`pose` maps the item's block-space cube (0 to 1, the `base` model's display transform applied), `argument` holds the
+stack's components and quads go to `sink` (`item_render::ItemQuad`, UVs in the shared atlas, a mod texture's included).
+
+```toml
+[[injection]]
+id = "special-model"
+kind = "HEAD"
+target = "horizon_client::game::item_draw::Game<'_>::native_special_item_model"
+helper = "special_model.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "argument", ty = "&serde_json::Value", value = "argument" },
+  { name = "pose", ty = "glam::Mat4", value = "pose" },
+  { name = "sink", ty = "&mut dyn horizon_client::item_render::ItemSink", value = "&mut *sink" },
+]
+```
+
+A mod's own `minecraft:condition` property (`native_item_model_property`) is asked in a game built with bundles that
+call `mod_api::set_native_listening`, as well as with trait mods. Lecterns take `#minecraft:lectern_books`, as vanilla's
+`LecternBlock` does, so a mod's book (Camerapture's album) lies on one; `Game::take_lectern_book` is its Take Book for the
+acting player.
 
 ### Server menus
 

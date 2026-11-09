@@ -390,6 +390,7 @@ impl Game<'_> {
             .borrow_mut()
             .set_resource_root(self.options.resources.clone());
         self.maps.slots.forget();
+        self.mod_textures.get_mut().forget();
         self.map_patches.clear();
         // Kept mod block entities name the old atlas's sprites.
         self.kept_block_entities.get_mut().clear();

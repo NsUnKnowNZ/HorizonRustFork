@@ -1,0 +1,83 @@
+Launch
+Platform
+C command "time set 6000"
+C command "kill @e[type=!minecraft:player]"
+C command "tp @s 197.5 151 196.5 -90 10"
+C wait 60
+C command "summon mutantmonsters:mutant_zombie 203.5 150 196.5 {NoAI:1b,Rotation:[90f,0f]}"
+C wait 10
+C command "tag @e[type=mutantmonsters:mutant_zombie] add mutantmonsters.anim.1"
+C wait 7
+C screenshot "$shots\mm-zs1.png"
+C wait 6
+C screenshot "$shots\mm-zs2.png"
+C wait 20
+C command "tag @e[type=mutantmonsters:mutant_zombie] add mutantmonsters.anim.2"
+C wait 14
+C screenshot "$shots\mm-zr1.png"
+C wait 40
+C screenshot "$shots\mm-zr2.png"
+C wait 80
+C command "tag @e[type=mutantmonsters:mutant_zombie] add mutantmonsters.anim.3"
+C wait 9
+C screenshot "$shots\mm-zt1.png"
+C wait 12
+C command "kill @e[type=!minecraft:player]"
+C command "summon mutantmonsters:mutant_zombie 203.5 150 196.5 {Rotation:[90f,0f]}"
+C wait 10
+C command "damage @e[type=mutantmonsters:mutant_zombie,limit=1] 300 minecraft:player_attack"
+C wait 12
+C screenshot "$shots\mm-zd1.png"
+C command "data get entity @e[type=mutantmonsters:mutant_zombie,limit=1] Health"
+C wait 100
+C screenshot "$shots\mm-zd2.png"
+C wait 20
+C screenshot "$shots\mm-zd3.png"
+C wait 20
+C command "data get entity @e[type=mutantmonsters:mutant_zombie,limit=1] Health"
+C screenshot "$shots\mm-zd4.png"
+C command "kill @e[type=mutantmonsters:mutant_zombie]"
+C wait 40
+C screenshot "$shots\mm-zd5.png"
+C command "kill @e[type=!minecraft:player]"
+C command "summon mutantmonsters:mutant_creeper 203.5 150 196.5 {NoAI:1b,Rotation:[90f,0f]}"
+C wait 10
+C command "execute at @e[type=mutantmonsters:mutant_creeper,limit=1] run summon minecraft:lightning_bolt ~ ~ ~"
+C wait 20
+C screenshot "$shots\mm-cc1.png"
+C command "damage @e[type=mutantmonsters:mutant_creeper,limit=1] 300 minecraft:player_attack"
+C wait 50
+C screenshot "$shots\mm-cc2.png"
+C wait 70
+C screenshot "$shots\mm-cc3.png"
+C command "kill @e[type=!minecraft:player]"
+C command "summon mutantmonsters:mutant_skeleton 203.5 150 196.5 {NoAI:1b,Rotation:[90f,0f]}"
+C wait 10
+C screenshot "$shots\mm-s0.png"
+C command "tag @e[type=mutantmonsters:mutant_skeleton] add mutantmonsters.anim.1"
+C wait 4
+C screenshot "$shots\mm-s1.png"
+C wait 20
+C command "tag @e[type=mutantmonsters:mutant_skeleton] add mutantmonsters.anim.2"
+C wait 18
+C screenshot "$shots\mm-s2.png"
+C wait 20
+C command "tag @e[type=mutantmonsters:mutant_skeleton] add mutantmonsters.anim.3"
+C wait 12
+C screenshot "$shots\mm-s3.png"
+C wait 25
+C command "tag @e[type=mutantmonsters:mutant_skeleton] add mutantmonsters.anim.4"
+C wait 6
+C screenshot "$shots\mm-s4.png"
+C wait 20
+C command "kill @e[type=!minecraft:player]"
+C command "effect give @s minecraft:resistance 600 4 true"
+C command "summon mutantmonsters:mutant_skeleton 210.5 150 196.5 {Rotation:[90f,0f]}"
+C command "gamemode survival"
+C wait 100
+C screenshot "$shots\mm-s5.png"
+C command "gamemode creative"
+C command "damage @e[type=mutantmonsters:mutant_skeleton,limit=1] 300 minecraft:player_attack"
+C wait 6
+C screenshot "$shots\mm-s6.png"
+C logs --lines 60

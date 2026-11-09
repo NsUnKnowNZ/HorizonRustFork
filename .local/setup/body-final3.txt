@@ -1,0 +1,23 @@
+Launch
+Platform
+C command "kill @e[type=!minecraft:player]"
+C command "setblock 207 150 200 minecraft:chest[facing=north]"
+C command "tp @s 207.5 150 197.5 0 20"
+C wait 60
+C screenshot "$shots\diag-chest-vanilla-pack.png"
+C command "setblock 207 150 200 minecraft:air"
+C command "tp @s 203.5 152 195.5 0 25"
+C wait 260
+C pause
+C screen
+C click-button "Save and Quit to Title"
+Start-Sleep 6
+C screen
+C open NativeTest
+C screenshot "$shots\diag-seamless-a.png"
+C screenshot "$shots\diag-seamless-b.png"
+Start-Sleep -Milliseconds 300
+C screenshot "$shots\diag-seamless-c.png"
+Start-Sleep 1
+C screenshot "$shots\diag-seamless-d.png"
+Start-Sleep 15

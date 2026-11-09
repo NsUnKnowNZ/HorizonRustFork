@@ -1,0 +1,42 @@
+Launch
+Platform
+C command "tp @s 203.5 150 200.5 0 70"
+C select 9
+C wait 10
+C use-item
+C wait 10
+C command "fill 190 150 190 216 156 216 minecraft:air"
+C command "kill @e[type=!minecraft:player]"
+C command "clear @s"
+C command "fill 200 150 197 207 154 197 minecraft:stone_bricks"
+C command "setblock 203 150 203 minecraft:red_wool"
+C command "setblock 204 151 204 minecraft:gold_block"
+C command "give @s camerapture:camera"
+C command "give @s minecraft:paper 16"
+C command "tp @s 203.5 150 200.5 0 10"
+C wait 20
+C select 1
+C use-item
+C wait 10
+C screenshot "$shots\cam-viewfinder.png"
+C mouse left click
+C wait 100
+C inventory
+C select 3
+C wait 40
+C screenshot "$shots\cam-hand.png"
+C use-item
+C wait 30
+C screenshot "$shots\cam-screen.png"
+C key esc tap
+C wait 5
+C command "tp @s 203.5 150 199.5 180 0"
+C wait 10
+C key shift down
+C wait 5
+C interact 203 151 197 south
+C wait 5
+C key shift up
+C wait 40
+C screenshot "$shots\cam-frame.png"
+C logs --lines 150

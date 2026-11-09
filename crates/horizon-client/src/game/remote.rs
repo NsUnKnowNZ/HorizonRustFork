@@ -10734,7 +10734,12 @@ impl Game<'_> {
             horizon_client::widgets::begin_screen(|| {
                 super::screen_info::level_loading(progress, &super::screen_info::tr)
             });
-            self.draw_level_loading_background(batch, r.level_load.reason);
+            let reason = r.level_load.reason;
+            let pictured = reason == horizon_client::level_loading::Reason::Other
+                && self.draw_seamless_background(batch);
+            if !pictured {
+                self.draw_level_loading_background(batch, reason);
+            }
             let atlas = &self.gui.atlas;
             match self.integrated.as_ref().map(|i| i.load_view()) {
                 Some(view) => {

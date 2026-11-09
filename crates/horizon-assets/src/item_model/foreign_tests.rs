@@ -150,11 +150,18 @@ fn range_property_reads_zero() {
 
 #[test]
 fn special_type_keeps_its_base_model() {
+    // A mod's own renderer type stays a special node with its base: a native
+    // mod may draw it, else the base model stands in when it resolves.
     let n = node(
-        r#"{"type":"minecraft:special","base":"mod:item/cube","model":{"type":"mod:energy_cube"}}"#,
+        r#"{"type":"minecraft:special","base":"mod:item/cube","model":{"type":"mod:energy_cube","size":2}}"#,
     )
     .unwrap();
-    assert_eq!(model_id(&n), "mod:item/cube");
+    let ItemModelNode::Special { base, model, .. } = &n else {
+        panic!("not a special node: {n:?}")
+    };
+    assert_eq!(base, "mod:item/cube");
+    assert_eq!(model.native_kind(), Some("mod:energy_cube"));
+    assert_eq!(model.to_json()["size"], 2);
     let n =
         node(r#"{"type":"minecraft:special","base":"a:b","model":{"type":"minecraft:shield"}}"#)
             .unwrap();

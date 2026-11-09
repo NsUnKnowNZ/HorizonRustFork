@@ -2296,6 +2296,24 @@ pub fn speed_bonus(m: &Mob) -> f64 {
 /// `Goat.getAmbientSound`, `Goat.getHurtSound`, and `Goat.getDeathSound`
 /// select the screaming voices from the goat's saved flag.
 pub fn voice_sounds(m: &Mob) -> [&'static str; 3] {
+    let mut sounds = species_voice(m);
+    native_mob_voice(m, &mut sounds);
+    sounds
+}
+/// A mob's ambient, hurt and death sounds as a mod has them (a Java mod's
+/// `getAmbientSound`, `getHurtSound` and `getDeathSound` overrides): `sounds`
+/// holds the species' (`voice_sounds`), and a mod puts its own in place, a
+/// namespaced id (`mymod:entity.golem.hurt`) or vanilla's without the
+/// namespace (`entity.zombie.hurt`); an empty one plays nothing (an ambient
+/// sound that returns `null`). Asked each time one is about to play, on the
+/// server: `m.kind.id` tells a mod's own types apart. API @API:mob_sounds@.
+#[inline(never)]
+pub fn native_mob_voice(m: &Mob, sounds: &mut [&'static str; 3]) {
+    let _ = (m, sounds);
+}
+/// The voices of species that pick them by state, before a mod's
+/// (`native_mob_voice`).
+fn species_voice(m: &Mob) -> [&'static str; 3] {
     match m.species() {
         Species::Goat if m.extra.screaming => [
             "entity.goat.screaming.ambient",
@@ -3166,6 +3184,26 @@ pub fn movement_sounds(m: &Mob) -> bool {
 }
 /// `playStepSound`: the species' footstep, or the block's step sound at 15%.
 pub fn step_sound(
+    m: &Mob,
+    w: &MobWorld,
+    pos: [i32; 3],
+    state: horizon_world::registry::BlockStateId,
+) -> Option<(&'static str, f32, f32)> {
+    let mut sound = species_step_sound(m, w, pos, state);
+    native_mob_step_sound(m, &mut sound);
+    sound
+}
+/// A mob's footfall as a mod has it (a Java mod's `playStepSound`
+/// override): `sound` holds the species' or its block's (`step_sound`) as
+/// the id, volume and pitch; put a mod's own in place (a namespaced id or
+/// vanilla's without the namespace), or `None` for no footfall. Asked on
+/// the server for each step a mob takes. API @API:mob_sounds@.
+#[inline(never)]
+pub fn native_mob_step_sound(m: &Mob, sound: &mut Option<(&'static str, f32, f32)>) {
+    let _ = (m, sound);
+}
+/// The footfall of `step_sound` before a mod's (`native_mob_step_sound`).
+fn species_step_sound(
     m: &Mob,
     w: &MobWorld,
     pos: [i32; 3],

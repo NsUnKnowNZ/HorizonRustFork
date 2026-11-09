@@ -43,6 +43,16 @@ pub enum SpecialKind {
     },
     Shield,
     Trident,
+    /// A special model of a mod's own (Fabric's and NeoForge's
+    /// `SpecialModelRenderers.ID_MAPPER` registrations): `kind` is its type
+    /// (`camerapture:picture`) and `model` the node's whole `model` object.
+    /// A native mod that claims the type draws it
+    /// (`native_special_item_model`); one nobody claims draws the node's
+    /// `base` model instead, as a model of another namespace always did.
+    Native {
+        kind: String,
+        model: Value,
+    },
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct SpecialModel {
@@ -83,6 +93,23 @@ impl SpecialModel {
             .and_then(Value::as_str)
             .and_then(|t| super::identifier(t).ok())
             .is_some_and(|t| super::foreign::is_foreign(&t))
+    }
+    /// A model of another namespace's type ([`SpecialKind::Native`]).
+    pub fn native(v: &Value) -> Result<Self> {
+        let kind = ident(required(object(v)?, "type")?)?;
+        Ok(Self {
+            kind: SpecialKind::Native {
+                kind,
+                model: v.clone(),
+            },
+        })
+    }
+    /// The type of a mod's own special model, `None` for vanilla's.
+    pub fn native_kind(&self) -> Option<&str> {
+        match &self.kind {
+            SpecialKind::Native { kind, .. } => Some(kind),
+            _ => None,
+        }
     }
     pub fn decode(v: &Value) -> Result<Self> {
         let m = object(v)?;
@@ -150,6 +177,9 @@ impl SpecialModel {
     }
     /// The codec's encoding: optional fields equal to their default are omitted.
     pub fn to_json(&self) -> Value {
+        if let SpecialKind::Native { model, .. } = &self.kind {
+            return model.clone();
+        }
         let mut m = Map::new();
         let mut put = |k: &str, v: Value| {
             m.insert(k.to_owned(), v);
@@ -222,6 +252,7 @@ impl SpecialModel {
             }
             SpecialKind::Shield => "shield",
             SpecialKind::Trident => "trident",
+            SpecialKind::Native { .. } => unreachable!("returned above"),
         };
         m.insert("type".to_owned(), json!(format!("minecraft:{ty}")));
         Value::Object(m)

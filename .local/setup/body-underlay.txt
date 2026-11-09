@@ -1,0 +1,41 @@
+Launch
+Platform
+C command "time set 6000"
+C command "kill @e[type=!minecraft:player]"
+C command "setblock 203 150 200 minecraft:chest[facing=north]"
+C command "setblock 204 150 200 minecraft:oak_slab"
+C command "item replace entity @s hotbar.0 with minecraft:red_carpet 8"
+C command "tp @s 203.5 150 197.5 0 20"
+C select 1
+C wait 20
+C key key.keyboard.left.shift down
+C wait 5
+C use-item
+C wait 5
+C key key.keyboard.left.shift up
+C command "tp @s 204.5 150 197.5 0 25"
+C wait 10
+C key key.keyboard.left.shift down
+C wait 5
+C use-item
+C wait 5
+C key key.keyboard.left.shift up
+C command "tp @s 203.9 151.2 197.0 0 30"
+C wait 30
+C screenshot "$shots\underlay.png"
+C command "clear @s minecraft:red_carpet"
+C key key.keyboard.left.shift down
+C wait 5
+C select 2
+C command "item replace entity @s hotbar.1 with minecraft:air"
+C command "tp @s 203.5 150 197.5 0 20"
+C wait 5
+C use-item
+C wait 5
+C key key.keyboard.left.shift up
+C command "execute if entity @s[nbt={Inventory:[{id:\"minecraft:red_carpet\"}]}] run say took-back"
+C command "setblock 204 150 200 minecraft:air destroy"
+C wait 10
+C command "execute if entity @e[type=minecraft:item,nbt={Item:{id:\"minecraft:red_carpet\"}}] run say dropped"
+C screenshot "$shots\\underlay2.png"
+C logs --lines 80
