@@ -1,0 +1,8 @@
+Launch
+Platform
+C command "gamemode creative"
+C command "item replace entity @s hotbar.0 with minecraft:iron_sword"
+C select 1
+C attack
+C wait 20
+C logs --lines 6000

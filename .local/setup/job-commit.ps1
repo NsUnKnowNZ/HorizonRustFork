@@ -11,22 +11,20 @@ foreach ($m in 'bedrockify','biome_paint','bitsandbalance','charm','chipped','ha
   & robocopy "horizon-mods\$m" "server-oneblock\horizon-mods\$m" /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
 }
 Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
-(Get-Content server-oneblock\horizon-mods.txt) | Where-Object { $_ -notmatch "^mod.(beb|ambientsounds):" } | Set-Content server-oneblock\horizon-mods.txt
+(Get-Content server-oneblock\horizon-mods.txt) | Where-Object { $_ -notmatch "^mod.(beb|ambientsounds|sounds):" } | Set-Content server-oneblock\horizon-mods.txt
 "server mods synced"
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates 2>&1 | ForEach-Object { "$_" }
-git add -f .local/native/mods/bitsandbalance .local/native/mods/diversity .local/native/mods/ambientsounds .local/native/mods/visualkeys .local/native/mods/sihywtcamd .local/setup/ambientsounds_build.py .local/setup/body-bnb.txt .local/setup/body-bnb2.txt .local/setup/body-bnb3.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
+git add -f .local/native/mods/jei .local/native/mods/sounds .local/native/mods/ambientsounds .local/setup/sounds_build.py .local/setup/body-jei.txt .local/setup/body-sounds.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | ForEach-Object { "$_" }
 $msg = @"
-AmbientSounds, Bits and Balance's gameplay, Diversity's bundles, VisualKeys, more of the Difficulty mod
+JEI for Horizon, the Sounds mod's block sounds, AmbientSounds fixes
 
-- ambientsounds: its ambience engine from its own region files (biomes, temperature, sky, height,
-  rain, storms, underwater, block features sampled round the player, day/night curves); sounds
-  from a client content mod built locally by ambientsounds_build.py
-- bitsandbalance: automatic restock, biome titles, Cascading, Aerodynamic
-- diversity: Vacuum, Selective Vacuum and Refill bundles
-- visualkeys: a keyboard of the key bindings on the Key Binds page (hold Left Alt)
-- sihywtcamd: spawn-time health and attributes
+- jei: enderliker/horizon-jei 0.2.1 (MIT) as the recipe viewer, its pinned revision removed
+- horizon-items: a client mod's assets/minecraft/sounds/blocks/*.json (the Sounds mod's format)
+  replaces those blocks' break, step, place, hit and fall sounds
+- sounds: a sword's swoosh; sounds_build.py builds the local content mod from the jar
+- ambientsounds: entity conditions (a warden near), day/night volumes as numbers
 - ledger updated
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

@@ -1,0 +1,24 @@
+# Sounds (IMB11, ARR) for Horizon: the part of the mod that is code. Its block sound groups are
+# data Horizon now reads from the client content mod horizon-mods/sounds (built locally by
+# .local/setup/sounds_build.py); this adds the swoosh of a sword swung at nothing.
+[mod]
+id = "sounds"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "sounds_extra"
+source = "sounds_extra.rs"
+
+[[injection]]
+id = "swing"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_interaction_key"
+helper = "swing.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]

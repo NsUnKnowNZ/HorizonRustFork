@@ -45,6 +45,8 @@ struct Env {
     hour: f64,
     /// Each feature's volume, from the blocks around.
     features: Option<HashMap<String, f64>>,
+    /// The nearest mob of each type (`warden`), in blocks.
+    entities: Option<HashMap<String, f64>>,
 }
 
 /// One sound of a region: its volume now, and ticks to its next start.
@@ -82,6 +84,7 @@ static STATE: Mutex<State> = Mutex::new(State {
         storming: false,
         hour: 0.0,
         features: None,
+        entities: None,
     },
     regions: None,
     playing: None,
@@ -241,11 +244,31 @@ fn conditions(o: &Value, env: &Env, regions: &HashMap<String, f64>) -> f64 {
             return 0.0;
         }
     }
-    if let Some(want) = o.get("day").and_then(Value::as_bool) {
-        v *= time_curve(&Value::String(if want { "day" } else { "night" }.into()), env.hour);
+    // `day` and `night`: a volume by day and by night (true 1, false 0); both, the day's by day
+    // and the night's by night.
+    let daylight = time_curve(&Value::String("day".into()), env.hour);
+    let part = |key: &str| o.get(key).and_then(|x| x.as_f64().or_else(|| x.as_bool().map(|b| f64::from(u8::from(b)))));
+    match (part("day"), part("night")) {
+        (None, None) => {}
+        (d, n) => {
+            let day = d.unwrap_or(if n.is_some() { 1.0 - n.unwrap_or(0.0).min(1.0) } else { 1.0 });
+            let night = n.unwrap_or(if d.is_some() { 1.0 - d.unwrap_or(0.0).min(1.0) } else { 1.0 });
+            let (day, night) = match (d, n) {
+                (Some(d), Some(n)) => (d, n),
+                _ => (day, night),
+            };
+            v *= day * daylight + night * (1.0 - daylight);
+        }
     }
-    if let Some(want) = o.get("night").and_then(Value::as_bool) {
-        v *= time_curve(&Value::String(if want { "night" } else { "day" }.into()), env.hour);
+    // `entity`: a mob of a type within a distance (a warden near).
+    if let Some(e) = o.get("entity") {
+        let kind = e["type"].as_str().unwrap_or("");
+        let kind = kind.rsplit(':').next().unwrap_or(kind);
+        let d = env.entities.as_ref().and_then(|m| m.get(kind)).copied().unwrap_or(f64::MAX);
+        v *= match e.get("distance") {
+            Some(c) => range(c, d),
+            None => f64::from(u8::from(d < f64::MAX)),
+        };
     }
     if let Some(c) = o.get("time") {
         v *= time_curve(c, env.hour);
@@ -331,6 +354,16 @@ fn weigh(game: &Game<'_>) -> Option<Env> {
         storming: thunder > 0.2,
         hour: (t / 1000.0 + 6.0) % 24.0,
         features: None,
+        entities: Some({
+            let mut near: HashMap<String, f64> = HashMap::new();
+            for m in game.native_mobs(game.dim.id()) {
+                let d = ((m.pos[0] - x).powi(2) + (m.pos[1] - y).powi(2) + (m.pos[2] - z).powi(2)).sqrt();
+                let kind = m.kind.rsplit(':').next().unwrap_or(&m.kind).to_owned();
+                let e = near.entry(kind).or_insert(f64::MAX);
+                *e = e.min(d);
+            }
+            near
+        }),
     })
 }
 

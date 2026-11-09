@@ -1,0 +1,11 @@
+Launch
+Platform
+C command "gamemode survival"
+C command "clear @s"
+C command "jei"
+C open-inventory
+C wait 5
+C screenshot "$shots\jei-inventory.png"
+C screen
+C close
+C logs

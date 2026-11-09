@@ -312,7 +312,10 @@ impl BlockFacts {
             || horizon_world::json_file::parse::<decode::Validate>(&path, &bytes).map(drop);
         if !parallel {
             validate()?;
-            return Self::decode_with_callback(&path, &bytes, registry, behaviours, callback);
+            let (mut facts, extra) =
+                Self::decode_with_callback(&path, &bytes, registry, behaviours, callback)?;
+            facts.apply_block_sounds(root);
+            return Ok((facts, extra));
         }
         // The validation pass (a third of the load) only reports errors: it
         // reads the file beside the decode, and its error still wins.
@@ -322,8 +325,76 @@ impl BlockFacts {
             validated
                 .join()
                 .unwrap_or_else(|panic| std::panic::resume_unwind(panic))?;
-            decoded
+            let (mut facts, extra) = decoded?;
+            facts.apply_block_sounds(root);
+            Ok((facts, extra))
         })
+    }
+
+    /// Block sound groups a client mod gives vanilla's blocks, in the Sounds mod's format
+    /// (`assets/minecraft/sounds/blocks/*.json`: `keys`, the blocks; `group`, each of
+    /// `break`, `step`, `place`, `hit` and `fall` a `sound_id`, with `volume` and `pitch`;
+    /// `enabled`). Every state of those blocks takes them; a part a group leaves out stays.
+    fn apply_block_sounds(&mut self, root: &Path) {
+        let Ok(dir) = std::fs::read_dir(root.join("assets/minecraft/sounds/blocks")) else {
+            return;
+        };
+        let mut paths: Vec<_> = dir.flatten().map(|e| e.path()).collect();
+        paths.sort();
+        let mut by_block: HashMap<String, Value> = HashMap::new();
+        for path in paths {
+            let Some(doc) = std::fs::read(&path)
+                .ok()
+                .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+            else {
+                continue;
+            };
+            if doc["enabled"].as_bool() == Some(false) || !doc["group"].is_object() {
+                continue;
+            }
+            for key in doc["keys"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+                by_block.insert(key.to_owned(), doc["group"].clone());
+            }
+        }
+        if by_block.is_empty() {
+            return;
+        }
+        let mut strings: HashMap<String, Arc<str>> = HashMap::new();
+        let mut intern = |s: &str| -> Arc<str> {
+            strings.entry(s.to_owned()).or_insert_with(|| Arc::from(s)).clone()
+        };
+        let mut changed = 0usize;
+        for state in &mut self.states {
+            let Some(group) = by_block.get(&*state.name) else { continue };
+            changed += 1;
+            let id = |part: &str| group[part]["sound_id"].as_str().map(str::to_owned);
+            let sounds = &mut state.sounds;
+            if let Some(v) = group["volume"].as_f64() {
+                sounds.volume = v as f32;
+            }
+            if let Some(v) = group["pitch"].as_f64() {
+                sounds.pitch = v as f32;
+            }
+            if let Some(s) = id("break") {
+                sounds.break_sound = intern(&s);
+            }
+            if let Some(s) = id("step") {
+                sounds.step = intern(&s);
+            }
+            if let Some(s) = id("place") {
+                sounds.place = intern(&s);
+            }
+            if let Some(s) = id("hit") {
+                sounds.hit = intern(&s);
+            }
+            if let Some(s) = id("fall") {
+                sounds.fall = intern(&s);
+            }
+        }
+        log::info!(
+            "Horizon: block sounds from a client mod for {} blocks ({changed} states)",
+            by_block.len()
+        );
     }
 
     fn decode_with_callback<T>(
