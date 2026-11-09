@@ -1,0 +1,41 @@
+# Fancy Health Bar (efekos / ehilynxin, MIT) for Horizon, after
+# VanillaHealthBarRendering and Better OneBlock's config/fancyhealthbar/
+# vanilla.json: the vanilla hearts, and every half heart lost splashes into
+# its pixels, which fly off and fall for 100 ticks.
+[mod]
+id = "fancy_health_bar"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "fancy_health_bar"
+source = "fancy_health_bar.rs"
+
+# Gui.extractPlayerHealth: the health the HUD shows this frame (lastHealth
+# compare, onDamage) and the hud tick count that moves the pixels.
+[[injection]]
+id = "health"
+kind = "HEAD"
+hook = "health_hud"
+hook_version = 1
+helper = "health.rs"
+bindings = [
+  { name = "inputs", ty = "&horizon_client::hud_layout::HealthInputs", value = "inputs" },
+  { name = "wi", ty = "i32", value = "wi" },
+  { name = "hi", ty = "i32", value = "hi" },
+]
+
+# HudEntityManager.render, over the health row.
+[[injection]]
+id = "draw"
+kind = "HEAD"
+hook = "gui_layer_post"
+hook_version = 1
+helper = "draw.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "layer", ty = "&str", value = "layer" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+]

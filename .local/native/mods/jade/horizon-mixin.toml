@@ -1,0 +1,299 @@
+[mod]
+id = "jade"
+version = "26.3.8"
+priority = 100
+
+# The Horizon commit this bundle was built and tested on.
+[compatibility]
+
+# Jade (snownee.jade, Jade-mc26.3-Fabric-26.3.5): the look-at overlay and its plugin registry.
+[[module]]
+id = "jade"
+file = "crates/horizon-client/src/game.rs"
+name = "jade"
+source = "jade.rs"
+
+# Jade's themes (ThemeHelper): jade_themes/**.json, the jar's and the resource root's.
+[[module]]
+id = "jade-theme"
+file = "crates/horizon-client/src/game.rs"
+name = "jade_theme"
+source = "jade_theme.rs"
+
+# Jade's config screens (HomeConfigScreen, WailaConfigScreen, PluginsConfigScreen, ProfileConfigScreen).
+[[module]]
+id = "jade-config"
+file = "crates/horizon-client/src/game.rs"
+name = "jade_config"
+source = "jade_config.rs"
+
+# BlockDisplayProvider and ItemDisplayProvider: what a display shows is private to its file.
+[[module]]
+id = "display-access"
+file = "crates/horizon-client/src/game/text_displays.rs"
+name = "hz_jade_displays"
+source = "display_access.rs"
+
+# NextEntityDropProvider: a sniffer's sniff_cooldown memory, whose time is private to its file.
+[[module]]
+id = "brain-ttl"
+file = "crates/horizon-client/src/mobs/animal_brain.rs"
+name = "hz_jade_brain"
+source = "brain_ttl.rs"
+
+[[injection]]
+id = "hud"
+kind = "HEAD"
+hook = "hud"
+hook_version = 1
+helper = "hud.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+]
+
+[[injection]]
+id = "net-from-client"
+kind = "HEAD"
+hook = "net_from_client"
+hook_version = 1
+helper = "net_from_client.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "u128", value = "player" },
+  { name = "channel", ty = "&str", value = "channel" },
+  { name = "data", ty = "&[u8]", value = "data" },
+]
+
+[[injection]]
+id = "net-from-server"
+kind = "HEAD"
+hook = "net_from_server"
+hook_version = 1
+helper = "net_from_server.rs"
+bindings = [
+  { name = "channel", ty = "&str", value = "channel" },
+  { name = "data", ty = "&[u8]", value = "data" },
+]
+
+# Jade in Options > Mods: its keys (JadeKeys) and its options page (WailaConfigScreen).
+[[injection]]
+id = "list"
+kind = "HEAD"
+hook = "mods"
+hook_version = 1
+helper = "list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
+]
+
+[[injection]]
+id = "settings"
+kind = "HEAD"
+hook = "settings"
+hook_version = 1
+helper = "settings.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "buttons", ty = "&mut Vec<String>", value = "&mut *buttons" },
+]
+
+[[injection]]
+id = "settings-click"
+kind = "HEAD"
+hook = "settings_click"
+hook_version = 1
+helper = "settings_click.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "button", ty = "usize", value = "button" },
+]
+
+# Boss Bar Overlap's Hide Boss Bar.
+[[injection]]
+id = "hide-boss-bars"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::dragon::Game<'_>::draw_boss_bars"
+helper = "hide_boss_bars.rs"
+bindings = [
+  { name = "game", ty = "&Game<'_>", value = "&*self" },
+]
+
+# Mod Name on Item Tooltip.
+[[injection]]
+id = "item-mod-name"
+kind = "RETURN"
+target = "horizon_client::game::stations::Game<'_>::stack_tooltip"
+helper = "item_mod_name.rs"
+bindings = [
+  { name = "game", ty = "&Game<'_>", value = "&*self" },
+  { name = "stack", ty = "&ItemStack", value = "stack" },
+  { name = "lines", ty = "Vec<(horizon_client::text::Text, u32)>", value = "$value" },
+]
+
+# /jadec and /jade.
+[[injection]]
+id = "jade-command"
+kind = "HEAD"
+hook = "command"
+hook_version = 1
+helper = "jade_command.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
+]
+
+[[injection]]
+id = "jade-perform-command"
+kind = "HEAD"
+hook = "perform_command"
+hook_version = 1
+helper = "jade_perform_command.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "&crate::game::native_server::NativeServerPlayer", value = "player" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
+]
+
+[[injection]]
+id = "jade-register-commands"
+kind = "HEAD"
+hook = "register_commands"
+hook_version = 1
+helper = "jade_register_commands.rs"
+bindings = [
+  { name = "commands", ty = "&mut Vec<crate::game::native_server::NativeCommand>", value = "&mut *commands" },
+]
+
+# The config screens: drawn and worked through the screen hooks, on the mod's own screen and over Options.
+[[injection]]
+id = "config-frame"
+kind = "HEAD"
+hook = "frame"
+hook_version = 1
+helper = "frame.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "config-render-post"
+kind = "HEAD"
+hook = "screen_render_post"
+hook_version = 1
+helper = "screen_render_post.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "&*screen" },
+]
+
+[[injection]]
+id = "config-mouse-pressed"
+kind = "HEAD"
+hook = "screen_mouse_button_pressed_pre"
+hook_version = 1
+helper = "screen_pressed.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "&*screen" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "modifiers", ty = "u32", value = "modifiers" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "config-mouse-released"
+kind = "HEAD"
+hook = "screen_mouse_button_released_pre"
+hook_version = 1
+helper = "screen_released.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "&*screen" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "config-mouse-scrolled"
+kind = "HEAD"
+hook = "screen_mouse_scrolled_pre"
+hook_version = 1
+helper = "screen_scrolled.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "&*screen" },
+  { name = "scroll", ty = "[f64; 2]", value = "scroll" },
+  { name = "modifiers", ty = "u32", value = "modifiers" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "config-key-pressed"
+kind = "HEAD"
+hook = "screen_key_pressed_pre"
+hook_version = 1
+helper = "screen_key.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "&*screen" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "repeat", ty = "bool", value = "repeat" },
+  { name = "modifiers", ty = "u32", value = "modifiers" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "config-char-typed"
+kind = "HEAD"
+hook = "screen_char_typed_pre"
+hook_version = 1
+helper = "screen_typed.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "&*screen" },
+  { name = "c", ty = "char", value = "c" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+# The themes are read again with the resources.
+[[injection]]
+id = "themes-reloaded"
+kind = "HEAD"
+hook = "client_resources_reloaded"
+hook_version = 1
+helper = "resources_reloaded.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "jade-perform-console"
+kind = "HEAD"
+hook = "perform_console_command"
+hook_version = 1
+helper = "jade_perform_console.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
+]
+
+# Jade.registerGameRules: jade:max_position_deviation, read when a world opens. The command is `/gamerule`, through the
+# command hooks above.
+[[injection]]
+id = "rule-world-open"
+kind = "HEAD"
+hook = "world_lifecycle"
+hook_version = 1
+helper = "rule_world_open.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "phase", ty = "horizon_client::mod_api::WorldPhase", value = "phase" },
+]
+

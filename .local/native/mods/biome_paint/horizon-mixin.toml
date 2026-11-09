@@ -1,0 +1,39 @@
+# Biome Paint (FloffyToffyToolBox, CC0-1.0) for Horizon, written from the mod's own code: hold
+# the Biome Brush in one hand and a biome paint in the other. Right click a block to set the
+# first corner (the brush takes the paint's colour), then right click a second block with the
+# same paint: the box between the two corners turns into the paint's biome, as /fillbiome does
+# (grass, leaves, water, sky and fog follow). The brush and the paint each lose one durability.
+# Sneak + right click cleans the brush. The items, textures and recipes are the content mod
+# horizon-mods/biome_paint.
+[mod]
+id = "biome_paint"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "biome_paint"
+source = "biome_paint.rs"
+
+[[injection]]
+id = "use"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_use_item_on"
+helper = "use.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" },
+]
+
+[[injection]]
+id = "level_tick_post"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_level_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+]

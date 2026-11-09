@@ -1,0 +1,22 @@
+# Random Mob Effects (Serilum, ARR) for Horizon, written from its described
+# behaviour and Better OneBlock's blacklist.txt; no code of the original is used.
+# Every hostile mob (creepers aside) that joins the world gets one random effect,
+# level 1, for good, with its particles.
+[mod]
+id = "random_mob_effects"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "random_mob_effects"
+source = "runtime.rs"
+
+[[injection]]
+id = "tick"
+hook = "tick"
+hook_version = 1
+kind = "HEAD"
+helper = "tick.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]

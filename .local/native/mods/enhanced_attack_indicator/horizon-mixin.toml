@@ -1,0 +1,43 @@
+# Enhanced Attack Indicator (Minenash, MIT) for Horizon, after its source
+# (getProgress) and Better OneBlock's config (weapon cooldown in the MIDDLE):
+# the crosshair's attack indicator also shows block breaking, bow / crossbow /
+# trident draw, eating and drinking, and item cooldowns.
+[mod]
+id = "enhanced_attack_indicator"
+version = "0.1.0"
+priority = 100
+
+# What the indicator shows this frame, worked out by the game each frame.
+[[module]]
+id = "state"
+file = "crates/horizon-client-render/src/hud_layout.rs"
+name = "enhanced_attack_indicator"
+source = "state.rs"
+visibility = "pub"
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "enhanced_attack_indicator_game"
+source = "game.rs"
+
+[[injection]]
+id = "frame"
+hook = "frame"
+hook_version = 1
+kind = "HEAD"
+helper = "frame.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]
+
+# Hud.extractCrosshair's attack indicator, drawn from that progress.
+[[injection]]
+id = "crosshair"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client_render::hud_layout::crosshair"
+helper = "crosshair.rs"
+bindings = [
+  { name = "w", ty = "i32", value = "w" },
+  { name = "h", ty = "i32", value = "h" },
+  { name = "attack", ty = "Option<f32>", value = "attack" },
+]

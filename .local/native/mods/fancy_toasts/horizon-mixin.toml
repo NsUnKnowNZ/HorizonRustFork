@@ -1,0 +1,40 @@
+# Fancy Toasts (Bivrik, MIT) for Horizon, written from its documented behaviour: an
+# advancement no longer slides in as the small corner toast; it drops in as a wide plaque
+# at the top centre of the screen, with its icon, the frame's own colour and label, the
+# title and the description, a shine across it, and a sound for the frame (a challenge
+# keeps its fanfare). Advancements queue and show one at a time; the time on screen
+# follows Notification Time in Accessibility. Recipe, tutorial and system toasts are
+# left as they are.
+[mod]
+id = "fancy_toasts"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "fancy_toasts"
+source = "fancy_toasts.rs"
+
+[[injection]]
+id = "toast"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_toast_add"
+helper = "toast.rs"
+bindings = [
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "id", ty = "&str", value = "id" },
+  { name = "cancel", ty = "&mut bool", value = "&mut *cancel" },
+]
+
+[[injection]]
+id = "draw"
+kind = "HEAD"
+hook = "gui_layer_post"
+hook_version = 1
+helper = "draw.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "layer", ty = "&str", value = "layer" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+]

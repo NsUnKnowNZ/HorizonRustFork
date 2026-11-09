@@ -1,0 +1,14 @@
+# Better F1 Reborn (MIT) for Horizon: F1 hides the HUD only; the hand and held
+# item stay (Horizon's own "no HUD" mode).
+[mod]
+id = "better_f1"
+version = "0.1.0"
+priority = 100
+
+[[injection]]
+id = "f1"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::chat::UiState::toggle_hide_gui"
+helper = "f1.rs"
+bindings = [{ name = "ui", ty = "&mut UiState", value = "&mut *self" }]

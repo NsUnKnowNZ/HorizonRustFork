@@ -1,0 +1,36 @@
+# Enhanced Visuals (CreativeMD, LGPL-2.1) for Horizon, its main effects written
+# from its documented behaviour: taking damage flashes the screen's edges red,
+# and below 30% health the edges pulse red with a heartbeat that quickens as
+# health falls. (Blood splatters, glass cracks and explosion blur: not yet.)
+[mod]
+id = "enhanced_visuals"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "enhanced_visuals"
+source = "enhanced_visuals.rs"
+
+[[injection]]
+id = "health"
+kind = "HEAD"
+hook = "health_hud"
+hook_version = 1
+helper = "health.rs"
+bindings = [
+  { name = "inputs", ty = "&horizon_client::hud_layout::HealthInputs", value = "inputs" },
+]
+
+[[injection]]
+id = "draw"
+kind = "HEAD"
+hook = "gui_layer_post"
+hook_version = 1
+helper = "draw.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "layer", ty = "&str", value = "layer" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+]

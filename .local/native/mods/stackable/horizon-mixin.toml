@@ -1,0 +1,24 @@
+# Stackable (LinkachuGaming, CC0) for Horizon: items that stack to 64 stack to
+# `maxStack` instead, with per-item overrides. Ported from the CC0 source's
+# behaviour (DataComponents' default 64 replaced) and Better OneBlock's config.
+[mod]
+id = "stackable"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-world/src/item_defaults.rs"
+name = "stackable"
+source = "runtime.rs"
+
+[[injection]]
+id = "stack-size"
+hook = "modify_default_components"
+hook_version = 1
+kind = "HEAD"
+helper = "stack.rs"
+bindings = [
+  { name = "item", ty = "&str", value = "item" },
+  { name = "components", ty = "&mut Map<String, Value>", value = "&mut *components" },
+]

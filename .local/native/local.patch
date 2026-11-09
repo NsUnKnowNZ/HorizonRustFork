@@ -1,0 +1,46 @@
+diff --git a/crates/horizon-client/src/game/functions.rs b/crates/horizon-client/src/game/functions.rs
+index 4c17573fce..6fe60168dc 100644
+--- a/crates/horizon-client/src/game/functions.rs
++++ b/crates/horizon-client/src/game/functions.rs
+@@ -216,6 +216,10 @@ impl Game<'_> {
+         // The candidate's named predicates/modifiers must also be available to
+         // argument codecs before any of its functions can be exposed.
+         self.sync_enchantment_registries();
++        // Vanilla loads the packs' tags before their functions
++        // (`ReloadableServerResources`), so a `#ns:tag` argument must see the
++        // world's tables, data-pack tags included, not only the game's own.
++        self.sync_tag_registries();
+         let mut registries = self.ui.registries.clone();
+         registries.permission = self.fns.command_level();
+         registries.functions = store.functions.keys().cloned().collect();
+@@ -268,6 +272,30 @@ impl Game<'_> {
+         let json = serde_json::json!({"enabled": self.fns.enabled, "disabled": disabled});
+         let _ = std::fs::write(self.datapack_settings_path(), json.to_string());
+     }
++    /// The block and item tag ids commands accept: the world's content
++    /// tables (its data packs' tags over the game's own).
++    pub(super) fn sync_tag_registries(&mut self) {
++        let normalized = |keys: Vec<&String>| {
++            let mut v: Vec<String> = keys
++                .into_iter()
++                .map(|k| horizon_client::command::args::normalize(k))
++                .collect();
++            v.sort();
++            v.dedup();
++            v
++        };
++        let block_tags = normalized(self.items().block_tags.keys().collect());
++        let item_tags = normalized(self.items().item_tags.keys().collect());
++        // `Registries::tags` reads the export's per-registry entry first, so
++        // that entry must list the packs' tags too, not only the field.
++        for (registry, tags) in [("minecraft:block", &block_tags), ("minecraft:item", &item_tags)] {
++            if let Some(entry) = self.ui.registries.by_registry.get_mut(registry) {
++                entry.tags.clone_from(tags);
++            }
++        }
++        self.ui.registries.block_tags = block_tags;
++        self.ui.registries.item_tags = item_tags;
++    }
+     pub(super) fn sync_function_registries(&mut self) {
+         self.sync_enchantment_registries();
+         let reg = &mut self.ui.registries;

@@ -1,0 +1,42 @@
+# Forgiving Void (TwelveIterations, ARR) for Horizon, written from its documented
+# behaviour and options (mods.twelveiterations.com) and Better OneBlock's config;
+# no code of the original is used. Local use only.
+#
+# Players who fall 32 blocks below the bottom of the world drop back in from
+# y=300 above where they last stood, blinded, and land with 19.9 damage instead
+# of the fall's. (The pack's allow-list also saves some animals: not yet.)
+[mod]
+id = "forgiving_void"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "forgiving_void"
+source = "runtime.rs"
+
+# Who is falling back down, shared with the motion code (a different crate).
+[[module]]
+id = "state"
+file = "crates/horizon-client/src/motion.rs"
+name = "forgiving_void_state"
+source = "state.rs"
+visibility = "pub"
+
+[[injection]]
+id = "tick"
+hook = "tick"
+hook_version = 1
+kind = "HEAD"
+helper = "tick.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]
+
+# While a rescued player falls back, vanilla's fall damage doesn't count up;
+# the mod's own landing damage replaces it.
+[[injection]]
+id = "no-fall-damage"
+kind = "HEAD"
+target = "horizon_client::motion::<MotionWorld<'_,'_,'_> as EntityMoveWorld>::check_fall_damage"
+helper = "fall.rs"
+bindings = [{ name = "world", ty = "&mut MotionWorld<'_, '_, '_>", value = "&mut *self" }]

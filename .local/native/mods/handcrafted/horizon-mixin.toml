@@ -1,0 +1,51 @@
+# Handcrafted (Terrarium, local use) for Horizon: what its furniture does, written from the mod's
+# documented behaviour. The blocks, items, textures and recipes are the content mod
+# horizon-mods/handcrafted (carried over by horizon-port-pack).
+#  - A sheet on a table, side table, nightstand, desk or fancy bed lays a cloth of its colour; a
+#    cushion on a chair, couch, bench or dining bench gives it that colour (one is used up).
+#  - Sneak + right click with an empty hand takes the sheet or cushion back.
+#  - The hammer turns a shelf, counter, cupboard, drawer or trim to its next look.
+#  - Right click a chair, couch, bench or dining bench with an empty hand to sit on it.
+[mod]
+id = "handcrafted"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "handcrafted"
+source = "handcrafted.rs"
+
+[[injection]]
+id = "use"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_use_item_on"
+helper = "use.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" },
+]
+
+[[injection]]
+id = "click"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_right_click_block"
+helper = "click.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "level_tick_post"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_level_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+]

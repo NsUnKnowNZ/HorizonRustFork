@@ -1,0 +1,28 @@
+# Damage Numbers (luavixen) for Horizon, after DamageNumbersImpl,
+# TextParticle and MixinLivingEntity with the default config: a living
+# entity's health drop on the client floats up from above its head as a
+# number, orange (< 2) through red to dark red (>= 16), for 32 ticks.
+[mod]
+id = "damage_numbers"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "damage_numbers"
+source = "damage_numbers.rs"
+
+# The frame's world primitives: health changes since the last frame, the
+# particles' ticks, and their text.
+[[injection]]
+id = "world"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_primitives"
+helper = "world.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "partial", ty = "f32", value = "partial" },
+  { name = "camera", ty = "[f64; 3]", value = "camera" },
+  { name = "primitives", ty = "&mut horizon_client::world_primitives::WorldPrimitives", value = "&mut *primitives" },
+]

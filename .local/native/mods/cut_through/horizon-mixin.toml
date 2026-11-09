@@ -1,0 +1,16 @@
+# Cut Through (MPL-2.0) for Horizon: attacks swing through blocks with no
+# collision shape (tall grass, flowers, crops...) to hit the mob behind them.
+[mod]
+id = "cut_through"
+version = "0.1.0"
+priority = 100
+
+# Whether an entity at `distance` is before the targeted block: always, when
+# that block has no collision shape.
+[[injection]]
+id = "through"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::frames::Game<'_>::before_block"
+helper = "through.rs"
+bindings = [{ name = "game", ty = "&Game<'_>", value = "self" }]

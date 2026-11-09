@@ -1,0 +1,27 @@
+# Mob Plaques (Fuzss, MPL-2.0) for Horizon, with Better OneBlock's
+# mobplaques-client.toml: over a hurt mob within 48 blocks, a heart and its
+# health in percent (and its armour when it has any), half a name tag's size
+# kept on screen with distance, on a dark background, hidden by walls and at
+# full health. Text only: the heart is the font's glyph, not the HUD sprite.
+[mod]
+id = "mob_plaques"
+version = "0.1.0"
+priority = 110
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "mob_plaques"
+source = "mob_plaques.rs"
+
+[[injection]]
+id = "world"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_primitives"
+helper = "world.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "partial", ty = "f32", value = "partial" },
+  { name = "camera", ty = "[f64; 3]", value = "camera" },
+  { name = "primitives", ty = "&mut horizon_client::world_primitives::WorldPrimitives", value = "&mut *primitives" },
+]

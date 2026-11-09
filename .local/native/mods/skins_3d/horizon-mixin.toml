@@ -1,0 +1,92 @@
+[mod]
+id = "skins_3d"
+version = "1.1.0"
+priority = 100
+
+[compatibility]
+
+[[module]]
+id = "build"
+file = "crates/horizon-client/src/mobs/render.rs"
+name = "umbx_skins3d_build"
+source = "voxels.rs"
+
+[[module]]
+id = "cache"
+file = "crates/horizon-client/src/mobs/render.rs"
+name = "umbx_skins3d_cache"
+source = "cache.rs"
+visibility = "pub"
+
+[[module]]
+id = "glue"
+file = "crates/horizon-client/src/game.rs"
+name = "umbx_skins3d_glue"
+source = "glue.rs"
+
+[[injection]]
+id = "model"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::remote::Game<'_>::skin_3d_model"
+helper = "hooks/model.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "kind", ty = "&std::sync::Arc<horizon_client::mobs::MobType>", value = "kind" },
+  { name = "skin", ty = "&str", value = "skin" },
+  { name = "slim", ty = "bool", value = "slim" },
+]
+
+[[injection]]
+id = "arm"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::Game<'_>::first_person_arm"
+helper = "hooks/arm.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "left", ty = "bool", value = "left" },
+  { name = "matrix", ty = "glam::Mat4", value = "m" },
+  { name = "light", ty = "u32", value = "light" },
+  { name = "out", ty = "&mut Vec<horizon_client::mesher::Vertex>", value = "&mut *out" },
+]
+
+[[injection]]
+id = "frame"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_frame"
+helper = "hooks/frame.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "list"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+helper = "hooks/list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::mod_api::NativeMod>", value = "&mut *mods" },
+]
+
+[[injection]]
+id = "settings"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_settings"
+helper = "hooks/settings.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "buttons", ty = "&mut Vec<String>", value = "&mut *buttons" },
+]
+
+[[injection]]
+id = "click"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_settings_click"
+helper = "hooks/click.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "button", ty = "usize", value = "button" },
+]

@@ -1,0 +1,49 @@
+[mod]
+id = "eatinganimation"
+version = "0.2.0"
+priority = 200
+
+[compatibility]
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/item_render.rs"
+name = "official_eatinganimation"
+source = "runtime.rs"
+
+[[injection]]
+id = "held-frame"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client_lib::item_render::ItemRenderer::resolve_with_rule"
+helper = "frames.rs"
+bindings = [
+  { name = "renderer", ty = "&crate::item_render::ItemRenderer", value = "self" },
+  { name = "stack", ty = "&horizon_assets::item_model::StackView", value = "stack" },
+  { name = "display", ty = "horizon_assets::item_model::DisplayContext", value = "display" },
+  { name = "owner", ty = "Option<&horizon_assets::item_model::OwnerState>", value = "owner" },
+  { name = "level", ty = "Option<&horizon_assets::item_model::LevelState>", value = "level" },
+  { name = "seed", ty = "i32", value = "seed" },
+  { name = "env", ty = "&dyn horizon_assets::item_model::ItemEnv", value = "env" },
+]
+
+[[injection]]
+id = "list"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+helper = "list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
+]
+
+[[injection]]
+id = "embedded-content"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::mods::content_root"
+helper = "embedded_content.rs"
+bindings = [
+  { name = "root", ty = "&std::path::Path", value = "root" },
+  { name = "enabled", ty = "&std::collections::BTreeSet<String>", value = "enabled" },
+  { name = "dev", ty = "&[std::path::PathBuf]", value = "dev" },
+]

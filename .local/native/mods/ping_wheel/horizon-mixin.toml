@@ -1,0 +1,37 @@
+# Ping Wheel (LukenSkyne, MIT) for Horizon, written from its documented behaviour:
+# the ping key (default the middle mouse button) marks the block looked at, up to
+# 256 blocks away. A ping shows as a beam with its distance, through walls, for
+# 7 seconds, with a ping sound. Up to 8 at once. (The wheel of ping kinds and
+# sharing with other players: not yet.)
+[mod]
+id = "ping_wheel"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "ping_wheel"
+source = "ping_wheel.rs"
+
+[[injection]]
+id = "key"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_key"
+helper = "key.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "pressed", ty = "bool", value = "pressed" },
+]
+
+[[injection]]
+id = "world"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_primitives"
+helper = "world.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "camera", ty = "[f64; 3]", value = "camera" },
+  { name = "primitives", ty = "&mut horizon_client::world_primitives::WorldPrimitives", value = "&mut *primitives" },
+]

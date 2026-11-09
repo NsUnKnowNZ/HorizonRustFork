@@ -1,0 +1,32 @@
+# Better Days (wendall911, LGPL-3.0) for Horizon, after its source (TimeService,
+# MathUtils) and Better OneBlock's betterdays-common.toml: day and night keep
+# vanilla's pace; while players sleep, the night runs faster (up to 110x) instead
+# of being skipped, and they wake at morning. Weather/random-tick effects: not yet.
+[mod]
+id = "better_days"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "better_days"
+source = "runtime.rs"
+
+[[injection]]
+id = "tick"
+hook = "tick"
+hook_version = 1
+kind = "HEAD"
+helper = "tick.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]
+
+# SleepStatus.areEnoughSleeping: not at night, so the night isn't skipped;
+# at morning vanilla wakes the sleepers.
+[[injection]]
+id = "no-skip"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::lan_actions::Game<'_>::enough_slept"
+helper = "no_skip.rs"
+bindings = [{ name = "game", ty = "&Game<'_>", value = "self" }]

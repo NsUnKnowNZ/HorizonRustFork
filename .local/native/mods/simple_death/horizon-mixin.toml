@@ -1,0 +1,53 @@
+# Simple Death Improvements (MIT) for Horizon, with Better OneBlock's config:
+# keep the hotbar, armour and off hand on death; the rest drops where you died
+# without scattering and never despawns; 80% of your experience drops.
+[mod]
+id = "simple_death"
+version = "0.2.0"
+priority = 100
+
+# Config and the pure parts (experience), where the entities live.
+[[module]]
+id = "config"
+file = "crates/horizon-client/src/entities.rs"
+name = "simple_death"
+source = "config.rs"
+visibility = "pub"
+
+# The game side: the slot snapshot, the kept stacks, the calmed drops.
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "simple_death_game"
+source = "game.rs"
+
+[[injection]]
+id = "tick"
+hook = "tick"
+hook_version = 1
+kind = "HEAD"
+helper = "tick.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]
+
+[[injection]]
+id = "death-drops"
+hook = "loot_drops"
+hook_version = 1
+kind = "HEAD"
+helper = "drops.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "context", ty = "&NativeLootDrops<'_>", value = "context" },
+  { name = "drops", ty = "&mut Vec<ItemStack>", value = "&mut *drops" },
+]
+
+[[injection]]
+id = "xp"
+kind = "RETURN"
+target = "horizon_client::entities::Experience::death_reward"
+helper = "xp.rs"
+bindings = [
+  { name = "value", ty = "u32", value = "$value" },
+  { name = "xp", ty = "&Experience", value = "self" },
+  { name = "keep", ty = "bool", value = "keep" },
+]

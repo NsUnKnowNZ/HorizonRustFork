@@ -1,0 +1,23 @@
+# Mob AI Tweaks (Bawnorton, MIT) for Horizon: a few of Better OneBlock's
+# general_config.txt settings, on the world's own side.
+#   animals_panic_in_groups=true, animals_panic_spread_radius=16
+#   creepers_delay_explosion_when_hit=true
+#   squid_ink_inflicts_debuffs=true, radius 8, 100 ticks
+[mod]
+id = "mob_ai_tweaks"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "mob_ai_tweaks"
+source = "runtime.rs"
+
+[[injection]]
+id = "tick"
+hook = "tick"
+hook_version = 1
+kind = "HEAD"
+helper = "tick.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]

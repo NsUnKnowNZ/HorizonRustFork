@@ -35,3 +35,17 @@
 
 # Release-only compiled original exporter bundle.
 /exporters/
+
+# This fork: local servers, caches and per-machine files.
+/server-oneblock/
+/command_history.txt
+/horizon-java-folders.txt
+/horizon_official_server.txt
+/horizon_partner_servers.txt
+/config/jade/
+/.False.horizon-mixins-stage.lock
+/horizon-mods/*/
+!/horizon-mods/biome_paint/
+/horizon-mods.txt
+/resourcepacks/
+/shaderpacks/

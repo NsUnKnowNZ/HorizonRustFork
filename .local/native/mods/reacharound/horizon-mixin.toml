@@ -1,0 +1,38 @@
+# Reacharound (Spanser, CC BY-NC-SA 3.0; a local adaptation for this
+# install, not for redistribution) for Horizon, after PlacementFeature and
+# Better OneBlock's config (both axes, off hand, the default 2D indicator):
+# a block item placed where the crosshair finds nothing goes against the edge
+# of the block underfoot or ahead, as Bedrock's bridging does.
+[mod]
+id = "reacharound"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "reacharound"
+source = "reacharound.rs"
+
+# Minecraft.startUseItem's block turn: with no block under the crosshair, the
+# reacharound target stands in for the hit (useItemOn on the empty cell).
+[[injection]]
+id = "use-block"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::remote::<RemoteUseWorld<'_,'_> as horizon_client::interaction_input::TargetUseWorld>::use_block"
+helper = "use_block.rs"
+bindings = [{ name = "world", ty = "&mut RemoteUseWorld<'_, '_>", value = "&mut *self" }]
+
+# Hud: the "-   -" (ahead) or "- -" (below / above) mark round the crosshair.
+[[injection]]
+id = "hud"
+kind = "HEAD"
+hook = "gui_layer_post"
+hook_version = 1
+helper = "hud.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "layer", ty = "&str", value = "layer" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+]

@@ -1,0 +1,20 @@
+# Custom Window Title (Unlicense) for Horizon, with Better OneBlock's settings:
+# the window's title ({mcversion} is 26.3) and icon.
+[mod]
+id = "custom_window_title"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "custom_window_title"
+source = "runtime.rs"
+
+[[injection]]
+id = "frame"
+hook = "frame"
+hook_version = 1
+kind = "HEAD"
+helper = "frame.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]

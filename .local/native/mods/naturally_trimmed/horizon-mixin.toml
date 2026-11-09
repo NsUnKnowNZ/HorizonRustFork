@@ -1,0 +1,22 @@
+# Naturally Trimmed (Majo24, LGPL-3.0) for Horizon, after its source's mob part
+# (TrimApplier.trimEquipment, Config defaults): a third of the mobs that spawn
+# wearing trimmable armour get one random vanilla trim on each piece (75% each).
+# Loot table (20%) and villager trade (33%) trims: not yet.
+[mod]
+id = "naturally_trimmed"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "naturally_trimmed"
+source = "runtime.rs"
+
+[[injection]]
+id = "tick"
+hook = "tick"
+hook_version = 1
+kind = "HEAD"
+helper = "tick.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]

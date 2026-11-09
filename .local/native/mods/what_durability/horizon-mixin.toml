@@ -1,0 +1,27 @@
+# What Durability? (Serilum) for Horizon: items don't lose durability, except the
+# ones listed in the config (item ids or #tags). Written from the mod's described
+# behaviour; no code of the original is used. Local use only.
+[mod]
+id = "what_durability"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "what_durability"
+source = "runtime.rs"
+
+# Every wear path (tools, weapons, armour, shields, elytra, dispensers, mobs'
+# gear) asks `durability_loss` (vanilla's processDurabilityChange) how many
+# points to take: answer 0 unless the item keeps its durability.
+[[injection]]
+id = "no-durability-loss"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::enchant_effects::Game<'_>::durability_loss"
+helper = "loss.rs"
+bindings = [
+  { name = "game", ty = "&mut Game<'_>", value = "&mut *self" },
+  { name = "stack", ty = "&ItemStack", value = "stack" },
+]

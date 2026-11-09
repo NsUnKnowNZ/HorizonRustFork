@@ -1,0 +1,24 @@
+# Name Pain for Horizon (behaviour only; the mod is ARR and closed source):
+# a named mob's name tag goes from white at full health to dark red near
+# death. Horizon's name tags take the legacy colour codes, so the gradient is
+# the five steps white, yellow, gold, red, dark red. (The name tag hook only
+# runs with trait mods loaded, so the colour goes into the shown name itself,
+# put back as it was at full health or when the server renames the mob.)
+[mod]
+id = "namepain"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "namepain"
+source = "namepain.rs"
+
+[[injection]]
+id = "frame"
+hook = "frame"
+hook_version = 1
+kind = "HEAD"
+helper = "frame.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]

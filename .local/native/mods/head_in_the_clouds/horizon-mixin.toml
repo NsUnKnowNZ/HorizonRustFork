@@ -1,0 +1,34 @@
+# Head in the Clouds (DaFuqs, GPL-3.0) for Horizon, after its source: no rain or
+# snow at or above cloud height (server), and the rain fades out as the camera
+# rises into the clouds and is gone above them (client).
+[mod]
+id = "head_in_the_clouds"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-world/src/level/weather.rs"
+name = "head_in_the_clouds"
+source = "runtime.rs"
+visibility = "pub"
+
+# Level.precipitationAt: NONE above the clouds.
+[[injection]]
+id = "precipitation"
+kind = "HEAD"
+cancellable = true
+target = "horizon_world::level::weather::Behaviours::precipitation_kind"
+helper = "precipitation.rs"
+bindings = [{ name = "pos", ty = "BlockPos", value = "pos" }]
+
+# Level.getRainLevel on the client: the camera's height fades it.
+[[injection]]
+id = "rain-level"
+kind = "RETURN"
+target = "horizon_client::game::Game<'_>::weather_levels"
+helper = "rain_level.rs"
+bindings = [
+  { name = "value", ty = "(f32, f32)", value = "$value" },
+  { name = "game", ty = "&Game<'_>", value = "self" },
+]

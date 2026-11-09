@@ -1,0 +1,205 @@
+[mod]
+id = "freecam"
+version = "0.1.1"
+priority = 100
+
+# The commit it was tested on: it patches the client's perspective, input
+# and motion sources directly, so a Horizon change there needs a re-check.
+[compatibility]
+
+# The mod's brain: pure standard library, no game types, tested on its own.
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "freecam"
+source = "runtime.rs"
+
+# The freeze gate lives with the motion tick, which the game's state cannot
+# reach (the client's game module is a different crate than motion's).
+[[module]]
+id = "gate"
+file = "crates/horizon-client/src/motion.rs"
+name = "freecam_gate"
+source = "gate.rs"
+visibility = "pub"
+
+# The mod's keys, wherever a key goes down or up.
+[[injection]]
+id = "key"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_key"
+helper = "key.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "pressed", ty = "bool", value = "pressed" },
+]
+
+# The keys the mod takes from the player: the fly keys while detached, the
+# hotbar digits while a combo key is held.
+[[injection]]
+id = "mapped"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::play_input::Game<'_>::mapped_key"
+helper = "mapped.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "key", ty = "winit::keyboard::KeyCode", value = "key" },
+  { name = "pressed", ty = "bool", value = "pressed" },
+  { name = "repeat", ty = "bool", value = "repeat" },
+]
+
+# The view's turn: the camera's, not the player's, while detached.
+[[injection]]
+id = "turn"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::perspective::Game<'_>::turn_player"
+helper = "turn.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "xo", ty = "f64", value = "xo" },
+  { name = "yo", ty = "f64", value = "yo" },
+]
+
+# The view the frame renders from: the freecam's while it holds the camera.
+[[injection]]
+id = "camera"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::perspective::Game<'_>::camera_view"
+helper = "camera.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+]
+
+# The player's own body hides with the camera, when the setting asks.
+[[injection]]
+id = "body"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::perspective::Game<'_>::own_body_in_view"
+helper = "body.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+]
+
+# F5 cannot disturb the detached view.
+[[injection]]
+id = "cycle"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::perspective::Game<'_>::cycle_camera"
+helper = "cycle.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+]
+
+# Targeting starts at the camera and points along its view, when the
+# interaction setting asks.
+[[injection]]
+id = "aim"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::Game<'_>::aim"
+helper = "aim.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+]
+
+# Clicks do nothing while the camera is detached and the interaction is Off.
+# Either way the press says whose hand is on the mouse, so the camera's aim
+# (the interaction's From camera) follows only the player's own clicks.
+[[injection]]
+id = "mouse"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::play_input::Game<'_>::play_mouse"
+helper = "mouse.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "button", ty = "winit::event::MouseButton", value = "button" },
+  { name = "pressed", ty = "bool", value = "pressed" },
+]
+
+# Once a tick: exits on damage or a closed world, restores the view kind,
+# and writes the freeze gate.
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_tick"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+# Once a frame: the camera flies while the world is played.
+[[injection]]
+id = "frame"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_frame"
+helper = "frame.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "elapsed", ty = "std::time::Duration", value = "elapsed" },
+]
+
+# The toast, centered above the hotbar.
+[[injection]]
+id = "hud"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_hud"
+helper = "hud.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "batch", ty = "&mut HudBatch", value = "&mut *batch" },
+]
+
+# The row in Options > Mods, with the mod's keys.
+[[injection]]
+id = "list"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+helper = "list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
+]
+
+# The settings page.
+[[injection]]
+id = "settings"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_settings"
+helper = "settings.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "buttons", ty = "&mut Vec<String>", value = "&mut *buttons" },
+]
+
+# A click on the settings page, stored for the next build.
+[[injection]]
+id = "click"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_settings_click"
+helper = "click.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "button", ty = "usize", value = "button" },
+]
+
+# The freeze: the player's whole simulation tick is skipped, so no gravity,
+# no momentum and no input drift move them while the camera flies. The tick's
+# own keys decide: a tick that drives the player (a bot's held keys, a
+# stick's push) runs anyway, so automation works with the camera away.
+[[injection]]
+id = "freeze"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::motion::MotionWorld<'_,'_,'_>::controlled_simulation_tick_with_sprint_window"
+helper = "freeze.rs"
+bindings = [
+  { name = "keys", ty = "crate::sprint::Keys", value = "keys" },
+]
