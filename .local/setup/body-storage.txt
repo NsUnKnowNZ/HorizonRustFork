@@ -1,0 +1,40 @@
+Launch
+Platform
+C command "setblock 202 150 198 handcrafted:oak_cupboard[facing=north]"
+C command "setblock 204 150 198 charm:azalea_chest"
+C command "setblock 206 150 198 charm:azalea_barrel[facing=north]"
+C command "setblock 208 150 198 supplementaries:sack"
+C command "setblock 200 150 198 handcrafted:oak_shelf[facing=north]"
+C command "item replace block 202 150 198 container.0 with minecraft:diamond 5"
+C command "data get block 202 150 198"
+C command "data get block 204 150 198"
+C command "data get block 208 150 198"
+C command "gamemode survival"
+C command "tp @s 203.5 150 195.5 0 30"
+C command "clear @s"
+C wait 10
+C select 9
+C interact 202 150 198 north
+C screen
+C screenshot "$shots\storage-cupboard.png"
+C close
+C interact 204 150 198 north
+C screen
+C close
+C command "tp @s 205.5 150 195.5 0 30"
+C interact 206 150 198 north
+C screen
+C close
+C command "tp @s 207.5 150 195.5 0 30"
+C interact 208 150 198 north
+C screen
+C screenshot "$shots\storage-sack.png"
+C close
+C command "tp @s 201.5 150 195.5 0 30"
+C interact 200 150 198 north
+C screen
+C close
+C command "setblock 202 150 198 air destroy"
+C wait 10
+C entities
+C logs

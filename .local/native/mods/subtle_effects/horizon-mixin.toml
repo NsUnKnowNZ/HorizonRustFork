@@ -1,0 +1,27 @@
+# Subtle Effects (ARR) for Horizon, written from its
+# documented behaviour, a part of its effects:
+#  - fire, lit campfires, torches and lit candles throw up small sparks;
+#  - glowstone and redstone blocks give off a fine dust of their colour;
+#  - running on the ground kicks up dust at the feet, and landing from a fall a puff of it;
+#  - at three hearts or less you hear your heartbeat, faster the lower you are; at three
+#    drumsticks or less your stomach growls now and then.
+# Client side only; the game's Particles setting and limits still apply.
+[mod]
+id = "subtle_effects"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "subtle_effects"
+source = "subtle_effects.rs"
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]

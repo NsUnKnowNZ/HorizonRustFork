@@ -79,7 +79,7 @@ Horizon source changes (allowed since 2026-11-08) live as uncommitted edits unde
 | Carry On | LGPL-3 | done (tested: sneak + empty-hand right click picked up a chest, "Carrying: Chest" HUD) | 7 API fixes for Horizon e1f01af; command verified;  registry `carryblock` |
 | ItemPhysic | LGPL-2.1 | partly done (tested; Horizon source) | dropped items no longer bob or spin: flat items lie on the ground, blocks stand on it, each turned its own way, tumbling while they fall (`game/item_draw.rs`). Todo: floating (swimming) items, fall sounds, cactus-proof items, pickup tooltip |
 | Underlay | GPL-3 | todo (M) | |
-| BedrockIfy | GPL-3 | todo (M) | |
+| BedrockIfy | GPL-3 | partly done | its 89 recipes and 2 blocks carried over (`horizon-mods/bedrockify`); its gameplay tweaks (reach-around placing is the Reacharound port, sheep dyeing, Bedrock-style bridging) not here |
 | Terrastorage | MIT | partly built-in | Horizon's sort buttons turned on (Extras → Sort); quick stack to nearby storages, loot/deposit all and favourites: todo |
 | Camerapture | MIT | todo (M–L) | |
 | Mob AI Tweaks | MIT | partly done (tested) | native mod `mob_ai_tweaks`: animals panic in groups (same kind within 16, no one blamed), a hit sets a lit creeper's fuse back, a hurt squid's ink blinds players and mobs within 8 for 5 s. The other ~140 settings (reworked AI for many mobs): todo |
@@ -88,13 +88,13 @@ Horizon source changes (allowed since 2026-11-08) live as uncommitted edits unde
 ## Wave 4 — large
 | Mod | Licence | Status | Notes |
 |---|---|---|---|
-| Supplementaries (+ Amendments) | custom | todo (L) | Supplementaries Squared's missing models are fixed apart from it: the 18 Supplementaries models/textures it builds on are copied into `horizon-mods/suppsquared` from supplementaries-1.21.1-4.0.2-fabric.jar, and the run-time ones (wall lantern templates, daub frame walls, shelf texture) written by hand |
-| Handcrafted | Terrarium | todo (L) | |
-| Charm (forked) | MIT | todo (L) | |
-| Bits and Balance | ARR | todo (L) | 100+ small features |
+| Supplementaries (+ Amendments) | custom | partly done | content carried over (`horizon-mods/supplementaries`, local only): 266 of its blocks (jars, sacks, globes, awnings, buntings, book piles, flower boxes, ash/blackstone bricks...) with shapes and no occlusion where they aren't full blocks, 68 items, 321 recipes; Supplementaries Squared's borrowed files removed again (Supplementaries owns them now). What its blocks do (jars and sacks holding items, the globe turning, notice boards...) not here; Amendments not carried (it reworks vanilla blocks) |
+| Handcrafted | Terrarium | mostly done (tested 2026-11-09: a red sheet laid a cloth on a table, the hammer turned a shelf to its 2-shelf look) | content: all 267 blocks, 18 items, 285 recipes and the loot carried over by horizon-port-pack (`horizon-mods/handcrafted`); its furniture has no vanilla template, so the port tool now builds such blocks as decorative ones: placed facing the player, their own state properties, outline and collision from the models' boxes, no occlusion, sounds and hardness from the name. Native mod `handcrafted` (tested: blue cushion on a chair, sat on it, got up and the seat was removed): sheets colour tables/side tables/nightstands/desks/fancy beds, cushions colour chairs/couches/benches, sneak + empty hand takes them back, the hammer cycles shelves/counters/cupboards/drawers/trims, and an empty-hand right click sits on a chair/couch/bench (an invisible frozen silverfish to ride, removed when nobody sits). Not here: storage in counters/cupboards/drawers/desks/nightstands, tables and couches joining their neighbours' shapes, fancy beds as beds |
+| Charm (forked) | MIT | partly done | content carried over (`horizon-mods/charm`): 140 blocks (its wood sets, variant chests/barrels/bookshelves/ladders on vanilla templates, arcane purpur...), 14 items, 429 recipes. Its gameplay features (100+ tweaks) not here |
+| Bits and Balance | ARR | partly done | content carried over (`horizon-mods/bitsandbalance`, local only): 1678 blocks (stairs/slabs/walls of many materials...), 7 items, 87 recipes. Its 100+ gameplay tweaks not here |
 | Faewuf's Diversity | CC-BY-NC-SA | todo (L) | |
 | Mutant Monsters | AGPL-3 | todo (L) | |
-| Friends & Foes | CC-BY-NC-ND | todo (L) | no-derivatives: local only, never shared |
+| Friends & Foes | CC-BY-NC-ND | todo (L) | no-derivatives: carried once to try it (29 blocks, 20 items) but not installed, as the friends package and the server would share it |
 
 ## Extra — asked for, not in the pack
 | Feature | Status | Notes |

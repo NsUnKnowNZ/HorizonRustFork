@@ -1,0 +1,56 @@
+Launch
+Platform
+C command "setblock 208 150 198 supplementaries:sack"
+C command "item replace block 208 150 198 container.0 with minecraft:apple 3"
+C command "gamemode survival"
+C command "clear @s"
+C command "tp @s 207.5 150 195.5 0 30"
+C wait 10
+C select 9
+C interact 208 150 198 north
+C screen
+C screenshot "$shots\storage-sack.png"
+C close
+C command "setblock 205 150 198 minecraft:oak_log"
+C command "item replace entity @s hotbar.8 with minecraft:diamond_axe[enchantments={'charm:collection':1}]"
+C command "tp @s 205.5 150 196.5 0 30"
+C select 9
+C wait 5
+C break 205 150 198
+C wait 10
+C inventory
+C entities 6
+C command "gamemode creative"
+C command "time set 1000"
+C command "weather clear"
+C command "item replace entity @s hotbar.0 with minecraft:enchanted_book[stored_enchantments={sharpness:5}]"
+C command "item replace entity @s hotbar.1 with minecraft:enchanted_book[stored_enchantments={mending:1}]"
+C command "item replace entity @s hotbar.2 with minecraft:enchanted_book[stored_enchantments={silk_touch:1}]"
+C command "item replace entity @s hotbar.3 with minecraft:enchanted_book[stored_enchantments={fortune:3}]"
+C command "item replace entity @s hotbar.4 with minecraft:enchanted_book[stored_enchantments={'charm:collection':1}]"
+C command "item replace entity @s hotbar.5 with minecraft:enchanted_book[stored_enchantments={protection:4}]"
+C command "item replace entity @s hotbar.6 with minecraft:enchanted_book"
+C select 1
+C command "tp @s 203.5 152 195.5 0 5"
+C wait 40
+C screenshot "$shots\fog-day.png"
+C command "weather rain"
+C wait 120
+C screenshot "$shots\fog-rain.png"
+C command "weather clear"
+C command "time set 12700"
+C wait 120
+C screenshot "$shots\fog-sunset.png"
+C command "time set 18000"
+C wait 20
+C screenshot "$shots\fog-night.png"
+C command "time set 1000"
+C command "fill 190 0 190 214 20 214 stone hollow"
+C command "tp @s 202.5 5 202.5 0 0"
+C wait 120
+C screenshot "$shots\fog-cave.png"
+C command "fill 190 0 190 214 20 214 air"
+C command "tp @s 203.5 260 195.5 0 10"
+C wait 60
+C screenshot "$shots\fog-high.png"
+C logs

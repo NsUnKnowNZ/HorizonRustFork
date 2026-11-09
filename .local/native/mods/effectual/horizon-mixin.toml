@@ -1,0 +1,26 @@
+# Effectual (MIT) for Horizon, written from its documented behaviour, a part of its effects:
+#  - your breath steams in cold biomes, more often while running;
+#  - underwater, bubbles rise from your mouth now and then;
+#  - coming out of the water, you drip for a few seconds;
+#  - with Wither on you, black smoke rises from you;
+#  - in dark caves, dust hangs in the air.
+# Client side only; the game's Particles setting and limits still apply.
+[mod]
+id = "effectual"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "effectual"
+source = "effectual.rs"
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]

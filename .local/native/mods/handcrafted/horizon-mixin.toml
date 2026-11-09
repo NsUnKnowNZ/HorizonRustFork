@@ -5,6 +5,8 @@
 #    cushion on a chair, couch, bench or dining bench gives it that colour (one is used up).
 #  - Sneak + right click with an empty hand takes the sheet or cushion back.
 #  - The hammer turns a shelf, counter, cupboard, drawer or trim to its next look.
+#  - Counters, cupboards, desks, drawers, nightstands, shelves and side tables hold 27 stacks
+#    (a barrel underneath, placed level and facing the player).
 #  - Right click a chair, couch, bench or dining bench with an empty hand to sit on it.
 [mod]
 id = "handcrafted"
@@ -48,4 +50,16 @@ helper = "tick.rs"
 bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
   { name = "dimension", ty = "&str", value = "dimension" },
+]
+
+[[injection]]
+id = "place"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::GameLevel<'_>::native_state_for_placement"
+helper = "place.rs"
+bindings = [
+  { name = "level", ty = "&crate::game::GameLevel<'_>", value = "&*self" },
+  { name = "state", ty = "horizon_world::registry::BlockStateId", value = "state" },
+  { name = "context", ty = "&horizon_world::level::PlacementContext", value = "context" },
+  { name = "answer", ty = "&mut Option<Option<horizon_world::registry::BlockStateId>>", value = "&mut *answer" },
 ]

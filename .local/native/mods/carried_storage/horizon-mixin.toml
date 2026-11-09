@@ -1,0 +1,49 @@
+# Storage for the carried furniture and containers, written from the mods' documented behaviour:
+#  - Handcrafted counters, cupboards, desks, drawers, nightstands, shelves and side tables hold
+#    27 stacks; Charm's wooden chests, trapped chests and barrels hold 27 (each chest half on its
+#    own: no double chests yet).
+#  - Supplementaries' safe holds 27 stacks and its sacks (and Supplementaries Squared's dyed ones)
+#    hold 9, opened with a right click (their decorative block is a gate, which would swing).
+# Their block entities are the mod's own (`native_block_entity`), so the items are saved with the
+# chunk, hoppers reach them and breaking the block drops them.
+[mod]
+id = "carried_storage"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "carried_storage"
+source = "carried_storage.rs"
+
+[[injection]]
+id = "entity"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_block_entity"
+helper = "entity.rs"
+bindings = [
+  { name = "block", ty = "&str", value = "block" },
+  { name = "entity", ty = "&mut Option<(String, horizon_world::nbt::Compound)>", value = "&mut *entity" },
+]
+
+[[injection]]
+id = "container"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_block_entity_container"
+helper = "container.rs"
+bindings = [
+  { name = "block", ty = "&str", value = "block" },
+  { name = "container", ty = "&mut Option<horizon_client::containers::ModContainer>", value = "&mut *container" },
+]
+
+[[injection]]
+id = "click"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_right_click_block"
+helper = "click.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]

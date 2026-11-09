@@ -1,0 +1,24 @@
+# Particle Rain (PigCart, MIT) for Horizon, written from its documented behaviour: weather you
+# see falling around you, not only the sheets of rain. In the rain, drops fall all around the
+# player (and splash where they land); in snowy biomes, flakes drift down on the wind; in deserts
+# and badlands, where it doesn't rain, the wind blows sand across the ground instead. Only under
+# open sky in the Overworld; the game's Particles setting and particle limits still apply.
+[mod]
+id = "particle_rain"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "particle_rain"
+source = "particle_rain.rs"
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]

@@ -234,3 +234,32 @@ pub(super) fn empty_hand(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut bool
         game.audio.play("minecraft:block.wool.break", Some(pos.map(|v| f64::from(v) + 0.5)), 1.0, 1.0);
     }
 }
+
+/// Handcrafted's storage furniture is a barrel underneath, which would face up or down when
+/// placed looking at the floor: it faces the player, level, as the furniture does.
+pub(super) fn state_for_placement(
+    level: &super::GameLevel<'_>,
+    state: horizon_world::registry::BlockStateId,
+    yaw: f32,
+    answer: &mut Option<Option<horizon_world::registry::BlockStateId>>,
+) {
+    if answer.is_some() {
+        return;
+    }
+    let Some(block) = level.native_state_block(state) else {
+        return;
+    };
+    if !block.starts_with("handcrafted:") || level.native_state_with_property(state, "open", "false").is_none() {
+        return;
+    }
+    // The player's horizontal direction (yaw 0 looks south), turned to face them.
+    let toward = match (((f64::from(yaw) / 90.0).round() as i64).rem_euclid(4)) as u8 {
+        0 => "north",
+        1 => "east",
+        2 => "south",
+        _ => "west",
+    };
+    if let Some(s) = level.native_state_with_property(state, "facing", toward) {
+        *answer = Some(Some(s));
+    }
+}

@@ -168,10 +168,39 @@ pub fn template(name: &str, properties: &BTreeSet<String>) -> Option<&'static st
         .map(|(_, t)| t)
 }
 
+/// Blocks whose name says what they are, when their properties don't stand in the way: a
+/// barrel, a chest or a trapped chest keeps its inventory and menu, a bookshelf its enchanting
+/// power, a ladder its climbing. Their properties must be ones the vanilla block has (a chest
+/// whose blockstate names none, as its block entity draws it, is fine).
+fn named_template(name: &str, properties: &BTreeSet<String>) -> Option<&'static str> {
+    let named: &[(&str, &str, &[&str])] = &[
+        ("_trapped_chest", "minecraft:trapped_chest", &["facing", "type", "waterlogged"]),
+        ("_chest", "minecraft:chest", &["facing", "type", "waterlogged"]),
+        ("_barrel", "minecraft:barrel", &["facing", "open"]),
+        ("_bookshelf", "minecraft:bookshelf", &[]),
+        ("_ladder", "minecraft:ladder", &["facing", "waterlogged"]),
+    ];
+    named.iter().find_map(|(suffix, t, allowed)| {
+        (name.ends_with(suffix) && properties.iter().all(|p| allowed.contains(&p.as_str())))
+            .then_some(*t)
+    })
+}
+
+/// Furniture that holds things (a counter, a cupboard, a drawer...): its decorative block is a
+/// barrel underneath, so it keeps a 27-slot inventory with a menu.
+fn holds_things(name: &str) -> bool {
+    ["_counter", "_cupboard", "_drawer", "_desk", "_nightstand", "_side_table", "_shelf"]
+        .iter()
+        .any(|s| name.ends_with(s))
+}
+
 /// [`template`] for a blockstate file. A wall's sides are `none`, `low` or
 /// `tall`; sides and `up` that are `true` or `false` are a vine's (Chipped's
 /// vines), which the names alone take for a wall.
 pub fn block_template(name: &str, blockstate: &Value) -> Option<&'static str> {
+    if let Some(t) = named_template(name, &properties(blockstate)) {
+        return Some(t);
+    }
     let t = template(name, &properties(blockstate))?;
     let boolean = ["north", "east", "south", "west"]
         .iter()
@@ -195,7 +224,10 @@ pub fn fallback_block(inside: &Path, name: &str, blockstate: &Value) -> Option<V
     let horizontal = ["north", "south", "west", "east"];
     let facing = values(blockstate, "facing");
     let faces = !facing.is_empty() && facing.iter().all(|f| horizontal.contains(&f.as_str()));
-    let template = if faces {
+    let template = if faces && holds_things(name) {
+        // A barrel faces up and down too: the game keeps such a block's facing level.
+        "minecraft:barrel"
+    } else if faces {
         "minecraft:white_glazed_terracotta"
     } else {
         "minecraft:stone"
@@ -208,7 +240,7 @@ pub fn fallback_block(inside: &Path, name: &str, blockstate: &Value) -> Option<V
     let mut own = serde_json::Map::new();
     let mut default = serde_json::Map::new();
     for p in &props {
-        if faces && p == "facing" {
+        if (faces && p == "facing") || (template == "minecraft:barrel" && p == "open") {
             continue;
         }
         let vals: Vec<String> = values(blockstate, p).into_iter().collect();

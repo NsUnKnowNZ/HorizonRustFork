@@ -1,0 +1,29 @@
+# Fog (IMB11, ARR) for Horizon, written from its documented behaviour, not its code: the
+# render-distance fog starts nearer while the view distance stays, for depth; fog thickens the
+# deeper you go underground (away from the sky); rain and snow bring it closer and greyer;
+# sunrise and sunset make it more vibrant; at night its colour follows the moon's phase; above
+# the clouds it fades out, so an elytra flight shows no horizon line. Overworld air only: water,
+# lava, powder snow and the other dimensions keep their own fog. The defaults are fixed (no
+# config screen yet).
+[mod]
+id = "fog"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "fog_looks"
+source = "fog_looks.rs"
+
+[[injection]]
+id = "render_fog"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_render_fog"
+helper = "render_fog.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "camera", ty = "[f64; 3]", value = "camera" },
+  { name = "fog_type", ty = "&horizon_client::fog::FogType", value = "&fog_type" },
+  { name = "fog", ty = "&mut horizon_client::fog::FogData", value = "&mut *fog" },
+]

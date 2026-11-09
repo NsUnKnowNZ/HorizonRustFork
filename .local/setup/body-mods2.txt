@@ -1,0 +1,36 @@
+Launch
+Platform
+C command "effect clear @s"
+C command "gamemode survival"
+C command "clear @s"
+C command "time set 1000"
+C command "weather clear"
+C command "setblock 205 150 198 minecraft:oak_log"
+C command "item replace entity @s hotbar.8 with minecraft:diamond_axe[enchantments={'charm:collection':1}]"
+C command "tp @s 205.5 150 196.5 0 30"
+C select 9
+C wait 5
+C break 205 150 198
+C wait 10
+C inventory
+C command "gamemode creative"
+C command "clear @s"
+C command "item replace entity @s hotbar.0 with minecraft:enchanted_book[stored_enchantments={sharpness:5}]"
+C command "item replace entity @s hotbar.1 with minecraft:enchanted_book[stored_enchantments={mending:1}]"
+C command "item replace entity @s hotbar.2 with minecraft:enchanted_book[stored_enchantments={silk_touch:1}]"
+C command "item replace entity @s hotbar.3 with minecraft:enchanted_book[stored_enchantments={fortune:3}]"
+C command "item replace entity @s hotbar.4 with minecraft:enchanted_book[stored_enchantments={'charm:collection':1}]"
+C command "item replace entity @s hotbar.5 with minecraft:enchanted_book[stored_enchantments={protection:4}]"
+C command "item replace entity @s hotbar.6 with minecraft:enchanted_book"
+C select 5
+C command "tp @s 203.5 152 195.5 0 5"
+C wait 40
+C screenshot "$shots\beb-books.png"
+C command "weather rain"
+C wait 160
+C screenshot "$shots\particle-rain.png"
+C command "weather clear"
+C command "tp @s 203.5 260 195.5 0 10"
+C wait 60
+C screenshot "$shots\fog-high.png"
+C logs

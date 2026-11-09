@@ -9,7 +9,7 @@
 //! tags (`c`, which NeoForge and Fabric mods share). Paths are plain, files
 //! and totals are capped, vanilla ids cannot be redefined, and no two mods
 //! share a namespace ([`clash`]).
-use crate::manifest::{Capability, MANIFEST, Manifest};
+use crate::manifest::{Capability, MANIFEST, Manifest, Side};
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -752,7 +752,14 @@ impl Content {
             // tags and atlases, and to the convention tags mods share.
             let shared = matches!(namespace, "minecraft" | "c");
             let atlas = top == "assets" && namespace == "minecraft" && rest.starts_with("atlases/");
-            let allowed = owned || (top == "data" && shared && rest.starts_with("tags/")) || atlas;
+            // A client-side content mod is a resource pack's worth of assets (a Fabric client
+            // mod's textures and models over vanilla's, as Beautiful Enchanted Books ships): its
+            // `assets/minecraft/` files replace vanilla's, as a pack's do, and no server sees them.
+            let client_assets = top == "assets" && manifest.side == Side::Client;
+            let allowed = owned
+                || (top == "data" && shared && rest.starts_with("tags/"))
+                || atlas
+                || client_assets;
             if !allowed {
                 return Err(format!(
                     "{name}: a mod adds files in its own namespaces ({top}/{id}/ and those listed in namespaces), to vanilla and convention (c) tags, or to vanilla's atlases"

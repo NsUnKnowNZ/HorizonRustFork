@@ -1,0 +1,38 @@
+# Charm (svenhjol, MIT) for Horizon: what its two enchantments do, written from the mod's
+# documented behaviour (the enchantments themselves are carried in horizon-mods/charm).
+#  - Collection (tools): what a block drops goes straight into the breaker's inventory; what
+#    doesn't fit drops as usual.
+#  - Aerial Affinity (boots): no slower digging while off the ground (vanilla's fivefold
+#    slowdown is undone; the one under water stays, as Aqua Affinity's job).
+[mod]
+id = "charm_tweaks"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "charm_tweaks"
+source = "charm_tweaks.rs"
+
+[[injection]]
+id = "drops"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_loot_drops"
+helper = "drops.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "context", ty = "&horizon_client::mod_api::NativeLootDrops<'_>", value = "context" },
+  { name = "drops", ty = "&mut Vec<horizon_client::items::ItemStack>", value = "&mut *drops" },
+]
+
+[[injection]]
+id = "break_speed"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_break_speed"
+helper = "break_speed.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "original", ty = "f32", value = "original" },
+  { name = "speed", ty = "&mut f32", value = "&mut *speed" },
+]

@@ -1,0 +1,25 @@
+Launch
+Platform
+C command "weather clear"
+C command "time set 14000"
+C command "clear @s"
+C command "setblock 201 150 199 minecraft:glowstone"
+C command "setblock 203 150 199 minecraft:campfire"
+C command "setblock 205 150 199 minecraft:redstone_block"
+C command "setblock 204 150 197 minecraft:torch"
+C command "tp @s 203.5 150 195.5 0 20"
+C wait 60
+C screenshot "$shots\subtle-blocks.png"
+C command "gamemode survival"
+C command "effect give @s minecraft:hunger 20 50 true"
+C command "damage @s 15 minecraft:generic"
+C wait 100
+C state
+C logs
+C command "gamemode creative"
+C command "effect clear @s"
+C command "weather rain"
+C command "time set 1000"
+C wait 160
+C screenshot "$shots\particle-rain.png"
+C command "weather clear"

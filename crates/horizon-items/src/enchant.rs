@@ -265,13 +265,39 @@ impl Enchantments {
                 }
             }
         }
+        // Content mods' enchantments (`data/<namespace>/enchantment/`), as the loot tables of
+        // every namespace are read: a mod's book and its effects are in the registry with
+        // vanilla's.
+        let mut namespaces: Vec<_> = std::fs::read_dir(root.join("data"))
+            .map(|dir| {
+                dir.flatten()
+                    .filter(|e| e.path().is_dir())
+                    .filter_map(|e| e.file_name().into_string().ok())
+                    .filter(|ns| ns != "minecraft")
+                    .collect()
+            })
+            .unwrap_or_default();
+        namespaces.sort();
+        for ns in namespaces {
+            let dir = root.join("data").join(&ns).join("enchantment");
+            if !dir.is_dir() {
+                continue;
+            }
+            if let Ok(folder) = horizon_world::json_folder::read(&dir) {
+                for file in folder.files.iter().filter(|f| !f.name.contains('/')) {
+                    if let Ok(v) = serde_json::from_slice(file.bytes().unwrap_or_default()) {
+                        files.insert(format!("{ns}:{}", file.name), v);
+                    }
+                }
+            }
+        }
         // The active pack's definition replaces the lower sources for this id.
         for (id, entries) in overlay.kind("enchantment") {
             if let Ok(v) = serde_json::from_slice(horizon_world::loot::PackOverlay::top(entries)) {
                 files.insert(id.to_owned(), v);
             }
         }
-        let lang: HashMap<String, String> =
+        let mut lang: HashMap<String, String> =
             horizon_core::prepared_files::read(&root.join("assets/minecraft/lang/en_us.json"))
                 .ok()
                 .and_then(|b| serde_json::from_slice::<HashMap<String, String>>(&b).ok())
@@ -299,6 +325,21 @@ impl Enchantments {
                         || k.starts_with("recipe.toast.")
                 })
                 .collect();
+        // The names of content mods' enchantments, from their own language files.
+        for id in files.keys().filter(|id| !id.starts_with("minecraft:")) {
+            let Some((ns, _)) = id.split_once(':') else { continue };
+            let key = format!("enchantment.{}", id.replace(':', "."));
+            if lang.contains_key(&key) {
+                continue;
+            }
+            let path = root.join(format!("assets/{ns}/lang/en_us.json"));
+            if let Some(names) = horizon_core::prepared_files::read(&path)
+                .ok()
+                .and_then(|b| serde_json::from_slice::<HashMap<String, String>>(&b).ok())
+            {
+                lang.extend(names.into_iter().filter(|(k, _)| k.starts_with("enchantment.")));
+            }
+        }
         let list = files
             .iter()
             .map(|(id, v)| parse_entry(id, v, &tags, &lang))

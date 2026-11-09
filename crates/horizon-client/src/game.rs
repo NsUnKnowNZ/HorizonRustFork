@@ -6178,7 +6178,10 @@ impl Game<'_> {
             });
         } else if storage::is_shulker_box(&name) && !self.shulker_can_open(pos) {
             // ShulkerBoxBlock.canOpen: the lid has no room; nothing opens.
-        } else if let Some(entity) = BlockEntity::for_block(&name) {
+        } else if let Some(entity) = BlockEntity::for_block(&name)
+            // A mod container whose name looks like a vanilla one (`mymod:oak_shelf`) is the mod's.
+            .filter(|_| self.mod_menu_at(key).is_none())
+        {
             self.world.block_entities.get_or_insert_with(key, || entity);
             horizon_client::spans::time("open_loot", || self.unpack_opened_loot(key, &name));
             let centre = [

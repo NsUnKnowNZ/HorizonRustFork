@@ -11649,11 +11649,21 @@ impl Game<'_> {
                 ..Default::default()
             }));
         }
-        if let Some(entity) = BlockEntity::for_block(name) {
-            return Some(entity);
-        }
+        // A mod's own block entity comes first: a mod block whose name looks like a vanilla
+        // one (`mymod:oak_shelf`, `mymod:red_banner`) is not that block entity when its mod
+        // gives it one.
         let mut entity = None;
-        self.native_block_entity(name, &mut entity);
+        if !name.starts_with("minecraft:") {
+            self.native_block_entity(name, &mut entity);
+        }
+        if entity.is_none() {
+            if let Some(entity) = BlockEntity::for_block(name) {
+                return Some(entity);
+            }
+            if name.starts_with("minecraft:") {
+                self.native_block_entity(name, &mut entity);
+            }
+        }
         let (id, nbt) = entity?;
         Some(BlockEntity::Mod(Box::new(
             ModBlockEntityFields {
