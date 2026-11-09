@@ -1,0 +1,29 @@
+Launch
+Platform
+C command "gamemode creative"
+C command "weather clear"
+C command "time set 6000"
+C command "fill 199 150 199 201 153 201 minecraft:glass"
+C command "fill 199 151 199 201 153 201 minecraft:water"
+C command "tp @s 200.5 151 197.5 0 20"
+C key f5
+C key f5
+C command "effect give @s minecraft:wither 30 0"
+C wait 40
+C screenshot "$shots\effectual-wither.png"
+C command "effect clear @s"
+C command "tp @s 200.5 151 200.5 180 0"
+C wait 140
+C screenshot "$shots\effectual-bubbles.png"
+C command "tp @s 203.5 150 196.5 0 0"
+C wait 30
+C screenshot "$shots\effectual-drip.png"
+C key f5
+C command "fill 190 0 190 214 20 214 stone hollow"
+C command "tp @s 202.5 5 202.5 0 0"
+C wait 120
+C screenshot "$shots\effectual-cave.png"
+C command "fill 190 0 190 214 20 214 air"
+C command "fill 199 150 199 201 153 201 air"
+C command "tp @s 203.5 152 195.5 0 5"
+C logs

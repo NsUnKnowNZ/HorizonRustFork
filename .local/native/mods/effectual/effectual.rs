@@ -43,7 +43,11 @@ pub(super) fn tick(game: &mut Game<'_>) {
     let eye = at[1] + 1.62;
     let yaw = f64::from(game.yaw).to_radians();
     let (fx, fz) = (-yaw.sin(), yaw.cos());
-    let mouth = [at[0] + fx * 0.35, eye - 0.12, at[2] + fz * 0.35];
+    // In first person the mouth is just under the camera: the breath starts a little ahead and
+    // lower, so it never fills the view.
+    let first = game.camera_type.first_person();
+    let (ahead, below) = if first { (0.8, 0.4) } else { (0.35, 0.12) };
+    let mouth = [at[0] + fx * ahead, eye - below, at[2] + fz * ahead];
     let underwater = game.eye_in_water(at[0], eye, at[2]);
     let in_water = underwater || game.eye_in_water(at[0], at[1] + 0.3, at[2]);
     let (bx, by, bz) = (at[0].floor() as i32, at[1].floor() as i32, at[2].floor() as i32);
@@ -67,9 +71,10 @@ pub(super) fn tick(game: &mut Game<'_>) {
             }
             state.breath = 50 + (rand() * 40.0) as u32;
         } else if cold && !in_water {
-            for _ in 0..4 {
+            for _ in 0..5 {
                 let v = [fx * 0.03 + velocity[0] + between(-0.005, 0.005), 0.01, fz * 0.03 + velocity[2] + between(-0.005, 0.005)];
-                planned.push((ParticleOptions::simple(ParticleType::Poof), mouth, v));
+                let p = [mouth[0] + between(-0.04, 0.04), mouth[1] + between(-0.04, 0.04), mouth[2] + between(-0.04, 0.04)];
+                planned.push((ParticleOptions::dust([0.92, 0.94, 0.97], between(0.5, 0.9) as f32), p, v));
             }
             state.breath = if running { 25 } else { 50 } + (rand() * 20.0) as u32;
         } else {
@@ -93,8 +98,12 @@ pub(super) fn tick(game: &mut Game<'_>) {
     drop(state);
     // Wither smoke.
     if wither && rand() < 0.5 {
-        let p = [at[0] + between(-0.3, 0.3), at[1] + between(0.2, 1.8), at[2] + between(-0.3, 0.3)];
-        planned.push((ParticleOptions::simple(ParticleType::LargeSmoke), p, [0.0, 0.02, 0.0]));
+        // Round the body, and below the eyes in first person.
+        let a = rand() * std::f64::consts::TAU;
+        let r = if first { between(0.45, 0.6) } else { between(0.0, 0.35) };
+        let top = if first { 1.1 } else { 1.8 };
+        let p = [at[0] + a.cos() * r, at[1] + between(0.1, top), at[2] + a.sin() * r];
+        planned.push((ParticleOptions::simple(ParticleType::Smoke), p, [0.0, 0.02, 0.0]));
     }
     // Cave dust: dark, below the surface, out of the sky.
     if loaded && sky == 0 && at[1] < 56.0 && !in_water {

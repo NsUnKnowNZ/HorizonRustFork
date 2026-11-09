@@ -1,0 +1,41 @@
+# So I Heard You Want To Customize Mob Difficulty (galatynf, "Difficulty" in the pack) for
+# Horizon, written from its options' documented behaviour, a part of them (its defaults on):
+#  - husks take no fire damage;
+#  - arthropods (spiders, cave spiders, silverfish, endermites, bees) take no fall damage;
+#  - evokers stop arrows;
+#  - undead heal by the damage they deal;
+#  - an enderman's hit can blind (a third of the time, 5 seconds).
+# Server side: in single player, on a LAN host and on a dedicated server.
+[mod]
+id = "sihywtcamd"
+version = "0.1.0"
+priority = 100
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "sihywtcamd"
+source = "sihywtcamd.rs"
+
+[[injection]]
+id = "damage"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_living_incoming_damage"
+helper = "damage.rs"
+bindings = [
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "damage_type", ty = "&str", value = "damage_type" },
+  { name = "causing", ty = "i32", value = "causing" },
+  { name = "amount", ty = "&mut f32", value = "&mut *amount" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_level_tick_post"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+]

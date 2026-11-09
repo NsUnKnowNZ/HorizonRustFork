@@ -1,0 +1,15 @@
+Launch
+Platform
+C command "gamemode creative"
+C command "weather clear"
+C command "time set 6000"
+C command "fill 197 150 200 203 150 206 minecraft:grass_block"
+C command "fill 197 151 202 203 151 206 minecraft:grass_block"
+C command "fill 197 152 204 203 152 206 minecraft:grass_block"
+C command "fill 193 150 200 196 150 206 minecraft:mycelium"
+C command "fill 193 151 202 196 151 206 minecraft:mycelium"
+C command "fill 193 152 204 196 152 206 minecraft:mycelium"
+C command "tp @s 198.5 152 195.5 0 25"
+C wait 60
+C screenshot "$shots\better-grass.png"
+C logs

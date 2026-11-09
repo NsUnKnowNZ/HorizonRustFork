@@ -1,0 +1,23 @@
+Launch
+Platform
+C command "gamemode creative"
+C command "difficulty normal"
+C command "time set 14000"
+C command "kill @e[type=!player]"
+C command "summon minecraft:spider 200.5 175 205.5"
+C command "summon minecraft:cow 206.5 175 205.5"
+C command "setblock 210 150 205 minecraft:fire"
+C command "summon minecraft:husk 210.5 150 205.5 {NoAI:1b}"
+C command "summon minecraft:skeleton 212.5 150 205.5 {NoAI:1b}"
+C command "setblock 212 150 205 minecraft:fire"
+C wait 120
+C entities 30
+C command "tp @s 203.5 152 195.5 0 5"
+C key f5
+C key f5
+C command "effect give @s minecraft:wither 10 0"
+C wait 40
+C screenshot "$shots\effectual-wither.png"
+C key f5
+C command "effect clear @s"
+C logs

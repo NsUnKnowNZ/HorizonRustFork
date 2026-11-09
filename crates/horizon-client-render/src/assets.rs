@@ -103,6 +103,9 @@ pub struct RenderAssets {
     pub connected: crate::connected::ConnectedTextures,
     /// Fusion connected textures (empty without Fusion's connecting textures and models).
     pub fusion: crate::fusion::FusionTextures,
+    /// LambdaBetterGrass: the grass-like blocks' states (not snowy), with their top's sprite
+    /// layer and whether it takes the grass colour.
+    pub better_grass: std::collections::HashMap<u32, (u16, bool)>,
     /// Counts up each time resources load, from 1: a native mod asks again where blocks'
     /// sprites are when it changes (`native_block_sprites_version`).
     pub generation: u64,
@@ -385,6 +388,7 @@ impl RenderAssets {
         if draws {
             emissive = crate::native_emissive::load_optifine(root, &mut sprites);
         }
+        let better_grass = better_grass(registry, &sprites.layers);
         sprites.save_disk_cache();
         if draws {
             sprites.finish();
@@ -412,9 +416,39 @@ impl RenderAssets {
             pbr_size: sprites.pbr_size,
             connected,
             fusion,
+            better_grass,
             generation: GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1,
         })
     }
+}
+
+/// LambdaBetterGrass's blocks: each state that isn't snowy, with its top's sprite layer and
+/// whether the top takes the grass colour.
+fn better_grass(
+    registry: &BlockRegistry,
+    layers: &std::collections::BTreeMap<String, u32>,
+) -> std::collections::HashMap<u32, (u16, bool)> {
+    let blocks = [
+        ("minecraft:grass_block", "grass_block_top", true),
+        ("minecraft:mycelium", "mycelium_top", false),
+        ("minecraft:podzol", "podzol_top", false),
+        ("minecraft:crimson_nylium", "crimson_nylium", false),
+        ("minecraft:warped_nylium", "warped_nylium", false),
+    ];
+    let mut out = std::collections::HashMap::new();
+    for i in 0..registry.len() as u32 {
+        let Some(state) = registry.state(BlockStateId(i)) else { continue };
+        let Some(&(_, top, tinted)) = blocks.iter().find(|b| b.0 == state.name) else { continue };
+        if state.properties.get("snowy").is_some_and(|v| v == "true") {
+            continue;
+        }
+        if let Some(&layer) = layers.get(&format!("minecraft:block/{top}"))
+            && let Ok(layer) = u16::try_from(layer)
+        {
+            out.insert(i, (layer, tinted));
+        }
+    }
+    out
 }
 
 #[cfg(test)]

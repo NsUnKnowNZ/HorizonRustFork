@@ -1861,7 +1861,28 @@ impl Mesher<'_> {
             };
             ([lighting::gray(directional); 4], [coords; 4], [1.0f32; 4])
         };
-        let tint = Self::tint(state, q.tint_index, tints, pos);
+        // LambdaBetterGrass (its fancy mode): the side of a grass block, mycelium, podzol or
+        // nylium shows its top where the block under that side is the same block, so slopes
+        // read as one carpet. The grass top keeps the grass colour.
+        let better_grass = self.render.better_grass.get(&id).and_then(|&(top, tinted)| {
+            let side = match q.facing as usize {
+                2 => [0, -1, -1],
+                3 => [0, -1, 1],
+                4 => [-1, -1, 0],
+                5 => [1, -1, 0],
+                _ => return None,
+            };
+            if q.tint_index >= 0 || face.layer as u16 == top {
+                return None;
+            }
+            let below = pad.blocks[(cell as isize + step_index(side)) as usize];
+            (self.render.better_grass.get(&below).map(|b| b.0) == Some(top)).then_some((top, tinted))
+        });
+        let tint_index = match better_grass {
+            Some((_, true)) => 0,
+            _ => q.tint_index,
+        };
+        let tint = Self::tint(state, tint_index, tints, pos);
         let tint = match q.color {
             Some(c) => {
                 let t = tint.unwrap_or(0xFF_FFFF);
@@ -1898,7 +1919,13 @@ impl Mesher<'_> {
                 &mut push,
             )
         });
-        let pick = if let Some(pick) = fused {
+        let pick = if let Some((top, _)) = better_grass {
+            Pick::Tile(TileLayer::Layer {
+                layer: top,
+                translucent: false,
+                opaque: true,
+            })
+        } else if let Some(pick) = fused {
             pick
         } else if connected.is_empty() {
             Pick::Keep
