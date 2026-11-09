@@ -1,0 +1,12 @@
+Launch
+Platform
+C command "gamemode creative"
+C command "advancement grant @s only minecraft:adventure/adventuring_time minecraft:plains"
+C command "advancement grant @s only minecraft:adventure/adventuring_time minecraft:desert"
+C command "advancement grant @s only minecraft:adventure/adventuring_time minecraft:badlands"
+C key key.keyboard.l tap
+C wait 5
+C screenshot "$shots\adv.png"
+C screen
+C close
+C logs

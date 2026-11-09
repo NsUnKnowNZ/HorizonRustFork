@@ -15,16 +15,15 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 "server mods synced"
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates 2>&1 | ForEach-Object { "$_" }
-git add -f .local/native/mods/jei .local/native/mods/sounds .local/native/mods/ambientsounds .local/setup/sounds_build.py .local/setup/body-jei.txt .local/setup/body-sounds.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
+git add -u -- .local 2>&1 | ForEach-Object { "$_" }
+git add -f .local/setup/body-place.txt .local/setup/body-adv.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | ForEach-Object { "$_" }
 $msg = @"
-JEI for Horizon, the Sounds mod's block sounds, AmbientSounds fixes
+Placement animation (A Good Place), advancement parts (Advancements Reloaded), cleanup
 
-- jei: enderliker/horizon-jei 0.2.1 (MIT) as the recipe viewer, its pinned revision removed
-- horizon-items: a client mod's assets/minecraft/sounds/blocks/*.json (the Sounds mod's format)
-  replaces those blocks' break, step, place, hit and fall sounds
-- sounds: a sword's swoosh; sounds_build.py builds the local content mod from the jar
-- ambientsounds: entity conditions (a warden near), day/night volumes as numbers
+- place_animations: a placed block settles into its spot, a larger copy shrinking over 0.2 s
+- advancements screen: hovering an advancement of many parts lists each, ticked or crossed
+- old job scripts and logs removed
 - ledger updated
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

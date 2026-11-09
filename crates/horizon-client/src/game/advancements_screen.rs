@@ -749,6 +749,44 @@ impl Game<'_> {
         lines(batch, &desc, desc_left, desc_y, 0xFF00_FF00);
         let icon = ItemStack::new(&d.icon, 1);
         self.draw_item(batch, &icon, ix + f(x + 8), iy + f(y + 5));
+        // Advancements Reloaded (AdvancementInfo): what an advancement of many parts still
+        // needs, each part ticked when done, beside the tooltip.
+        if a.requirements.len() > 1 {
+            let atlas = &self.gui.atlas;
+            let names: Vec<(String, bool)> = a
+                .requirements
+                .iter()
+                .map(|group| {
+                    let done = group.iter().any(|c| self.adv.progress.has(&a.id, c));
+                    (group.first().map_or_else(String::new, |c| criterion_name(c)), done)
+                })
+                .collect();
+            let missing = names.iter().filter(|n| !n.1).count();
+            let rows = 18usize;
+            let cols = names.len().div_ceil(rows).min(4);
+            let shown: Vec<&(String, bool)> = names.iter().take(rows * cols).collect();
+            let col_w = shown
+                .iter()
+                .map(|(n, _)| atlas.font.width(n) + 12.0)
+                .fold(60.0f32, f32::max)
+                .min(140.0);
+            let header = format!("{missing} of {} left", names.len());
+            let panel_w = (col_w * cols as f32).max(atlas.font.width(&header)) + 8.0;
+            let panel_h = 9.0 * rows.min(shown.len()) as f32 + 18.0;
+            let px = if left_side { ix + f(title_left) - panel_w - 4.0 } else { ix + f(title_left + width) + 4.0 };
+            let py = (iy + f(title_top)).min(batch.height - panel_h - 2.0).max(2.0);
+            batch.fill(atlas, px, py, panel_w, panel_h, 0xF010_0010);
+            batch.text(atlas, &header, px + 4.0, py + 4.0, 0xFFFF_FF55, true);
+            for (k, (name, done)) in shown.iter().enumerate() {
+                let (c, r) = (k / rows, k % rows);
+                let (mark, color) = if *done { ("\u{2714}", 0xFF55_FF55) } else { ("\u{2718}", 0xFFAA_AAAA) };
+                let line = format!("{mark} {name}");
+                let x0 = px + 4.0 + col_w * c as f32;
+                let start = batch.vertices.len();
+                batch.text(atlas, &line, x0, py + 15.0 + 9.0 * r as f32, color, true);
+                batch.clip_since(start, x0, py, x0 + col_w - 2.0, py + panel_h);
+            }
+        }
     }
     /// A left button press or release.
     pub(super) fn advancements_mouse(&mut self, pressed: bool, size: [u32; 2]) {
@@ -807,4 +845,30 @@ impl Game<'_> {
         let view = self.adv_view();
         self.adv_scroll_by(&view, f64::from(x) * 16.0, f64::from(y) * 16.0);
     }
+}
+
+/// A criterion's name as the game words it: a biome, mob, item or block of that id, else the id
+/// with its underscores spaced.
+fn criterion_name(id: &str) -> String {
+    let (ns, path) = id.split_once(':').unwrap_or(("minecraft", id));
+    for kind in ["biome", "entity", "item", "block", "effect", "enchantment"] {
+        let key = format!("{kind}.{ns}.{}", path.replace('/', "."));
+        let name = horizon_client::lang::get_or(&key, "");
+        if !name.is_empty() {
+            return name;
+        }
+    }
+    let words = path.rsplit('/').next().unwrap_or(path).replace('_', " ");
+    let mut out = String::new();
+    for (i, w) in words.split(' ').enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        let mut chars = w.chars();
+        if let Some(c) = chars.next() {
+            out.extend(c.to_uppercase());
+            out.push_str(chars.as_str());
+        }
+    }
+    out
 }

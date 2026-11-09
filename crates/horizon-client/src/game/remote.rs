@@ -8976,6 +8976,7 @@ impl Game<'_> {
             r.placing = Some(([pos.x, pos.y, pos.z], ticks));
         }
         self.predict_blocks(changes, seq);
+        self.start_place_animation([pos.x, pos.y, pos.z]);
     }
     /// The blocks a use changed, set on this client's level and kept as
     /// predicted under the use's sequence until the server acknowledges it

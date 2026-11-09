@@ -1,29 +1,36 @@
-﻿$repo = Resolve-Path "$PSScriptRoot\..\.."
-Set-Location $repo
-"=== JOB START $(Get-Date)"
-$env:GIT_TERMINAL_PROMPT = "0"
-$env:GCM_INTERACTIVE = "never"
-if (Test-Path "$repo\.git\index.lock") { Remove-Item -Force "$repo\.git\index.lock"; "removed a stale index.lock" }
-"CLAUDE.md: $((Get-Item CLAUDE.md -Force).Attributes) $((Get-Item CLAUDE.md -Force).LinkType)"
-$changed = & git diff --name-only | Where-Object { $_ -ne "CLAUDE.md" }
-$changed | ForEach-Object { "  $_" }
-& git add -- @changed 2>&1 | Where-Object { $_ -notmatch "LF will be replaced" } | ForEach-Object { "$_" }
-& git add -f -- horizon-mods/biome_paint 2>&1 | Where-Object { $_ -notmatch "LF will be replaced" } | ForEach-Object { "$_" }
-& git diff --cached --stat 2>&1 | Select-Object -Last 3 | ForEach-Object { "$_" }
+$ErrorActionPreference = 'Continue'
+$env:GIT_TERMINAL_PROMPT = '0'; $env:GCM_INTERACTIVE = 'never'
+Set-Location D:\HorizonRust
+"=== COMMIT + SERVER SYNC $(Get-Date)"
+# The offline server gets the new engine and the both-sides content mods.
+if (Test-Path server-oneblock\engine) {
+  Copy-Item .local\native\target\fast\horizon-client.exe server-oneblock\engine\horizon-client.exe -Force
+  "engine copied"
+}
+foreach ($m in 'bedrockify','biome_paint','bitsandbalance','charm','chipped','handcrafted','diversity','horizonportals','more_babies','puddleflood','supplementaries','suppsquared','yo_hooks') {
+  & robocopy "horizon-mods\$m" "server-oneblock\horizon-mods\$m" /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+}
+Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
+(Get-Content server-oneblock\horizon-mods.txt) | Where-Object { $_ -notmatch "^mod.(beb|ambientsounds|sounds):" } | Set-Content server-oneblock\horizon-mods.txt
+"server mods synced"
+if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
+git add -u -- crates 2>&1 | ForEach-Object { "$_" }
+git add -u -- .local 2>&1 | ForEach-Object { "$_" }
+git add -f .local/setup/body-place.txt .local/setup/body-adv.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
+git diff --cached --stat 2>&1 | ForEach-Object { "$_" }
 $msg = @"
-Engine changes for Better OneBlock and the Biome Paint content mod
+Placement animation (A Good Place), advancement parts (Advancements Reloaded), cleanup
 
-The Horizon source changes the first commit left out: Java pack import,
-Armor Hider, crafting tweaks, the shader-pack crash guard, FabricSkyboxes/Nuit
-skies, the HUD vignette fix, decorative blocks and shapes in horizon-port-pack,
-and horizon-mods/biome_paint (CC0 content).
+- place_animations: a placed block settles into its spot, a larger copy shrinking over 0.2 s
+- advancements screen: hovering an advancement of many parts lists each, ticked or crossed
+- old job scripts and logs removed
+- ledger updated
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01PvVsmM7bcrac8CAckUphGV
+Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
 "@
-& git commit -q -m $msg 2>&1 | ForEach-Object { "$_" }
-& git log --oneline -3 2>&1 | ForEach-Object { "$_" }
-& git push fork fork:main 2>&1 | ForEach-Object { "$_" }
-"push exit: $LASTEXITCODE"
-& git status --short --untracked-files=no 2>&1 | ForEach-Object { "left: $_" }
+[IO.File]::WriteAllText("$PWD\.local\setup\commit-msg.txt", $msg)
+git commit -F .local\setup\commit-msg.txt 2>&1 | ForEach-Object { "$_" }
+git push fork fork:main 2>&1 | ForEach-Object { "$_" }
+git log --oneline -3 2>&1 | ForEach-Object { "$_" }
 "=== JOB DONE"

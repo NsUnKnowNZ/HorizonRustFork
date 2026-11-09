@@ -442,6 +442,7 @@ mod tnt;
 mod totem;
 mod trading;
 mod transient_blocks;
+mod place_animations;
 mod trial_spawner;
 mod trial_visuals;
 mod trident;
@@ -2884,6 +2885,8 @@ struct Game<'a> {
     falling: horizon_client::join_seq::JoinList<FallingBlock>,
     /// Blocks the server shows for a moment (`ClientboundAddTransientBlockPacket`).
     transient_blocks: transient_blocks::TransientBlocks,
+    /// Blocks the player just placed, settling into place (A Good Place).
+    place_animations: place_animations::PlaceAnimations,
     paintings: Vec<horizon_client::entities::Painting>,
     painting_variants: paintings::PaintingVariants,
     item_frames: Vec<horizon_client::entities::ItemFrame>,
@@ -7240,6 +7243,9 @@ impl Game<'_> {
         };
         let target = [pos.x, pos.y, pos.z];
         let state = self.apply_item_block_state(target, state, &stack)?;
+        if self.lan_acting.is_none() {
+            self.start_place_animation(target);
+        }
         let key = (target[0], target[1], target[2]);
         if !self.world.block_entities.stateful_entity(state.0)
             && let Some(entity) = self.new_block_entity_for_state(state)
@@ -10278,6 +10284,7 @@ impl Game<'_> {
         self.moving_piston_geometry(camera, alpha, &mut out);
         // LevelRenderer.submitTransientBlocks.
         self.transient_block_geometry(camera, &mut out);
+        self.place_animation_geometry(camera, &mut out);
         self.mark_entity(out.len(), "minecraft:tnt");
         self.tnt_geometry(camera, alpha, &mut out);
         self.mark_motion(out.len(), 0);
@@ -16934,6 +16941,7 @@ impl<'a> Game<'a> {
             level_events: Vec::new(),
             falling: Default::default(),
             transient_blocks: Default::default(),
+            place_animations: Default::default(),
             paintings: Vec::new(),
             painting_variants: prepared.painting_variants,
             item_frames: Vec::new(),

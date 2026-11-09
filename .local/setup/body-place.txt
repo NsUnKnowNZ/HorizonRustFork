@@ -1,0 +1,13 @@
+Launch
+Platform
+C command "gamemode creative"
+C command "time set 6000"
+C command "item replace entity @s hotbar.0 with minecraft:oak_planks 64"
+C select 1
+C command "tp @s 203.5 150 196.5 0 30"
+C wait 10
+C place 203 150 198
+C screenshot "$shots\place-anim.png"
+C wait 10
+C screenshot "$shots\place-after.png"
+C logs
