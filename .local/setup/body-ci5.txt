@@ -1,0 +1,108 @@
+LaunchOff
+Platform
+$log = "$env:TEMP\horizon-native-test.log"
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "xp set @s 30 levels"
+C command "setblock 204 150 205 minecraft:brewing_stand"
+C command "setblock 206 150 205 minecraft:anvil[facing=north]"
+C command "setblock 208 150 205 minecraft:grindstone[face=floor,facing=north]"
+C command "setblock 210 150 205 minecraft:smithing_table"
+C command "setblock 212 150 205 minecraft:stonecutter[facing=north]"
+C command "item replace entity @s hotbar.0 with minecraft:iron_sword[damage=200]"
+C command "item replace entity @s hotbar.1 with minecraft:iron_ingot 2"
+C command "item replace entity @s hotbar.2 with minecraft:iron_sword[enchantments={'minecraft:sharpness':3}]"
+C command "item replace entity @s hotbar.3 with minecraft:netherite_upgrade_smithing_template"
+C command "item replace entity @s hotbar.4 with minecraft:diamond_sword"
+C command "item replace entity @s hotbar.5 with minecraft:netherite_ingot"
+C command "item replace entity @s hotbar.6 with minecraft:potion[potion_contents={potion:'minecraft:water'}]"
+C command "item replace entity @s hotbar.7 with minecraft:potion[potion_contents={potion:'minecraft:water'}]"
+C command "item replace entity @s hotbar.8 with minecraft:potion[potion_contents={potion:'minecraft:water'}]"
+C command "item replace entity @s inventory.0 with minecraft:nether_wart 1"
+C command "item replace entity @s inventory.1 with minecraft:blaze_powder 1"
+C command "item replace entity @s inventory.2 with minecraft:stone 4"
+C command "data get entity @s Inventory"
+function Station {
+  $l = Select-String -Path $log -Pattern 'cinematic_interactions\] station (\w+) at panel (-?\d+) (-?\d+) result (-?\d+) (-?\d+) spots (.*)$' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $script:px=[int]$g[2].Value; $script:py=[int]$g[3].Value; $script:rx=[int]$g[4].Value; $script:ry=[int]$g[5].Value
+  $script:spots = @($g[6].Value.Trim().Split(' ') | ForEach-Object { [int]$_ })
+  "station: $($l.Line)"
+}
+function SpotX($i) { return $script:spots[2*$i] }
+function SpotY($i) { return $script:spots[2*$i+1] }
+function HotX($i) { return $script:px + 13 + 18*$i }
+function HotY { return $script:py + 71 }
+function InvX($k) { return $script:px + 13 + 18*($k % 9) }
+function InvY($k) { return $script:py + 13 + 18*[math]::Floor($k / 9) }
+function Open($x, $face) {
+  C command "tp @s $($x + 0.5) 150 207.3 180 35"
+  C wait 10
+  C look-at-block $x 150 205 $face
+  C mouse right click
+  C wait 30
+  Station
+}
+function Lay($slotX, $slotY, $spot) { C click-at $slotX $slotY; C click-at (SpotX $spot) (SpotY $spot) }
+"--- brewing: three water bottles, nether wart, blaze powder"
+Open 204 south
+foreach ($i in 0,1,2) { Lay (HotX (6 + $i)) (HotY) $i }
+Lay (InvX 0) (InvY 0) 3
+Lay (InvX 1) (InvY 1) 4
+C wait 40
+C command "data get block 204 150 205"
+C screenshot "$shots\ci5-1-brewing.png"
+C wait 400
+C command "data get block 204 150 205 Items"
+C key e tap
+C wait 15
+"--- anvil: a worn iron sword mended with two ingots"
+Open 206 south
+Lay (HotX 0) (HotY) 0
+Lay (HotX 1) (HotY) 1
+C wait 5
+C screenshot "$shots\ci5-2-anvil.png"
+C click-at $rx $ry
+C wait 5
+C screenshot "$shots\ci5-3-hammer.png"
+C wait 10
+C command "data get entity @s XpLevel"
+C command "data get entity @s Inventory"
+C key e tap
+C wait 15
+"--- grindstone: the sharpness taken off a sword"
+Open 208 south
+Lay (HotX 2) (HotY) 0
+C wait 5
+C screenshot "$shots\ci5-4-grindstone.png"
+C click-at $rx $ry
+C wait 10
+C command "data get entity @s Inventory"
+C key e tap
+C wait 15
+"--- smithing table: a diamond sword to netherite"
+Open 210 south
+Lay (HotX 3) (HotY) 0
+Lay (HotX 4) (HotY) 1
+Lay (HotX 5) (HotY) 2
+C wait 5
+C screenshot "$shots\ci5-5-smithing.png"
+C click-at $rx $ry
+C wait 10
+C command "data get entity @s Inventory"
+C key e tap
+C wait 15
+"--- stonecutter: stone cut into its first choice"
+Open 212 south
+Lay (InvX 2) (InvY 2) 0
+C wait 5
+C click-at 1202 300
+C wait 5
+C screenshot "$shots\ci5-6-stonecutter.png"
+C click-at $rx $ry
+C wait 10
+C command "data get entity @s Inventory"
+C key e tap
+C wait 15
+Select-String -Path $log -Pattern 'panicked|ERROR' | Select-Object -Last 5 | ForEach-Object { "$_" }

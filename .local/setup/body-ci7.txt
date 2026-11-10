@@ -1,0 +1,86 @@
+function LaunchOff {
+  C launch --world NativeTest --wait --offscreen
+  for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+  "ready after $($i*5)s more"
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = "Normal" }
+  C wait 20
+}
+"--- the test copy of the OneBlock world goes"
+Remove-Item -Recurse -Force "$repo\saves\OBTest" -ErrorAction SilentlyContinue
+"OBTest left: $(Test-Path "$repo\saves\OBTest")"
+LaunchOff
+Platform
+$log = "$env:TEMP\horizon-native-test.log"
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "xp set @s 30 levels"
+C command "setblock 206 150 205 minecraft:anvil[facing=north]"
+C command "setblock 210 150 205 minecraft:chiseled_bookshelf[facing=south]"
+C command "setblock 214 150 205 minecraft:crafter"
+C command "fill 215 149 204 217 149 206 minecraft:iron_block"
+C command "setblock 216 150 205 minecraft:beacon"
+C command "item replace entity @s hotbar.0 with minecraft:iron_sword[damage=200]"
+C command "item replace entity @s hotbar.1 with minecraft:iron_ingot 3"
+C command "item replace entity @s hotbar.3 with minecraft:book 3"
+C command "item replace entity @s hotbar.7 with minecraft:oak_planks 4"
+function Station {
+  $l = Select-String -Path $log -Pattern 'cinematic_interactions\] station (\w+) at panel (-?\d+) (-?\d+) result (-?\d+) (-?\d+) spots(.*)$' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $script:px=[int]$g[2].Value; $script:py=[int]$g[3].Value; $script:rx=[int]$g[4].Value; $script:ry=[int]$g[5].Value
+  $script:spots = @($g[6].Value.Trim().Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { [int]$_ })
+  "station: $($l.Line)"
+}
+function SpotX($i) { return $script:spots[2*$i] }
+function SpotY($i) { return $script:spots[2*$i+1] }
+function HotX($i) { return $script:px + 13 + 18*$i }
+function HotY { return $script:py + 71 }
+function Open($x, $face) {
+  C command "tp @s $($x + 0.5) 150 207.3 180 35"
+  C wait 10
+  C look-at-block $x 150 205 $face
+  C mouse right click
+  C wait 30
+  Station
+}
+function Lay($slotX, $slotY, $spot) { C click-at $slotX $slotY; C click-at (SpotX $spot) (SpotY $spot) }
+"--- anvil: the hammer"
+Open 206 south
+Lay (HotX 0) (HotY) 0
+Lay (HotX 1) (HotY) 1
+C wait 5
+C click-at $rx $ry
+C screenshot "$shots\ci7-1-hammer.png"
+C wait 10
+C command "data get entity @s Inventory"
+C key e tap
+C wait 15
+"--- bookshelf: a book's label"
+Open 210 south
+Lay (HotX 3) (HotY) 0
+C wait 5
+C mouse-move (SpotX 0) (SpotY 0)
+C wait 3
+C screenshot "$shots\ci7-2-label.png"
+C key e tap
+C wait 15
+"--- crafter: a cell turned off"
+Open 214 south
+C click-at (SpotX 8) (SpotY 8)
+C click-at (SpotX 2) (SpotY 2)
+C wait 10
+C mouse-move 640 600
+C wait 3
+C screenshot "$shots\ci7-3-crafter.png"
+C command "data get block 214 150 205 disabled_slots"
+C key e tap
+C wait 15
+"--- beacon: the labels"
+C wait 60
+Open 216 south
+C mouse-move 640 600
+C wait 5
+C screenshot "$shots\ci7-4-beacon.png"
+C key e tap
+C wait 15
+Select-String -Path $log -Pattern 'panicked|ERROR' | Select-Object -Last 5 | ForEach-Object { "$_" }

@@ -1,0 +1,143 @@
+function LaunchOff {
+  C launch --world NativeTest --wait --offscreen
+  for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+  "ready after $($i*5)s more"
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = "Normal" }
+  C wait 20
+  C respawn
+  C wait 20
+}
+LaunchOff
+Platform
+$log = "$env:TEMP\horizon-native-test.log"
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "xp set @s 30 levels"
+C command "setblock 204 150 205 minecraft:enchanting_table"
+C command "setblock 206 150 205 minecraft:lectern[facing=south,has_book=true]{Book:{id:'minecraft:written_book',count:1,components:{'minecraft:written_book_content':{title:'Cinema',author:'Test',pages:['The first page of the book, read on the lectern.','A second page, turned to.','The last page.']}}}}"
+C command "setblock 208 150 205 minecraft:jukebox"
+C command "setblock 210 150 205 minecraft:chiseled_bookshelf[facing=south]"
+C command "setblock 212 150 205 minecraft:loom[facing=south]"
+C command "setblock 214 150 205 minecraft:crafter"
+C command "fill 215 149 204 217 149 206 minecraft:iron_block"
+C command "setblock 216 150 205 minecraft:beacon"
+C command "item replace entity @s hotbar.0 with minecraft:iron_sword"
+C command "item replace entity @s hotbar.1 with minecraft:lapis_lazuli 3"
+C command "item replace entity @s hotbar.2 with minecraft:music_disc_cat"
+C command "item replace entity @s hotbar.3 with minecraft:book 3"
+C command "item replace entity @s hotbar.4 with minecraft:white_banner"
+C command "item replace entity @s hotbar.5 with minecraft:red_dye 2"
+C command "item replace entity @s hotbar.6 with minecraft:iron_ingot 2"
+C command "item replace entity @s hotbar.7 with minecraft:oak_planks 4"
+function Station {
+  $l = Select-String -Path $log -Pattern 'cinematic_interactions\] station (\w+) at panel (-?\d+) (-?\d+) result (-?\d+) (-?\d+) spots(.*)$' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $script:px=[int]$g[2].Value; $script:py=[int]$g[3].Value; $script:rx=[int]$g[4].Value; $script:ry=[int]$g[5].Value
+  $script:spots = @($g[6].Value.Trim().Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { [int]$_ })
+  "station: $($l.Line)"
+}
+function SpotX($i) { return $script:spots[2*$i] }
+function SpotY($i) { return $script:spots[2*$i+1] }
+function HotX($i) { return $script:px + 13 + 18*$i }
+function HotY { return $script:py + 71 }
+function Open($x, $face) {
+  C command "tp @s $($x + 0.5) 150 207.3 180 35"
+  C wait 10
+  C look-at-block $x 150 205 $face
+  C mouse right click
+  C wait 30
+  Station
+}
+function Lay($slotX, $slotY, $spot) { C click-at $slotX $slotY; C click-at (SpotX $spot) (SpotY $spot) }
+"--- enchanting table: an iron sword and lapis, the first offer taken"
+Open 204 south
+Lay (HotX 0) (HotY) 0
+Lay (HotX 1) (HotY) 1
+C wait 30
+C screenshot "$shots\ci6-1-enchanting.png"
+C click-at 1214 319
+C wait 8
+C screenshot "$shots\ci6-2-enchanted.png"
+C wait 20
+C command "data get entity @s Inventory"
+C command "data get entity @s XpLevel"
+C key e tap
+C wait 15
+"--- lectern: the book read, a page turned, the book taken"
+Open 206 south
+C wait 15
+C screenshot "$shots\ci6-3-lectern.png"
+C click-at 671 409
+C wait 3
+C screenshot "$shots\ci6-4-turning.png"
+C wait 20
+C command "data get block 206 150 205 Page"
+C screenshot "$shots\ci6-5-page2.png"
+C click-at 691 450
+C wait 20
+C command "data get block 206 150 205"
+C command "data get entity @s Inventory"
+"--- jukebox: a disc put in, then taken out"
+Open 208 south
+Lay (HotX 2) (HotY) 0
+C wait 12
+C screenshot "$shots\ci6-6-jukebox.png"
+C wait 30
+C command "data get block 208 150 205"
+C screenshot "$shots\ci6-7-playing.png"
+C click-at (SpotX 0) (SpotY 0)
+C wait 10
+C command "data get block 208 150 205"
+C key e tap
+C wait 15
+"--- chiseled bookshelf: two books shelved, one taken back"
+Open 210 south
+Lay (HotX 3) (HotY) 0
+Lay (HotX 3) (HotY) 4
+C wait 10
+C screenshot "$shots\ci6-8-bookshelf.png"
+C command "data get block 210 150 205"
+C click-at (SpotX 0) (SpotY 0)
+C wait 10
+C command "data get block 210 150 205"
+C key e tap
+C wait 15
+"--- loom: a red pattern woven on a white banner"
+Open 212 south
+Lay (HotX 4) (HotY) 0
+Lay (HotX 5) (HotY) 1
+C wait 5
+C click-at 1161 279
+C wait 5
+C screenshot "$shots\ci6-9-loom.png"
+C click-at $rx $ry
+C wait 10
+C command "data get entity @s Inventory"
+C key e tap
+C wait 15
+"--- crafter: planks in a cell, the last cell turned off"
+Open 214 south
+Lay (HotX 7) (HotY) 0
+C wait 5
+C click-at (SpotX 8) (SpotY 8)
+C wait 10
+C screenshot "$shots\ci6-10-crafter.png"
+C command "data get block 214 150 205"
+C key e tap
+C wait 15
+"--- beacon: paid with an ingot, Speed picked"
+C wait 60
+Open 216 south
+Lay (HotX 6) (HotY) 0
+C wait 10
+C screenshot "$shots\ci6-11-beacon.png"
+C click-at 1173 301
+C wait 3
+C click-at 1243 377
+C wait 10
+C command "data get block 216 150 205"
+C command "data get entity @s Inventory"
+C key e tap
+C wait 15
+Select-String -Path $log -Pattern 'panicked|ERROR' | Select-Object -Last 5 | ForEach-Object { "$_" }

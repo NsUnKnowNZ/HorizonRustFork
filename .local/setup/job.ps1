@@ -30,6 +30,7 @@ function Platform {
   C command "weather clear"
   C command "time set 6000"
 }
+Remove-Item -Recurse -Force "$repo\.local\drafts\cinematic_interactions" -ErrorAction SilentlyContinue
 "running games: $((Get-Process horizon-client -ErrorAction SilentlyContinue | Measure-Object).Count)"
 & "$PSScriptRoot\job-commit.ps1"
 

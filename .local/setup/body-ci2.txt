@@ -1,0 +1,65 @@
+LaunchOff
+Platform
+$log = "$env:TEMP\horizon-native-test.log"
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "setblock 200 150 205 minecraft:crafting_table"
+C command "item replace entity @s hotbar.0 with minecraft:oak_planks 8"
+C command "item replace entity @s hotbar.1 with minecraft:stick 4"
+C command "item replace entity @s hotbar.2 with minecraft:cobblestone 9"
+C command "item replace entity @s hotbar.3 with minecraft:iron_ingot 3"
+function Scene {
+  $l = Select-String -Path $log -Pattern 'cinematic_interactions\] scene at panel (-?\d+) (-?\d+) book (-?\d+) (-?\d+) result (-?\d+) (-?\d+) layout (-?\d+) (-?\d+) cells (.*)$' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $script:px=[int]$g[1].Value; $script:py=[int]$g[2].Value; $script:bx=[int]$g[3].Value; $script:by=[int]$g[4].Value; $script:rx=[int]$g[5].Value; $script:ry=[int]$g[6].Value; $script:lx=[int]$g[7].Value; $script:ly=[int]$g[8].Value
+  $script:cells = @($g[9].Value.Trim().Split(' ') | ForEach-Object { [int]$_ })
+  "scene: $($l.Line)"
+}
+function CellX($i) { return $script:cells[2*$i] }
+function CellY($i) { return $script:cells[2*$i+1] }
+function HotX($i) { return $script:px + 13 + 18*$i }
+function HotY { return $script:py + 71 }
+C command "tp @s 200.5 150 207.3 180 40"
+C wait 20
+C look-at-block 200 150 205 up
+C mouse right click
+C wait 30
+Scene
+"--- an iron pickaxe: ingots along the top row, sticks down the middle"
+C click-at (HotX 3) (HotY)
+foreach ($i in 0,1,2) { C click-at (CellX $i) (CellY $i) right }
+C click-at (HotX 1) (HotY)
+foreach ($i in 4,7) { C click-at (CellX $i) (CellY $i) right }
+C click-at (HotX 1) (HotY)
+C wait 10
+C screenshot "$shots\ci2-1-pickaxe.png"
+C click-at $rx $ry
+C wait 5
+"--- the furnace's eight cobblestone, laid out"
+C click-at ($bx + 30) ($by + 10)
+C type "furnace"
+C key enter tap
+C wait 5
+C click-at ($bx + 15) ($by + 31)
+C click-at $lx $ly
+C wait 10
+C screenshot "$shots\ci2-2-furnace.png"
+"--- planks: one cell of three, one of one; then leave and look"
+C click-at ($bx + 113) ($by + 116)
+C wait 5
+C click-at (HotX 0) (HotY)
+foreach ($n in 1,2,3) { C click-at (CellX 0) (CellY 0) right }
+C click-at (CellX 4) (CellY 4) right
+C click-at (HotX 0) (HotY)
+C wait 10
+C screenshot "$shots\ci2-3-planks.png"
+C key e tap
+C wait 30
+C screenshot "$shots\ci2-4-left.png"
+C command "kill @e[type=item]"
+C command "setblock 200 150 205 minecraft:air destroy"
+C wait 10
+C command "execute if entity @e[type=item,nbt={Item:{id:`"minecraft:oak_planks`"}}]"
+C command "execute if entity @e[type=item,nbt={Item:{id:`"minecraft:crafting_table`"}}]"
+C command "data get entity @s Inventory"

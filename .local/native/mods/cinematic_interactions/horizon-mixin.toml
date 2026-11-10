@@ -1,0 +1,211 @@
+# Cinematic Interactions for Horizon, written from its documented behaviour (its page; none of its
+# code): workstations worked in the world, the camera flown to them.
+[mod]
+id = "cinematic_interactions"
+version = "0.1.0"
+priority = 125
+
+[[module]]
+id = "game"
+file = "crates/horizon-client/src/game.rs"
+name = "cinematic_interactions"
+source = "cinematic.rs"
+
+# A right click on a station opens its scene.
+[[injection]]
+id = "mouse"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::play_input::Game<'_>::play_mouse"
+helper = "mouse.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "button", ty = "winit::event::MouseButton", value = "button" },
+  { name = "pressed", ty = "bool", value = "pressed" },
+]
+
+# The station's camera.
+[[injection]]
+id = "camera"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::perspective::Game<'_>::camera_view"
+helper = "camera.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+]
+
+[[injection]]
+id = "client-tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_tick_post"
+helper = "client-tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }
+]
+
+[[injection]]
+id = "screen-render-post"
+kind = "HEAD"
+hook = "screen_render_post"
+hook_version = 1
+helper = "screen-render-post.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" }
+]
+
+[[injection]]
+id = "screen-press"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_screen_mouse_button_pressed_pre"
+helper = "screen-press.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "modifiers", ty = "u32", value = "modifiers" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "screen-release"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_screen_mouse_button_released_pre"
+helper = "screen-release.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "screen-drag"
+kind = "HEAD"
+hook = "screen_mouse_dragged_pre"
+hook_version = 1
+helper = "screen-drag.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "delta", ty = "[f32; 2]", value = "delta" },
+  { name = "modifiers", ty = "u32", value = "modifiers" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "screen-key"
+kind = "HEAD"
+hook = "screen_key_pressed_pre"
+hook_version = 1
+helper = "screen-key.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "modifiers", ty = "u32", value = "modifiers" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+[[injection]]
+id = "screen-char"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_screen_char_typed_pre"
+helper = "screen-char.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "screen", ty = "&horizon_client::mod_api::NativeScreenView<'_>", value = "screen" },
+  { name = "c", ty = "char", value = "c" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" }
+]
+
+# What lies on the tables, drawn in the world.
+[[injection]]
+id = "world-submit"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_submit"
+helper = "world-submit.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "draw", ty = "&mut crate::game::native_world_draw::NativeWorldDraw", value = "&mut *draw" },
+]
+
+[[injection]]
+id = "net-from-client"
+kind = "HEAD"
+hook = "net_from_client"
+hook_version = 1
+helper = "net-from-client.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "u128", value = "player" },
+  { name = "channel", ty = "&str", value = "channel" },
+  { name = "data", ty = "&[u8]", value = "data" }
+]
+
+# What the station worked holds, from the server.
+[[injection]]
+id = "net-from-server"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_net_from_server"
+helper = "net-from-server.rs"
+bindings = [
+  { name = "channel", ty = "&str", value = "channel" },
+  { name = "data", ty = "&[u8]", value = "data" }
+]
+
+# H by a campfire sits down.
+[[injection]]
+id = "key"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_key"
+helper = "key.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "pressed", ty = "bool", value = "pressed" },
+]
+
+[[injection]]
+id = "player-tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_player_tick"
+helper = "player-tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+# A table that goes drops what lay on it.
+[[injection]]
+id = "block-changed"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::GameLevel<'_>::native_block_changed"
+helper = "block-changed.rs"
+bindings = [
+  { name = "level", ty = "&crate::game::GameLevel<'_>", value = "&*self" },
+  { name = "dimension", ty = "horizon_world::level::Dimension", value = "dimension" },
+  { name = "pos", ty = "horizon_core::position::BlockPos", value = "pos" },
+  { name = "old", ty = "horizon_world::registry::BlockStateId", value = "old" },
+  { name = "new", ty = "horizon_world::registry::BlockStateId", value = "new" },
+]
+
+[[injection]]
+id = "level-tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_level_tick_post"
+helper = "level-tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+]
+
+[[injection]]
+id = "list"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+helper = "list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
+]

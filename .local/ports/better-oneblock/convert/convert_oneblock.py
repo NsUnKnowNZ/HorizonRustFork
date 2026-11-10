@@ -119,5 +119,22 @@ for n in kept:
 report.append(f"worldgen: 6 void noise settings, {nb} biomes stripped, {len(kept)} features no-op "
               f"({len(old_features - vanilla_features)} old names renamed in 26.3, covered by stripped biomes)")
 
+# --- Horizon: the progress bar for every player -----------------------------
+# The pack turns the bar on, and enables its settings trigger, only for a player whose first join
+# is in spectator: anyone joining in survival (a server's players, a player under a new name) had
+# neither. Every player without a setting now gets it on; one who turns it off keeps it off.
+fn = os.path.join(out, "data", "one-block", "function")
+with open(os.path.join(fn, "tick.mcfunction"), "a", encoding="utf-8", newline="\n") as t:
+    t.write("\n# Horizon: every player has the progress bar, on until they turn it off in the settings, and the settings\n"
+            "# themselves (the pack gave both only to players who start in spectator: anyone joining in\n"
+            "# survival, or under a new name, had neither).\n"
+            "execute as @a[gamemode=!spectator] unless score @s ob-progressbar = @s ob-progressbar "
+            "run function one-block:events/progressbar-default\n")
+open(os.path.join(fn, "events", "progressbar-default.mcfunction"), "w", encoding="utf-8", newline="\n").write(
+    "# Horizon: a player the pack has no progress bar setting for gets it on, and the settings trigger.\n"
+    "scoreboard players set @s ob-progressbar 1\n"
+    "scoreboard players enable @s ob-trigger\n")
+report.append("progress bar: on for every player with no setting yet (the pack gave it to spectator starts only)")
+
 open(os.path.join(out, "CONVERSION.txt"), "w", encoding="utf-8").write("\n".join(report) + "\n")
 print("\n".join(report))

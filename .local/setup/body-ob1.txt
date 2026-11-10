@@ -1,0 +1,42 @@
+"--- a copy of a OneBlock world for the test (the player's own saves are left alone)"
+$src = "D:\HorizonOneBlock\saves\OneBlockFresh"
+$dst = "$repo\saves\OBTest"
+if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+& robocopy $src $dst /E /NFL /NDL /NJH /NJS /NP | Out-Null
+Remove-Item -Force "$dst\session.lock" -ErrorAction SilentlyContinue
+"copied: $(Test-Path "$dst\level.dat")"
+C launch --world OBTest --wait --offscreen
+for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+"ready after $($i*5)s more"
+Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = "Normal" }
+C wait 20
+C respawn
+C wait 20
+C command "gamemode creative"
+C command "tp @s 0.5 61 0.5 0 30"
+C wait 20
+C command "scoreboard players get @s ob-progressbar"
+C command "scoreboard players get #ob ob-progress"
+C command "bossbar get ob:progress players"
+C command "scoreboard players set @s ob-progressbar 1"
+"--- the block broken: the bar shows"
+C command "setblock 0 60 0 minecraft:air"
+C wait 10
+C command "bossbar get ob:progress players"
+C screenshot "$shots\ob-1-mined.png"
+C wait 100
+C command "bossbar get ob:progress players"
+C screenshot "$shots\ob-2-5s.png"
+"--- ten seconds after the last break: the pack hides it"
+C wait 140
+C command "bossbar get ob:progress players"
+C screenshot "$shots\ob-3-12s.png"
+"--- broken again: it comes back"
+C command "setblock 0 60 0 minecraft:air"
+C wait 10
+C command "bossbar get ob:progress players"
+C screenshot "$shots\ob-4-again.png"
+"--- the toggle"
+C command "trigger ob-trigger set 13"
+C wait 5
+C command "scoreboard players get @s ob-progressbar"
