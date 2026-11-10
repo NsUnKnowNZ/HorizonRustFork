@@ -732,13 +732,38 @@ pub fn offline_cape() -> Option<&'static [u8]> {
 pub fn offline_skin() -> Option<&'static (Vec<u8>, bool)> {
     static SKIN: std::sync::OnceLock<Option<(Vec<u8>, bool)>> = std::sync::OnceLock::new();
     SKIN.get_or_init(|| {
-        let path = std::env::var_os("HORIZON_OFFLINE_SKIN").filter(|p| !p.is_empty())?;
-        let model = std::env::var("HORIZON_OFFLINE_SKIN_MODEL").unwrap_or_default();
-        read_offline_skin(std::path::Path::new(&path), &model)
+        let (path, model) = match std::env::var_os("HORIZON_OFFLINE_SKIN").filter(|p| !p.is_empty())
+        {
+            Some(path) => (
+                std::path::PathBuf::from(path),
+                std::env::var("HORIZON_OFFLINE_SKIN_MODEL").unwrap_or_default(),
+            ),
+            None => profile_skin()?,
+        };
+        read_offline_skin(&path, &model)
             .inspect_err(|e| eprintln!("Horizon: no offline skin ({}): {e}", path.display()))
             .ok()
     })
     .as_ref()
+}
+/// The skin of the offline profile in use, when it has one: `profiles/<name>.png` beside
+/// `horizon-player.txt`, which names the profile (`name:`) and its arms (`model:`).
+fn profile_skin() -> Option<(std::path::PathBuf, String)> {
+    let dir = crate::logging::player_dir();
+    let text = std::fs::read_to_string(dir.join("horizon-player.txt")).ok()?;
+    let line = |key: &str| {
+        text.lines()
+            .find_map(|l| l.trim_end_matches('\r').strip_prefix(key))
+            .map(str::to_owned)
+    };
+    let name = line("name:")?;
+    // A name is letters, digits and underscores: never a path.
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return None;
+    }
+    let path = dir.join("profiles").join(format!("{name}.png"));
+    path.is_file()
+        .then(|| (path, line("model:").unwrap_or_default()))
 }
 fn read_offline_skin(path: &std::path::Path, model: &str) -> Result<(Vec<u8>, bool), String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;

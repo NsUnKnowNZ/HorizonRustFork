@@ -2845,7 +2845,12 @@ pub fn resource_root(base: &Path, mods: &[ContentMod], cache: &Path) -> Result<P
     {
         return Ok(base.to_owned());
     }
+    let started = std::time::Instant::now();
     let stamp = stamp(base, mods)?;
+    log::info!(
+        "Horizon: mod files checked in {} ms",
+        started.elapsed().as_millis()
+    );
     let roots = cache.join("mod-content");
     let out = roots.join(&stamp[..ROOT_NAME]);
     if fs::read(out.join(STAMP)).is_ok_and(|s| s == stamp.as_bytes()) {
@@ -2997,9 +3002,8 @@ fn stamp(base: &Path, mods: &[ContentMod]) -> Result<String> {
         if m.content.files.is_empty() {
             // Declared in code only: nothing to read.
         } else if source.is_dir() {
-            for file in &m.content.files {
-                parts.push(meta(&source.join(file))?);
-            }
+            let paths: Vec<PathBuf> = m.content.files.iter().map(|f| source.join(f)).collect();
+            parts.extend(metas(&paths, &meta)?);
         } else {
             parts.push(meta(source)?);
         }
@@ -3010,6 +3014,40 @@ fn stamp(base: &Path, mods: &[ContentMod]) -> Result<String> {
         hasher.update(part.as_bytes());
     }
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+/// `meta` of each of `paths`, in their order, asked for on several threads: a folder mod can
+/// have tens of thousands of files, each a lookup the disk may have to seek for.
+fn metas(
+    paths: &[PathBuf],
+    meta: &(impl Fn(&Path) -> Result<String> + Sync),
+) -> Result<Vec<String>> {
+    let threads = std::thread::available_parallelism()
+        .map_or(4, |n| n.get())
+        .min(16);
+    if paths.len() < 256 || threads < 2 {
+        return paths.iter().map(|p| meta(p)).collect();
+    }
+    let per_thread = paths.len().div_ceil(threads);
+    let parts = std::thread::scope(|scope| {
+        let workers: Vec<_> = paths
+            .chunks(per_thread)
+            .map(|chunk| {
+                scope.spawn(move || {
+                    chunk
+                        .iter()
+                        .map(|p| meta(p).map_err(|e| e.to_string()))
+                        .collect::<std::result::Result<Vec<String>, String>>()
+                })
+            })
+            .collect();
+        let mut parts = Vec::with_capacity(paths.len());
+        for worker in workers {
+            parts.extend(worker.join().map_err(|_| "a file check stopped".to_owned())??);
+        }
+        Ok::<_, String>(parts)
+    })?;
+    Ok(parts)
 }
 
 #[cfg(test)]

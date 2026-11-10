@@ -1,0 +1,45 @@
+function Times($tag) {
+  $l = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 30 logs --lines 4000 2>&1 | Out-String
+  "--- $tag"
+  [regex]::Matches($l, '(load core tables: [0-9.]+s|load items: [0-9.]+s|resources loaded in [0-9.]+s|mod files checked in \d+ ms|wrote horizon-data.bin in \d+ ms|horizon-data.bin not written[^"\\\r\n]*|content from \d+ mod)') | ForEach-Object { $_.Value } | Select-Object -Unique | Select-Object -Last 10
+}
+Get-ChildItem "$repo\.horizon-cache\mod-content" -Directory | ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
+"roots removed"
+Launch
+for ($i = 0; $i -lt 90; $i++) { Start-Sleep 5; $l = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 20 logs --lines 4000 2>&1 | Out-String; if ($l -match 'wrote horizon-data.bin|horizon-data.bin not written') { break } }
+"data file wait $($i*5)s"
+Times "first start on a new root (writes the data file)"
+C quit
+"--- waiting 12 minutes $(Get-Date -Format HH:mm:ss)"
+Start-Sleep 720
+Launch
+Start-Sleep 15
+Times "second start, 12 minutes later, WITH the data file"
+C quit
+Start-Sleep 6
+# --- the profiles screen, from the title
+Copy-Item -Force "$repo\horizon-player.txt" "$repo\.local\tmp\horizon-player.keep"
+$sock2 = "$env:TEMP\horizon-profile-test.json"
+Remove-Item $sock2 -ErrorAction SilentlyContinue
+$p = Start-Process "$repo\.local\native\target\fast\horizon-client.exe" -WorkingDirectory $repo -ArgumentList '--control','--control-socket',"`"$sock2`"" -PassThru
+function T { "`n>>> $args"; & $ctl --socket $sock2 --timeout 60 @args 2>&1 | ForEach-Object { "$_" } }
+for ($i = 0; $i -lt 60; $i++) { Start-Sleep 5; $r = & $ctl --socket $sock2 --timeout 10 screen 2>&1 | Out-String; if ($r -match 'title') { break } }
+Start-Sleep 5
+T screenshot "$shots\profile-0-title.png"
+T click-at 79 14
+Start-Sleep 1
+T screen
+T click-at 615 94
+T type Andre
+T screenshot "$shots\profile-1-typed.png"
+T click-at 717 94
+Start-Sleep 1
+T screenshot "$shots\profile-2-added.png"
+T menu
+Get-Content "$repo\horizon-player.txt"
+Get-Content "$repo\horizon-profiles.txt"
+T quit
+Start-Sleep 4
+if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+Copy-Item -Force "$repo\.local\tmp\horizon-player.keep" "$repo\horizon-player.txt"
+Remove-Item "$repo\horizon-profiles.txt" -ErrorAction SilentlyContinue

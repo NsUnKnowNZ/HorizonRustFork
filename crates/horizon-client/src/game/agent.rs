@@ -630,6 +630,17 @@ impl Game<'_> {
                 "biome": buffet.biome(),
                 "query": buffet.query(),
             }),
+            Mode::Profiles {
+                profiles,
+                active,
+                name,
+                ..
+            } => json!({
+                "mode": "profiles",
+                "profiles": profiles.iter().map(|p| json!({ "name": p.name, "slim": p.slim })).collect::<Vec<_>>(),
+                "in_use": active,
+                "fields": { "name": name },
+            }),
             Mode::Edit {
                 world,
                 name,

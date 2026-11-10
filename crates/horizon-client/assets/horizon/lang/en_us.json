@@ -1035,5 +1035,19 @@
   "horizon.recipe_transfer.missing": "Missing Items",
   "horizon.recipe_transfer.no_room": "Inventory full",
   "horizon.recipe_transfer.unavailable": "Recipe does not fit this menu",
-  "horizon.recipe_transfer.unsupported": "Server requires a known recipe"
+  "horizon.recipe_transfer.unsupported": "Server requires a known recipe",
+  "horizon.profiles.title": "Player Profiles",
+  "horizon.profiles.button": "Profile: %s",
+  "horizon.profiles.in_use": "%s (in use)",
+  "horizon.profiles.add": "Add",
+  "horizon.profiles.arms_slim": "Arms: Slim",
+  "horizon.profiles.arms_classic": "Arms: Classic",
+  "horizon.profiles.folder": "Skins Folder",
+  "horizon.profiles.remove": "Remove",
+  "horizon.profiles.new": "New profile name",
+  "horizon.profiles.skin": "Skin: %s.png in the skins folder",
+  "horizon.profiles.no_skin": "No skin: put %s.png (64x64) in the skins folder",
+  "horizon.profiles.skin_note": "A skin shows on your own screen, after the game is started again",
+  "horizon.profiles.invalid": "A name has 1 to 16 letters, digits or underscores",
+  "horizon.profiles.exists": "There is a profile with that name"
 }

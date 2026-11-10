@@ -23,6 +23,8 @@ Copy-Item -Force "$repo\.local\native\target\fast\horizon-client.exe" "$Game\bin
 foreach ($f in 'horizon-mods.txt','options.txt','horizon-graphics.txt','horizon-extras.txt','horizon-player.txt','servers.dat','horizon.txt','horizon-java-folders.txt','horizon_official_server.txt','horizon_partner_servers.txt') {
   if ((Test-Path "$repo\$f") -and -not (Test-Path "$Game\$f")) { Copy-Item "$repo\$f" "$Game\$f"; "copied $f" }
 }
+# The native mods' own settings and data.
+if ((Test-Path "$repo\horizon-mods\.horizon-mod-data") -and -not (Test-Path "$Game\horizon-mods\.horizon-mod-data")) { Copy-Item -Recurse "$repo\horizon-mods\.horizon-mod-data" "$Game\horizon-mods\.horizon-mod-data"; "copied mod data" }
 if ((Test-Path "$repo\config") -and -not (Test-Path "$Game\config")) { Copy-Item -Recurse "$repo\config" "$Game\config"; "copied config" }
 # The player's own folders move over once; the source keeps a link to each.
 foreach ($d in 'resourcepacks','shaderpacks','screenshots') {

@@ -16,21 +16,24 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .local/game-launcher/Cargo.toml .local/game-launcher/src/main.rs .gitignore FORK.md
-git add -u -- "Play Better OneBlock (modded).bat" "Play Better OneBlock.bat" "Play OneBlock Fresh (modded).bat" 2>&1 | ForEach-Object { "$_" }
+git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .local/setup/body-coldstart3.txt .gitignore crates/horizon-client/src/profiles.rs
+git add -u -- "Play OneBlock Fresh (modded).bat" 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-A clean game folder with one program to start it; the .bat shortcuts are gone
+One data file for the root with mods and packs; offline player profiles
 
-.local/setup/make-game-folder.ps1 makes D:\HorizonOneBlock (or -Game <folder>):
-Horizon OneBlock.exe (.local/game-launcher, starts bin\horizon-client.exe with
-no console window), the prepared resources in bin\, the mods, and on its first
-run the player's worlds, packs and screenshots moved over from the source
-folder (NativeTest stays for tests; the packs keep a link here). Later runs
-refresh the program, the resources and the mods only.
+Start-up: the root the game loads with content mods or resource packs on
+(.horizon-cache) gets its own horizon-data.bin, as the prepared folder has,
+written once the start is done. Until now only plain Horizon read one file;
+with mods every start opened some 100,000 small files. Measured on a new root:
+first start 190 s (it writes the file), a start 12 minutes later 8.9 s; such a
+second start took 140 s before. The check of the mods' files for changes runs
+on several threads (0.4 s warm).
 
-Supplementaries (local content): six blocks its jar has stale files for but the
-mod never registers are taken out; raked gravel has its model.
+Profiles: a button in the title screen's corner (without an account) opens
+Player Profiles: pick the name worlds and servers are joined under, add one,
+its arm model, and profiles/<name>.png as its skin on the player's own screen
+(read at start). Kept in horizon-profiles.txt and horizon-player.txt.
 
 Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
@@ -56,3 +59,5 @@ git worktree remove --force $wt 2>&1 | ForEach-Object { "$_" }
 Remove-Item -Recurse -Force "$env:TEMP\horizon-verify-target" -ErrorAction SilentlyContinue
 git status --short --untracked-files=no 2>&1 | Select-Object -First 20 | ForEach-Object { "$_" }
 "=== JOB DONE"
+
+& "$PSScriptRoot\make-game-folder.ps1" 2>&1 | ForEach-Object { "$_" }

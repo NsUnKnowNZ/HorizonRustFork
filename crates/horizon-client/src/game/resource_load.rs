@@ -492,6 +492,7 @@ pub(super) fn load_resources(
     let rest_loader = if menu {
         let resources = resources.clone();
         let root = root.clone();
+        let data_root = root.clone();
         let vanilla_root = vanilla_root.to_owned();
         let entity_models = entity_models.clone();
         let rest_progress = progress.clone();
@@ -524,6 +525,12 @@ pub(super) fn load_resources(
                     "Horizon: rest-ready after {} ms",
                     started.elapsed().as_millis()
                 );
+                // The root the game loaded (content mods' and resource packs' files over
+                // the game's own) gets its own data file too: with mods it is some 80,000
+                // more small files, each a slow first open on Windows.
+                if data_root != vanilla_root {
+                    write_prepared_files(data_root);
+                }
                 write_prepared_files(vanilla_root);
                 Ok(())
             })?;
@@ -548,6 +555,12 @@ pub(super) fn load_resources(
             .rest
             .set(rest)
             .map_err(|_| "world resources already loaded")?;
+        if !headless {
+            if root != vanilla_root {
+                write_prepared_files(root.clone());
+            }
+            write_prepared_files(vanilla_root.to_owned());
+        }
         None
     };
     // The world tables load (above) while the handoff's CPU work is done: the
@@ -596,7 +609,8 @@ pub(super) fn load_resources(
     })
 }
 
-/// Write the prepared folder's `horizon-data.bin` when it has none the game
+/// Write a root's `horizon-data.bin` (the prepared folder's, or a root built over it in the
+/// game's cache: those are made once and never changed) when it has none the game
 /// can use: on a thread of its own, at idle priority, once the start is done.
 /// This start has just read the folder's files (they are in the disk cache);
 /// the next starts read them from one file (#1961).

@@ -36,6 +36,10 @@ const LIST_BOTTOM: f32 = 60.0;
 const ROW_HEIGHT: f32 = 36.0;
 const ROW_WIDTH: f32 = 270.0;
 
+/// The profiles screen: where its name field's row starts, under `rows` profiles.
+fn profiles_top(rows: usize) -> f32 {
+    46.0 + rows as f32 * 24.0
+}
 fn edit_top(h: f32) -> f32 {
     ((h.ceil() - 234.0) / 2.0).floor()
 }
@@ -336,6 +340,17 @@ pub enum Mode {
         alert: Option<Alert>,
     },
     Multiplayer(crate::multiplayer::Screen),
+    /// Horizon's offline player profiles (`profiles`): pick one, add one, its arm model.
+    Profiles {
+        profiles: Vec<crate::profiles::Profile>,
+        /// The name in use.
+        active: String,
+        /// The new profile's name field.
+        name: String,
+        focused: bool,
+        /// Why the last press did nothing.
+        note: Option<String>,
+    },
     Realms(crate::realms::Screen),
     /// SafetyScreen: the warning before the first Multiplayer click, with its
     /// "Do not show this screen again" box.
@@ -772,6 +787,7 @@ impl Mode {
             Self::CreateFlat { .. } => "world_create_flat",
             Self::CreateBuffet { .. } => "world_create_buffet",
             Self::Edit { .. } => "world_edit",
+            Self::Profiles { .. } => "profiles",
             Self::Backup { .. } => "world_backup",
             Self::BackupBeforeUpgrade { .. } => "world_backup_confirm",
             Self::OptimizeConfirm { .. } => "world_optimize_confirm",
@@ -1893,6 +1909,22 @@ impl Title {
                     button.icon = Some((icon, 15.0));
                     buttons.push(button);
                 }
+                // Horizon's offline profiles, in the corner: the name worlds and servers are
+                // joined under without an account.
+                if crate::auth::current().is_none() {
+                    buttons.push(b(
+                        4.0,
+                        4.0,
+                        150.0,
+                        &translate(
+                            "horizon.profiles.button",
+                            "Profile: %s",
+                            &[&crate::profiles::current_name()],
+                        ),
+                        true,
+                        9,
+                    ));
+                }
                 buttons
             }
             Mode::Select { worlds, selected } => {
@@ -1964,6 +1996,72 @@ impl Title {
             } => create_world::buttons(w, h, *creative, options),
             Mode::CreateFlat { flat, .. } => flat::buttons(w, h, flat),
             Mode::CreateBuffet { buffet, .. } => buffet::buttons(w, h, buffet),
+            Mode::Profiles {
+                profiles, active, ..
+            } => {
+                let x = (w / 2.0).floor() - 100.0;
+                let top = profiles_top(profiles.len());
+                let mut buttons: Vec<Button> = profiles
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        let label = if p.name == *active {
+                            translate("horizon.profiles.in_use", "%s (in use)", &[&p.name])
+                        } else {
+                            p.name.clone()
+                        };
+                        b(x, 40.0 + i as f32 * 24.0, 200.0, &label, true, 60 + i as u8)
+                    })
+                    .collect();
+                let slim = profiles.iter().any(|p| p.name == *active && p.slim);
+                buttons.extend([
+                    b(
+                        x + 154.0,
+                        top + 14.0,
+                        46.0,
+                        &lang::get_or("horizon.profiles.add", "Add"),
+                        profiles.len() < crate::profiles::MAX,
+                        68,
+                    ),
+                    b(
+                        x,
+                        top + 40.0,
+                        98.0,
+                        &if slim {
+                            lang::get_or("horizon.profiles.arms_slim", "Arms: Slim")
+                        } else {
+                            lang::get_or("horizon.profiles.arms_classic", "Arms: Classic")
+                        },
+                        true,
+                        69,
+                    ),
+                    b(
+                        x + 102.0,
+                        top + 40.0,
+                        98.0,
+                        &lang::get_or("horizon.profiles.folder", "Skins Folder"),
+                        true,
+                        70,
+                    ),
+                    b(
+                        x,
+                        top + 64.0,
+                        98.0,
+                        &lang::get_or("horizon.profiles.remove", "Remove"),
+                        profiles.len() > 1,
+                        71,
+                    ),
+                    b(
+                        x + 102.0,
+                        top + 64.0,
+                        98.0,
+                        &lang::get_or("gui.done", "Done"),
+                        true,
+                        72,
+                    ),
+                ]);
+                buttons
+            }
             Mode::Edit { world, name, .. } => {
                 let x = (w / 2.0).floor() - 100.0;
                 let top = edit_top(h);
@@ -2343,6 +2441,9 @@ impl Title {
                     "Single Biome Customization",
                 ),
             ),
+            Mode::Profiles { .. } => {
+                ScreenInfo::new("profiles", get("horizon.profiles.title", "Player Profiles"))
+            }
             Mode::Edit { .. } => {
                 ScreenInfo::new("edit_world", get("selectWorld.edit.title", "Edit World"))
             }
@@ -2836,6 +2937,72 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
             } => self.draw_create(atlas, batch, cursor, name, seed, *focus, options),
             Mode::CreateFlat { flat, .. } => flat::draw(self, atlas, items, batch, cursor, flat),
             Mode::CreateBuffet { buffet, .. } => buffet::draw(self, atlas, batch, cursor, buffet),
+            Mode::Profiles {
+                profiles,
+                active,
+                name,
+                focused,
+                note,
+            } => {
+                crate::ui::menu_background(batch, atlas, 0.0, 0.0, w, h, false);
+                centered(
+                    atlas,
+                    batch,
+                    &lang::get_or("horizon.profiles.title", "Player Profiles"),
+                    15.0,
+                    u32::MAX,
+                );
+                let x = (w / 2.0).floor() - 100.0;
+                let top = profiles_top(profiles.len());
+                let grey = rgba(160, 160, 160, 255);
+                batch.text(
+                    atlas,
+                    &lang::get_or("horizon.profiles.new", "New profile name"),
+                    x,
+                    top,
+                    grey,
+                    true,
+                );
+                self.caret.borrow_mut().draw(
+                    batch,
+                    atlas,
+                    (PROFILE_NAME, name, 16),
+                    [x, top + 14.0, 150.0, 20.0],
+                    *focused,
+                    self.started,
+                );
+                crate::widgets::name_last_edit_box(|| {
+                    lang::get_or("horizon.profiles.new", "New profile name")
+                });
+                let dir = crate::logging::player_dir();
+                let skin = if crate::profiles::skin_file(&dir, active).is_file() {
+                    translate(
+                        "horizon.profiles.skin",
+                        "Skin: %s.png in the skins folder",
+                        &[active],
+                    )
+                } else {
+                    translate(
+                        "horizon.profiles.no_skin",
+                        "No skin: put %s.png (64x64) in the skins folder",
+                        &[active],
+                    )
+                };
+                centered(atlas, batch, &skin, top + 94.0, grey);
+                centered(
+                    atlas,
+                    batch,
+                    &lang::get_or(
+                        "horizon.profiles.skin_note",
+                        "A skin shows on your own screen, after the game is started again",
+                    ),
+                    top + 106.0,
+                    grey,
+                );
+                if let Some(note) = note {
+                    centered(atlas, batch, note, top + 122.0, rgba(255, 85, 85, 255));
+                }
+            }
             Mode::Edit { name, focused, .. } => {
                 crate::ui::menu_background(batch, atlas, 0.0, 0.0, w, h, false);
                 centered(
@@ -3839,6 +4006,33 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
                 }
                 Action::None
             }
+            (Mode::Main, Some(9)) => {
+                let dir = crate::logging::player_dir();
+                self.focused_button = None;
+                self.mode = Mode::Profiles {
+                    profiles: crate::profiles::load(&dir),
+                    active: crate::offline_name::load_or_create(&dir),
+                    name: String::new(),
+                    focused: false,
+                    note: None,
+                };
+                Action::None
+            }
+            (Mode::Profiles { .. }, Some(id @ (60..=72))) => {
+                self.profile_button(id);
+                Action::None
+            }
+            (
+                Mode::Profiles {
+                    profiles, focused, ..
+                },
+                None,
+            ) => {
+                let top = profiles_top(profiles.len()) + 14.0;
+                let left = (w / 2.0).floor() - 100.0;
+                *focused = y >= top && y < top + 20.0 && x >= left && x < left + 150.0;
+                Action::None
+            }
             (Mode::Edit { world, name, .. }, Some(id @ (30..=36))) => {
                 let world = world.clone();
                 let name = name.clone();
@@ -4086,6 +4280,11 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
         match &self.mode {
             Mode::Select { .. } if self.search_focused => Some([x, 21.0, 200.0, 20.0]),
             Mode::Edit { focused: true, .. } => Some([x, edit_top(h) + 39.0, 200.0, 20.0]),
+            Mode::Profiles {
+                focused: true,
+                profiles,
+                ..
+            } => Some([x, profiles_top(profiles.len()) + 14.0, 150.0, 20.0]),
             Mode::Create { focus, options, .. } => create_world::field_rect(w, h, options.tab)
                 .filter(|(id, _)| id == focus)
                 .map(|(_, rect)| rect),
@@ -4145,6 +4344,89 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
             crate::widgets::narrate_now();
         }
     }
+    /// A press on the profiles screen: a profile's row puts it in use; Add keeps the name
+    /// typed as a new profile and uses it; Arms switches the one in use between the classic
+    /// and the slim model; Remove drops it for the first of the others.
+    fn profile_button(&mut self, id: u8) {
+        use crate::profiles::{self, Profile};
+        if id == 72 {
+            self.mode = Mode::Main;
+            return;
+        }
+        let dir = crate::logging::player_dir();
+        let Mode::Profiles {
+            profiles: list,
+            active,
+            name,
+            note,
+            ..
+        } = &mut self.mode
+        else {
+            return;
+        };
+        *note = None;
+        let result = match id {
+            60..=67 => match list.get(usize::from(id - 60)) {
+                Some(profile) => {
+                    *active = profile.name.clone();
+                    profiles::select(&dir, profile)
+                }
+                None => Ok(()),
+            },
+            68 => {
+                let new = name.trim().to_owned();
+                if !profiles::valid(&new) {
+                    *note = Some(lang::get_or(
+                        "horizon.profiles.invalid",
+                        "A name has 1 to 16 letters, digits or underscores",
+                    ));
+                    return;
+                }
+                if list.iter().any(|p| p.name.eq_ignore_ascii_case(&new)) {
+                    *note = Some(lang::get_or(
+                        "horizon.profiles.exists",
+                        "There is a profile with that name",
+                    ));
+                    return;
+                }
+                if list.len() >= profiles::MAX {
+                    return;
+                }
+                let profile = Profile {
+                    name: new.clone(),
+                    slim: false,
+                };
+                list.push(profile.clone());
+                *active = new;
+                name.clear();
+                profiles::save(&dir, list).and_then(|()| profiles::select(&dir, &profile))
+            }
+            69 => match list.iter_mut().find(|p| p.name == *active) {
+                Some(profile) => {
+                    profile.slim = !profile.slim;
+                    let profile = profile.clone();
+                    profiles::save(&dir, list).and_then(|()| profiles::select(&dir, &profile))
+                }
+                None => Ok(()),
+            },
+            70 => {
+                if let Err(error) = world_management::open_folder(&profiles::skins_dir(&dir)) {
+                    *note = Some(error.to_string());
+                }
+                Ok(())
+            }
+            71 if list.len() > 1 => {
+                list.retain(|p| p.name != *active);
+                let first = list[0].clone();
+                *active = first.name.clone();
+                profiles::save(&dir, list).and_then(|()| profiles::select(&dir, &first))
+            }
+            _ => Ok(()),
+        };
+        if let Err(error) = result {
+            *note = Some(error.to_string());
+        }
+    }
     pub fn confirm_edit(&mut self) {
         let Mode::Edit {
             world,
@@ -4176,6 +4458,12 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
         self.remember_direct_address();
         if self.rules.get_mut().is_some() {
             return (Action::None, false);
+        }
+        if matches!(self.mode, Mode::Profiles { focused: true, .. })
+            && self.focused_button.is_none()
+        {
+            self.profile_button(68);
+            return (Action::None, true);
         }
         if matches!(self.mode, Mode::Edit { .. }) && self.focused_button.is_none() {
             self.confirm_edit();
@@ -4579,7 +4867,7 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
     pub fn blur_field(&mut self) {
         match &mut self.mode {
             Mode::Select { .. } => self.search_focused = false,
-            Mode::Edit { focused, .. } => *focused = false,
+            Mode::Edit { focused, .. } | Mode::Profiles { focused, .. } => *focused = false,
             Mode::Create { focus, .. } => *focus = 2,
             _ => {}
         }
@@ -4904,6 +5192,7 @@ fn wrapped(atlas: &HudAtlas, text: &str, width: f32) -> Vec<String> {
 }
 const SEARCH: crate::clipboard::FieldId = ("world.search", 0);
 const EDIT_NAME: crate::clipboard::FieldId = ("world.edit-name", 0);
+const PROFILE_NAME: crate::clipboard::FieldId = ("profiles.name", 0);
 const WORLD_NAME: crate::clipboard::FieldId = ("world.name", 0);
 const WORLD_SEED: crate::clipboard::FieldId = ("world.seed", 0);
 const FLAT_SHARE: crate::clipboard::FieldId = ("world.flat-share", 0);
@@ -4922,6 +5211,11 @@ fn caret_field<'a>(
             focused: true,
             ..
         } => Some((EDIT_NAME, name, 32)),
+        Mode::Profiles {
+            name,
+            focused: true,
+            ..
+        } => Some((PROFILE_NAME, name, 16)),
         Mode::Create {
             name, seed, focus, ..
         } => match focus {

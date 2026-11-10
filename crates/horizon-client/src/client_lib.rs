@@ -106,6 +106,7 @@ pub mod net;
 pub mod nether_portal;
 pub mod no_resources;
 pub mod offline_name;
+pub mod profiles;
 pub mod old_world;
 pub mod osk;
 pub mod patrol;
