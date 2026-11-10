@@ -397,6 +397,20 @@ fn sign(hanging: bool, wall: bool, prop: &dyn Fn(&str) -> Option<String>) -> Kin
         angle,
     }
 }
+/// A texture name kept for the program's life: a mod's chests name theirs from their block
+/// ids, three a chest, the same ones each time its states are classified.
+fn interned(name: String) -> &'static str {
+    static NAMES: std::sync::Mutex<Option<std::collections::HashSet<&'static str>>> =
+        std::sync::Mutex::new(None);
+    let mut names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
+    let names = names.get_or_insert_with(Default::default);
+    if let Some(known) = names.get(name.as_str()) {
+        return known;
+    }
+    let kept: &'static str = Box::leak(name.into_boxed_str());
+    names.insert(kept);
+    kept
+}
 fn classify(name: &str, prop: &dyn Fn(&str) -> Option<String>) -> Kind {
     let name = name.strip_prefix("minecraft:").unwrap_or(name);
     let facing = || intern(&prop("facing").unwrap_or_default());
@@ -427,6 +441,20 @@ fn classify(name: &str, prop: &dyn Fn(&str) -> Option<String>) -> Kind {
     };
     if let Some(hanging) = signs::sign_kind(name) {
         return sign(hanging, name.contains("_wall_"), prop);
+    }
+    // A content mod's chests (Charm's `charm:azalea_chest` and `charm:trapped_azalea_chest`):
+    // drawn as chests from `<namespace>:entity/chest/<wood>_normal` or `_trapped` and the
+    // double chest's `_left` and `_right`, where the mods that add wood chests keep them.
+    if let Some((namespace, path)) = name.split_once(':')
+        && let Some(wood) = path.strip_suffix("_chest")
+    {
+        let (wood, kind) = match wood.strip_prefix("trapped_") {
+            Some(wood) => (wood, "trapped"),
+            None => (wood, "normal"),
+        };
+        let single = format!("{namespace}:entity/chest/{wood}_{kind}");
+        let (left, right) = (format!("{single}_left"), format!("{single}_right"));
+        return chest(interned(single), interned(left), interned(right));
     }
     let unwaxed = name.strip_prefix("waxed_").unwrap_or(name);
     match unwaxed {

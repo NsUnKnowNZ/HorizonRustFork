@@ -181,11 +181,16 @@ fn texture_sprite(id: &str) -> String {
     let path = path.strip_prefix("textures/").unwrap_or(path);
     path.strip_suffix(".png").unwrap_or(path).to_owned()
 }
+/// A special model's texture (`minecraft:normal`, `charm:azalea_normal`) as its sprite's name:
+/// under `entity/<directory>/`, with a namespace other than Minecraft's kept in front.
 fn mapped(directory: &str, id: &str) -> String {
-    format!(
-        "entity/{directory}/{}",
-        id.strip_prefix("minecraft:").unwrap_or(id)
-    )
+    match id.split_once(':') {
+        Some((namespace, path)) if namespace != "minecraft" => {
+            format!("{namespace}:entity/{directory}/{path}")
+        }
+        Some((_, path)) => format!("entity/{directory}/{path}"),
+        None => format!("entity/{directory}/{id}"),
+    }
 }
 /// `DyeColor.getTextureDiffuseColor` as ARGB.
 fn dye(name: &str) -> u32 {

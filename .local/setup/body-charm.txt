@@ -1,0 +1,29 @@
+Launch
+Platform
+C command "kill @e[type=!minecraft:player]"
+C command "clear @s"
+C command "fill 194 150 199 212 151 201 minecraft:air"
+C command "setblock 203 150 200 charm:azalea_chest[facing=north]"
+C command "setblock 201 150 200 charm:trapped_acacia_chest[facing=north]"
+C command "setblock 205 150 200 charm:bamboo_chest[facing=north,type=left]"
+C command "setblock 206 150 200 charm:bamboo_chest[facing=north,type=right]"
+C command "setblock 199 150 200 minecraft:chest[facing=north]"
+C command "give @s charm:azalea_chest 1"
+C command "give @s charm:bamboo_chest 1"
+C command "give @s charm:trapped_acacia_chest 1"
+C command "give @s charm:ebony_chest 1"
+C command "give @s minecraft:chest 1"
+C command "tp @s 202.5 151 196.5 0 25"
+C wait 60
+C screenshot "$shots\charm-chests.png"
+C command "tp @s 203.5 150 198.2 0 30"
+C wait 20
+C use-item
+C wait 30
+C screenshot "$shots\charm-chest-open.png"
+C key esc tap
+C wait 20
+C command "tp @s 202.5 151 196.5 0 25"
+C wait 10
+C screenshot "$shots\charm-chests-after.png"
+C logs --lines 25

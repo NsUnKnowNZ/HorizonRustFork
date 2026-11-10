@@ -16,21 +16,17 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/prune_compat.py .local/setup/charm_chest_items.py .local/setup/body-ui2.txt .local/setup/body-ui.txt .local/setup/body-chest.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
+git add -f .local/setup/prune_compat.py .local/setup/charm_chest_items.py .local/setup/body-ui2.txt .local/setup/body-charm.txt .local/setup/body-ui.txt .local/setup/body-chest.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-Fixes found while playing with resource and shader packs on
+A content mod's wood chests are drawn (Charm's azalea, bamboo, acacia...)
 
-- chests: a pack's chest .jem that is posed by its animations (Fresh Animations)
-  keeps vanilla's model; block entities don't run CEM animations yet, and the
-  unposed model lay upside down in the floor
-- shader packs: after a pack loses the graphics device only that pack is off until
-  a restart; before, no other pack loaded either
-- Crafting Tweaks: on the crafting table the buttons sit over the arrow, clear of
-  the recipe book button
-- prune_compat.py: lists (and with --apply moves out) content-mod blocks made for
-  mods that are not installed; Bits and Balance had 1,351 of them, blank in JEI
-- ledger updated
+- block_entity_render: `<namespace>:<wood>_chest` and `trapped_<wood>_chest` are
+  chests, drawn from `<namespace>:entity/chest/<wood>_normal` or `_trapped` and
+  the double chest's `_left` and `_right`
+- hud: the chests atlas takes files from every namespace, not only Minecraft's
+- item_render: a special chest model's namespaced texture finds its sprite
+- old test-game cache folders removed from the working machine (not tracked)
 
 Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
@@ -48,11 +44,11 @@ $env:CARGO_TARGET_DIR = "$env:TEMP\horizon-verify-target"
 (Get-Process -Id $PID).PriorityClass = "BelowNormal"
 & cargo check --locked -p horizon-client 2>&1 | ForEach-Object { "$_" } | Select-String -Pattern "^error|Finished|-->|could not|failed|panicked" | Select-Object -First 40 | ForEach-Object { "$_" }
 "CLEAN CHECK EXIT $LASTEXITCODE"
-& cargo test --locked -p horizon-client-render --lib block_entity_cem 2>&1 | ForEach-Object { "$_" } | Select-String -Pattern "^error|test result|FAILED|panicked|failed" | Select-Object -First 20 | ForEach-Object { "$_" }
-"CEM TESTS EXIT $LASTEXITCODE"
 Pop-Location
 Remove-Item Env:CARGO_TARGET_DIR
 git worktree remove --force $wt 2>&1 | ForEach-Object { "$_" }
 Remove-Item -Recurse -Force "$env:TEMP\horizon-verify-target" -ErrorAction SilentlyContinue
 git status --short --untracked-files=no 2>&1 | Select-Object -First 20 | ForEach-Object { "$_" }
+"--- old content caches"
+Get-ChildItem .horizon-cache\mod-content -Directory | Sort-Object LastWriteTime -Descending | Select-Object -Skip 3 | ForEach-Object { Remove-Item -Recurse -Force $_.FullName; "removed cache $($_.Name)" }
 "=== JOB DONE"

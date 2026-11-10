@@ -667,7 +667,11 @@ fn atlas_sprites(root: &Path, packed: &[PackedImage]) -> (Vec<PackedImage>, Vec<
     for (atlas, sources) in atlas_sources::atlases(root) {
         // The other atlases' renamed files (GUI sprites, particles...) are
         // looked up by their texture paths here.
-        let item_models = atlas == "minecraft:blocks" || atlas == "minecraft:items";
+        // The chests atlas too: a content mod's chests (`charm:entity/chest/azalea_normal`)
+        // are drawn by the chest renderer from files no walked folder holds.
+        let item_models = atlas == "minecraft:blocks"
+            || atlas == "minecraft:items"
+            || atlas == "minecraft:chests";
         for (id, origin) in atlas_sources::list(&sources, &textures) {
             if !item_models && matches!(origin, SpriteOrigin::File(_)) {
                 continue;

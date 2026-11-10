@@ -108,7 +108,8 @@ Horizon source changes (allowed since 2026-11-08) live as uncommitted edits unde
   - Chests were drawn upside down in the floor with Fresh Animations' `FA+All_Extensions`: its chest `.jem` is posed by its animations, which block entities don't run yet. Such a file now keeps vanilla's model (`block_entity_cem.rs`).
   - After a shader pack lost the graphics device, no other pack loaded until a restart: only the pack that lost it is turned off now (`game/shader_packs.rs`).
   - Changing the enabled mods or resource packs rebuilds `.horizon-cache/mod-content` on the next start (about 3 minutes on the test PC) with no progress shown; closing the window starts it over.
-  - Still open: items with no model in other content mods (charm 2, chipped 6, supplementaries 16, suppsquared 3, mutantmonsters 1: `prune_compat.py` lists them); Handcrafted chairs show as not craftable in the recipe book with their ingredients in the inventory.
+  - Still open: Charm's wood chests (azalea, bamboo, acacia...) are invisible as blocks and as items: the block entity renderer and the chest atlas know only Minecraft's own chests (their item definitions are already the special chest model, `.local/setup/charm_chest_items.py`); items with no model in other content mods (charm 2 spawn eggs, chipped 6, supplementaries 16, suppsquared 3, mutantmonsters 1: `prune_compat.py` lists them).
+  - Checked and fine: the recipe book places a Handcrafted chair's recipe (slab, planks, sticks) and gives 2 chairs; without the slab it shows the red ghost recipe, as vanilla does.
 
 ## Extra — asked for, not in the pack
 | Feature | Status | Notes |
