@@ -1,0 +1,36 @@
+Launch
+Platform
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "setblock 200 150 205 farmersdelight:stove[facing=south,lit=true]"
+C command "setblock 200 151 205 farmersdelight:cooking_pot[facing=south]"
+C command "setblock 202 150 205 farmersdelight:cutting_board[facing=south]"
+C command "item replace block 202 150 205 container.0 with farmersdelight:tomato"
+C command "item replace entity @s hotbar.4 with minecraft:bowl 4"
+C command "tp @s 202.5 150 204.3 0 60"
+C wait 40
+C select 9
+C mouse right click
+C wait 10
+C command "data get block 202 150 205"
+C command "data get entity @s Inventory"
+C command "tp @s 200.5 150 203 0 30"
+C command "item replace block 200 151 205 container.0 with minecraft:beef"
+C command "item replace block 200 151 205 container.1 with minecraft:carrot"
+C command "item replace block 200 151 205 container.2 with minecraft:potato"
+C wait 100
+C select 5
+C interact 200 151 205 north
+C wait 10
+C screenshot "$shots\zoom-0-pot.png"
+C close
+C command "tp @s 203.5 152 190.5 0 5"
+C wait 20
+C screenshot "$shots\zoom-1-off.png"
+C key c down
+C wait 30
+C screenshot "$shots\zoom-2-on.png"
+C key c up
+C wait 30
+C screenshot "$shots\zoom-3-off.png"

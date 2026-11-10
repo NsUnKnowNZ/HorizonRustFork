@@ -1,0 +1,55 @@
+Launch
+Platform
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "setblock 200 150 205 farmersdelight:stove[facing=south,lit=true]"
+C command "setblock 200 151 205 farmersdelight:cooking_pot[facing=south]"
+C command "setblock 202 150 205 farmersdelight:cutting_board[facing=south]"
+C command "item replace entity @s hotbar.0 with farmersdelight:cabbage 3"
+C command "item replace entity @s hotbar.1 with farmersdelight:iron_knife"
+C command "item replace entity @s hotbar.2 with minecraft:oak_log 2"
+C command "item replace entity @s hotbar.4 with minecraft:bowl 4"
+C command "item replace entity @s hotbar.5 with minecraft:iron_axe"
+C command "tp @s 202.5 150 204.3 0 60"
+C wait 40
+C select 1
+C mouse right click
+C wait 10
+C command "data get block 202 150 205"
+C screenshot "$shots\fdm3-1-board.png"
+C select 2
+C mouse right click
+C wait 20
+C command "data get block 202 150 205"
+C entities
+C command "data get entity @s Inventory"
+C select 3
+C mouse right click
+C wait 10
+C screenshot "$shots\fdm3-2-log.png"
+C select 6
+C mouse right click
+C wait 10
+C entities
+C select 1
+C mouse right click
+C wait 5
+C select 5
+C mouse right click
+C wait 5
+C command "data get block 202 150 205"
+C command "data get entity @s Inventory"
+C command "tp @s 200.5 150 203 0 30"
+C command "item replace block 200 151 205 container.0 with minecraft:brown_mushroom"
+C command "item replace block 200 151 205 container.1 with minecraft:red_mushroom"
+C wait 260
+C select 5
+C interact 200 151 205 north
+C wait 10
+C command "data get block 200 151 205"
+C close
+C interact 200 151 205 north
+C wait 20
+C screenshot "$shots\fdm3-3-pot.png"
+C close

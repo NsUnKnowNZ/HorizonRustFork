@@ -7,7 +7,7 @@ if (Test-Path server-oneblock\engine) {
   Copy-Item .local\native\target\fast\horizon-client.exe server-oneblock\engine\horizon-client.exe -Force
   "engine copied"
 }
-foreach ($m in 'bedrockify','biome_paint','bitsandbalance','camerapture','charm','chipped','handcrafted','diversity','horizonportals','more_babies','mutantmonsters','puddleflood','supplementaries','suppsquared','yo_hooks') {
+foreach ($m in 'bedrockify','biome_paint','bitsandbalance','camerapture','charm','chipped','handcrafted','diversity','horizonportals','farmersdelight','more_babies','mutantmonsters','puddleflood','supplementaries','suppsquared','yo_hooks') {
   & robocopy "horizon-mods\$m" "server-oneblock\horizon-mods\$m" /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
 }
 Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
@@ -16,26 +16,35 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .gitignore .local/native/mods/xaeroworldmap .local/setup/body-xmap.txt crates/horizon-client-render/src/world_map.rs
+git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .local/native/mods/farmersdelight .local/native/mods/cinematiczoom .local/setup/body-fdm3.txt .local/setup/body-zoom.txt
 git add -u -- "Play OneBlock Fresh (modded).bat" 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-Xaero's World Map for Horizon, on an engine world map store
+Farmer's Delight kitchen blocks and Cinematic Zoom for Horizon
 
-horizon_client::world_map: a tile of map colours per chunk the player has seen
-(scanned as the minimap's: MapItem.update's colour, height and water depth),
-kept in region files of 32 by 32 chunks (r.<x>.<z>.hmap) and loaded as the
-map is looked at; compose() draws any area at any zoom, shaded as a map item.
+Farmer's Delight (a native mod over the farmersdelight content mod, written
+from its documented behaviour and its own recipes, tags, sounds and GUI
+texture; none of its code):
+- cutting board: holds one item; the tool a farmersdelight:cutting recipe
+  names cuts it (results pop out, the tool wears, the recipe's sound); an
+  empty hand takes it back. Items lie flat, blocks stand on it.
+- stove: lit when placed, relit by flint and steel or a fire charge, put
+  out by a shovel; six campfire-cookable items cook on its top and pop out.
+- cooking pot: six ingredients become a farmersdelight:cooking meal over a
+  heat source (farmersdelight:heat_sources, lit); the meal moves to the
+  output once its container is in place, or is served with it in hand. Its
+  own menu type and screen (progress arrow, heat flame); hoppers fill it
+  from the top and side and empty it from below; a tray over a fire.
+- Nourishment keeps hunger from going down; Comfort heals with no
+  saturation left.
 
-Xaero's World Map (a native mod, written from its documented behaviour): the
-chunks round the player go on the map as they load (the Nether's floor under
-its roof), saved under xaero/world-map/<world>/<dimension>/ every ten seconds
-and on leaving. M opens it full screen: drag to move, scroll to zoom (1/8 to
-16 blocks a pixel), Space back to the player; the player's arrow, the block
-under the pointer and its height.
+Cinematic Zoom (written from its documented behaviour): hold C to glide in,
+cinematic camera and letterbox bars while zoomed, the wheel sets 2x to 10x.
 
-Tested: the map of the test world opened, moved, zoomed out to 1:4, and was
-saved (r.0.0.hmap) within fifteen seconds of play.
+Tested in the test world: cabbage cut into two leaves with a knife, an oak
+log stripped with an axe (bark too), raw beef cooked on the stove, mushroom
+stew and beef stew cooked in the pot over a stove and served into a bowl,
+a placed stove lit; the zoom and its bars in and out.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
@@ -65,6 +74,9 @@ git status --short --untracked-files=no 2>&1 | Select-Object -First 20 | ForEach
 "=== JOB DONE"
 
 & "$PSScriptRoot\make-game-folder.ps1" 2>&1 | ForEach-Object { "$_" }
+
+$hm = 'D:\HorizonOneBlock\horizon-mods.txt'
+if ((Test-Path $hm) -and -not (Select-String -Path $hm -Pattern '^mod\.farmersdelight:' -Quiet)) { Add-Content $hm 'mod.farmersdelight:true'; "game folder: Farmer's Delight on" }
 # Fresh Animations' extensions need the base pack under them, and the extensions that match it.
 $o = 'D:\HorizonOneBlock\options.txt'
 if (Test-Path $o) {
