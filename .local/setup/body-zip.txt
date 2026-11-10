@@ -1,0 +1,1 @@
+& "$PSScriptRoot\make-friend-zip.ps1" 2>&1 | ForEach-Object { "$_" }

@@ -14,73 +14,71 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 (Get-Content server-oneblock\horizon-mods.txt) | Where-Object { $_ -notmatch "^mod.(beb|ambientsounds|sounds):" } | Set-Content server-oneblock\horizon-mods.txt
 "server mods synced"
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
-git add -- crates/horizon-client/src/game/control.rs crates/horizon-client/src/bin/horizon-ctl/commands.rs docs/horizon-ctl-commands.md 2>&1 | ForEach-Object { "$_" }
-git diff --cached --stat 2>&1 | Select-Object -Last 5 | ForEach-Object { "$_" }
+& rustfmt --edition 2024 crates/horizon-client/src/game/lan_entities.rs crates/horizon-client/src/game/native_world_draw.rs crates/horizon-client/src/game/commands/data.rs crates/horizon-shaders/src/post.rs crates/horizon-client-render/src/gfx.rs 2>&1 | Select-Object -First 8 | ForEach-Object { "$_" }
+"rustfmt exit $LASTEXITCODE"
+git add -u -- crates 2>&1 | ForEach-Object { "$_" }
+git diff --cached --stat 2>&1 | Select-Object -Last 12 | ForEach-Object { "$_" }
 $msg = @"
-horizon-ctl: the Left Alt key
+Shader packs: see-through text, text displays and mod draws; display data
 
-``key alt`` (or ``lalt``) holds, taps and releases Left Alt, so a harness
-can drive what a native mod reads from the keys held (Cinematic
-Interactions shows the player at their station while it is down).
+Three things were missing or wrong under a shader pack, and two about
+display entities with or without one.
+
+- See-through text (a name tag's copy through walls, a text display with
+  see_through) was drawn by Horizon into its own picture with no depth,
+  and the pack's programs then drew over it wherever nothing had written
+  depth: it never showed under any pack. It is now drawn over the pack's
+  picture, before the hand.
+- Translucent entity parts drawn by a program that does not blend keep
+  the cutout test at 0.1. Bliss turns gbuffers_entities_translucent off
+  by default and falls back to gbuffers_entities, whose output alpha
+  packs the lightmap beside the texel's alpha, so the test at 0 passed
+  every texel: text displays were solid boxes of their colour.
+- A native mod's world draws go to the pack's block-entity program
+  instead of Horizon's own draw, which a pack with packed gbuffers
+  (Bliss, Photon) never showed; text, shadows and the other special
+  layers stay Horizon's.
+- A text display's ``score`` text pieces show the score, resolved when
+  its data is sent (Display.TextDisplay resolves its text for the
+  entity).
+- ``data modify entity`` on a text, block or item display applies; it
+  failed for every kept entity but a marker.
+
+Tested offscreen with screenshots under Bliss, BSL, Complementary
+Reimagined, Photon and no pack: a text display, a see-through one with
+a score piece recoloured by data modify, and Cinematic Interactions'
+items on a crafting table.
 
 Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
 "@
 [IO.File]::WriteAllText("$PWD\.local\setup\commit-msg.txt", $msg)
 git commit -F .local\setup\commit-msg.txt 2>&1 | Select-Object -First 6 | ForEach-Object { "$_" }
-git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/native/mods/cinematic_interactions .local/setup/body-ci1.txt .local/setup/body-ci2.txt .local/setup/body-ci3.txt .local/setup/body-ci4.txt .local/setup/body-ci5.txt .local/setup/body-ci5b.txt .local/setup/body-ci6.txt .local/setup/body-ci7.txt .local/setup/body-ob1.txt .local/setup/body-ob2.txt 2>&1 | ForEach-Object { "$_" }
+git add -f .local/setup/job-commit.ps1 .local/setup/make-friend-zip.ps1 .local/setup/body-zip.txt .local/native/mods/cinematic_interactions .local/setup/body-obnew.txt .local/setup/body-shpack.txt .local/setup/body-dbg.txt .local/setup/body-dbg2.txt .local/setup/body-hand.txt 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-Cinematic Interactions for Horizon; the OneBlock bar for every player
+Cinematic Interactions: the player's arm in the scene; OneBlock's displays
 
-Cinematic Interactions (written from its page; none of its code), a
-native mod: a right click on a workstation flies the camera to it, hides
-the HUD behind letterbox bars and puts the inventory in a panel below;
-the station is worked in the world. Escape, E, a movement key or jump
-flies back, Left Alt shows the player at the station, a click on a
-station nearby glides over to it, and sneak + right click still opens
-the usual menu.
+Cinematic Interactions (from its public description; none of its code):
+the player's own arm, with their skin, reaches into every scene but the
+lectern's. The hand follows the pointer over the station, holds the
+stack picked up, presses down on a click, and takes the hammer's handle
+at the anvil, whose blow shakes the view. What it lets go of drops the
+last of the way onto the table. The icon on the pointer and the icons
+flying to the station give way to the hand while it is out.
 
-- Crafting table: its top is the 3x3 grid; what lies on it stays, every
-  player sees it and it drops with the table (a synced chunk
-  attachment). A recipe guide lists what can be crafted, searches by
-  name, marks what is missing and lays a recipe out from the inventory.
-- Furnace, smoker, blast furnace, brewing stand, campfire: their slots
-  are parts of the block to click; meters show the fire, the cooking and
-  the brew, whose ingredient shrinks into the bottles. H by a campfire
-  sits the player down beside it.
-- Anvil, grindstone, smithing table, stonecutter, loom, cartography
-  table: stacks laid on them stay in the inventory, the result floats
-  over the station and a click makes it, paying what the menu would.
-- Enchanting table: the three offers for the item and lapis laid on it,
-  from the player's own enchantment seed; the item rises to the book as
-  it is enchanted.
-- Lectern: its book opens over it; the pages turn (the block's page and
-  redstone pulse follow), Take Book takes it.
-- Jukebox and chiseled bookshelf: discs and books go in and come out by
-  clicks; the disc sinks into the jukebox.
-- Crafter: its grid lies on its top; an empty cell clicked turns off or
-  on. Beacon: a payment laid before it, its powers picked and confirmed.
+OneBlock: the converter turns ``text set value '{json}'`` into a text
+compound (1.21.5's form), so the pack's hint and its upgrade countdown
+keep their text when the pack updates them.
 
-Tested offscreen, station by station: a pickaxe crafted and a recipe
-laid out; iron smelted and its experience paid; three water bottles
-brewed awkward; a sword mended on the anvil for 2 levels, its sharpness
-ground off, a diamond sword smithed to netherite, stone cut; an iron
-sword enchanted for 1 level and 1 lapis; a lectern's page turned and its
-book taken; a disc played and taken back; two books shelved; a red
-pattern woven on a banner; a crafter's cell filled and another turned
-off; a beacon given Speed for an ingot.
-
-OneBlock: the pack turned its progress bar on, and enabled its settings
-trigger, only for players whose first join was in spectator. Anyone
-joining in survival, or under a new name (scores go by name), had
-neither. The converter now adds a tick line and a function that give
-every player without a setting the bar and the trigger; a player who
-turns it off keeps it off. Tested on a copy of a world under a new name:
-the bar showed on the next block, the settings opened, off and on again
-worked.
+The game folder for friends: make-friend-zip.ps1 zips the clean game
+folder without the worlds, the player's own files, the shader packs and
+bin\resources (Minecraft's assets). "Horizon OneBlock.exe" then starts
+the game with the resources that player prepared themselves: the folder
+named in horizon-resources.txt, a Horizon source folder near the game
+folder, or the Horizon launcher's; with none it opens a note that says
+what to do. --find-resources only writes down which it would use.
 
 Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
@@ -107,4 +105,6 @@ Remove-Item -Recurse -Force "$env:TEMP\horizon-verify-target" -ErrorAction Silen
 git status --short --untracked-files=no 2>&1 | Select-Object -First 20 | ForEach-Object { "$_" }
 "=== JOB DONE"
 
-& "$PSScriptRoot\make-game-folder.ps1" 2>&1 | ForEach-Object { "$_" }
+$made = & "$PSScriptRoot\make-game-folder.ps1" 2>&1 | ForEach-Object { "$_" }
+$made
+if ($made -match 'GAME FOLDER DONE') { & "$PSScriptRoot\make-friend-zip.ps1" 2>&1 | ForEach-Object { "$_" } } else { "the friends' zip was left as it is: the game folder was not refreshed" }

@@ -1,0 +1,27 @@
+"--- a new OneBlock world, made here and then put in the game folder"
+$name = "OneBlock"
+$w = "$repo\saves\$name"
+if (Test-Path $w) { Remove-Item -Recurse -Force $w }
+New-Item -ItemType Directory -Force "$w\datapacks" | Out-Null
+& robocopy "$repo\server-oneblock\oneblock\datapacks" "$w\datapacks" /E /NFL /NDL /NJH /NJS /NP | Out-Null
+"datapacks: $((Get-ChildItem "$w\datapacks").Name -join ', ')"
+C launch --world $name --wait --offscreen
+for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+"ready after $($i*5)s more"
+Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = "Normal" }
+C wait 100
+C command "data get entity @s Pos"
+C command "data get entity @s playerGameType"
+C command "scoreboard players get @s ob-progressbar"
+C command "execute if block 0 60 0 minecraft:air run say the block is missing"
+C look 90 50
+C wait 20
+C screenshot "$shots\obnew-1.png"
+C command "data get entity @s Inventory"
+C quit
+Start-Sleep 8
+Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; "closed" }
+Remove-Item -Force "$w\session.lock" -ErrorAction SilentlyContinue
+$dst = "D:\HorizonOneBlock\saves\$name"
+if (Test-Path $dst) { "the game folder already has a world named ${name}, left alone" }
+else { Move-Item $w $dst; "world moved to ${dst} - $(Test-Path "$dst\level.dat")" }

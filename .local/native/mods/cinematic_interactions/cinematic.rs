@@ -27,6 +27,10 @@
 //    the pattern picked; the cartography table copies, zooms out and locks maps; the crafter's grid
 //    lies on its top (a click on an empty cell with nothing picked turns it off or on); the beacon
 //    takes its payment and the powers picked.
+//  - The player's own arm (their skin) reaches into every scene but the lectern's: the hand follows
+//    the pointer over the station, holds the stack picked up, presses down on a click and takes
+//    the hammer's handle at the anvil, whose blow shakes the view. What it lets go of drops the
+//    last of the way onto the table.
 //  - Hold Left Alt to see yourself at the table. A click on another crafting table nearby glides
 //    the camera over to it. Escape, E, a movement key or jump flies back; coming back soon after
 //    is quicker. Sneak + right click opens the usual crafting menu, and so does a table with no
@@ -318,6 +322,16 @@ struct Client {
     tables: Vec<Table>,
     /// What the station worked holds, as the server sent it.
     view: Option<View>,
+    /// The pointer, in GUI pixels.
+    mouse: [f32; 2],
+    /// The hand in the scene: where it is, when it last moved, when it last pressed down, and
+    /// whether it is out over the station (else it rests out of sight).
+    hand: Option<[f64; 3]>,
+    hand_at: Option<Instant>,
+    tap: Option<Instant>,
+    hand_out: bool,
+    /// The table cells an item just landed on, and when.
+    landed: Vec<([i32; 3], usize, Instant)>,
 }
 
 /// A station's slots and numbers (a furnace's fire and cooking, a brewing stand's brew and fuel),
@@ -344,6 +358,12 @@ static CLIENT: Mutex<Client> = Mutex::new(Client {
     left: None,
     tables: Vec::new(),
     view: None,
+    mouse: [0.0, 0.0],
+    hand: None,
+    hand_at: None,
+    tap: None,
+    hand_out: false,
+    landed: Vec::new(),
 });
 
 fn client<T>(f: impl FnOnce(&mut Client) -> T) -> T {
@@ -482,6 +502,14 @@ fn scene_pose(c: &Client, s: &Scene) -> Pose {
     let k = progress(s);
     pose.1 += c.lean[0] * 1.2 * k;
     pose.2 += c.lean[1] * 0.8 * k;
+    // The hammer landing on the anvil shakes the view.
+    if s.kind == Kind::Anvil
+        && let Some(t) = s.strike.map(|at| at.elapsed().as_secs_f32() - 0.42).filter(|t| (0.0..0.25).contains(t))
+    {
+        let fade = 1.0 - t / 0.25;
+        pose.1 += (t * 65.0).cos() * 0.3 * fade;
+        pose.2 += (t * 80.0).sin() * 0.5 * fade;
+    }
     if c.peek > 0.0 {
         pose = lerp_pose(pose, peek_pose(c.player, s.pos), smooth(c.peek));
     }
@@ -957,6 +985,21 @@ pub(crate) fn client_tick(game: &mut Game<'_>) {
         }
     }
     client(|c| {
+        // What was just laid on the scene's table drops onto it.
+        let now = Instant::now();
+        c.landed.retain(|l| now.duration_since(l.2).as_secs_f32() < 1.0);
+        if let Some(at) = c.scene.as_ref().map(|s| s.pos)
+            && let Some(new) = seen.iter().find(|t| t.pos == at)
+        {
+            let old = c.tables.iter().find(|t| t.pos == at);
+            for (cell, stack) in new.items.iter().enumerate() {
+                let Some(stack) = stack else { continue };
+                let was = old.and_then(|t| t.items.get(cell)).and_then(Option::as_ref);
+                if was.is_none_or(|w| w.item != stack.item || w.count < stack.count) {
+                    c.landed.push((at, cell, now));
+                }
+            }
+        }
         if every {
             c.tables = seen;
         } else {
@@ -1106,6 +1149,7 @@ pub(crate) fn screen_draw(game: &Game<'_>, batch: &mut HudBatch, view: &NativeSc
     let Some((pose, pos, kind, facing, carried, entered, k, typing, search, page, chosen)) = client(|c| {
         c.size = size;
         c.fov = fov;
+        c.mouse = mouse;
         // The camera leans a little towards the pointer.
         let now = Instant::now();
         let dt = c.lean_at.map_or(0.0, |t| now.duration_since(t).as_secs_f32()).min(0.1);
@@ -1212,9 +1256,14 @@ pub(crate) fn screen_draw(game: &Game<'_>, batch: &mut HudBatch, view: &NativeSc
     draw_guide(game, batch, at, mouse, &grid, &search, typing, page, chosen.as_deref(), recipe.as_deref(), time);
     // Items flying between the panel and the table.
     client(|c| {
+        // The hand carries what goes to the station; only what comes back flies.
+        let carries = c.hand_out;
         if let Some(s) = c.scene.as_mut() {
             s.flights.retain(|f| f.start.elapsed().as_secs_f32() < FLIGHT);
             for f in &s.flights {
+                if carries && inside(panel(size), [SLOT * 9.0 + 8.0, SLOT * 4.0 + 12.0], f.from) {
+                    continue;
+                }
                 let t = smooth(f.start.elapsed().as_secs_f32() / FLIGHT);
                 let arc = (t * std::f32::consts::PI).sin() * 30.0;
                 let p = [f.from[0] + (f.to[0] - f.from[0]) * t - 8.0, f.from[1] + (f.to[1] - f.from[1]) * t - 8.0 - arc];
@@ -1224,6 +1273,7 @@ pub(crate) fn screen_draw(game: &Game<'_>, batch: &mut HudBatch, view: &NativeSc
     });
     // The stack picked up, on the pointer.
     if let Some(slot) = carried
+        && !client(|c| c.hand_out)
         && let Some(Some(stack)) = game.inventory.get(slot)
     {
         draw_stack(game, batch, stack, [mouse[0] - 8.0, mouse[1] - 8.0]);
@@ -1347,6 +1397,11 @@ pub(crate) fn press(game: &Game<'_>, view: &NativeScreenView<'_>, button: i32, m
     if !ready {
         return;
     }
+    // The hand presses down where the pointer is.
+    client(|c| {
+        c.mouse = mouse;
+        c.tap = Some(Instant::now());
+    });
     if kind != Kind::Table {
         station_press(game, mouse, button, pos);
         return;
@@ -1569,6 +1624,7 @@ pub(crate) fn drag(game: &Game<'_>, view: &NativeScreenView<'_>, button: i32, ca
             let o = panel(size);
             s.flights.push(Flight { item: stack.item.to_string(), from: slot_middle(o, slot), to, start: Instant::now() });
         }
+        c.tap = Some(Instant::now());
         send(c, PLACE, pos, facing, cell as u8, slot as u8, &[1]);
     });
 }
@@ -1647,8 +1703,9 @@ pub(crate) fn world_submit(game: &Game<'_>, draw: &mut super::native_world_draw:
     if !game.native_on(ID) {
         return;
     }
-    let (tables, scene) = client(|c| {
-        (c.tables.clone(), c.scene.as_ref().filter(|s| s.leaving.is_none() && s.kind == Kind::Table).map(|s| (s.pos, s.facing)))
+    draw_hand(game, draw);
+    let (tables, scene, landed) = client(|c| {
+        (c.tables.clone(), c.scene.as_ref().filter(|s| s.leaving.is_none() && s.kind == Kind::Table).map(|s| (s.pos, s.facing)), c.landed.clone())
     });
     let time = game.world.game_time as f32 + draw.partial;
     for table in &tables {
@@ -1662,6 +1719,11 @@ pub(crate) fn world_submit(game: &Game<'_>, draw: &mut super::native_world_draw:
             let c = cell_center(pos, table.facing, cell);
             let seed = (cell * 3) as i32;
             let (scale, lift, block) = fitted(game, stack, 0.19, seed);
+            // What the hand just let go of drops the last of the way.
+            let fall = landed.iter().rev().find(|l| l.0 == pos && l.1 == cell).map_or(0.0, |l| {
+                let t = l.2.elapsed().as_secs_f32() / 0.2;
+                if t < 1.0 { f64::from((1.0 - t) * (1.0 - t)) * 0.09 } else { 0.0 }
+            });
             // A pile of flat items shows a few lying on each other; a block, one.
             let copies = match (block, stack.count) {
                 (true, _) | (false, 0 | 1) => 1,
@@ -1670,7 +1732,8 @@ pub(crate) fn world_submit(game: &Game<'_>, draw: &mut super::native_world_draw:
             };
             for n in 0..copies {
                 draw.push();
-                if draw.translate_world([c[0], c[1] + 0.002 + f64::from(lift) + n as f64 * 0.01, c[2]]) {
+                let fall = if n + 1 == copies { fall } else { 0.0 };
+                if draw.translate_world([c[0], c[1] + 0.002 + f64::from(lift) + n as f64 * 0.01 + fall, c[2]]) {
                     draw.light = horizon_client::block_entity_render::vertex_light(light);
                     let jitter = if block { 0.0 } else { ((cell * 37 + n * 23) % 30) as f32 - 15.0 };
                     draw.rotate_about([0.0, 1.0, 0.0], 180.0 - facing_yaw(table.facing) - jitter, [0.0, 0.0, 0.0]);
@@ -1710,6 +1773,192 @@ pub(crate) fn world_submit(game: &Game<'_>, draw: &mut super::native_world_draw:
         let (scale, _, _) = fitted(game, &result, 0.32, 99);
         draw.scale([scale, scale, scale]);
         game.native_draw_item(&mut *draw, &result, DisplayContext::Fixed, None, 99);
+    }
+    draw.pop();
+}
+
+// ---- the hand ----
+
+/// Where the player's hand goes in the scene: over the part of the station under the pointer, or
+/// to the hammer's handle while it strikes. None rests it out of sight.
+fn hand_goal(game: &Game<'_>, c: &Client, s: &Scene, pose: Pose) -> Option<[f64; 3]> {
+    if !settled(s) || c.peek > 0.0 || s.typing || s.kind == Kind::Lectern {
+        return None;
+    }
+    let (size, fov, mouse) = (c.size, c.fov, c.mouse);
+    if size[0] < 1.0 {
+        return None;
+    }
+    let time = game.world.game_time as f32 / 20.0;
+    // A little short of a point, on the eye's side of it.
+    let towards = |p: [f64; 3], by: f64| {
+        let d = [pose.0[0] - p[0], pose.0[1] - p[1], pose.0[2] - p[2]];
+        let len = dot(d, d).sqrt().max(1e-6);
+        [p[0] + d[0] / len * by, p[1] + d[1] / len * by, p[2] + d[2] / len * by]
+    };
+    if s.kind == Kind::Anvil
+        && let Some(at) = s.strike
+        && at.elapsed().as_secs_f32() < 0.45
+    {
+        let item = spots(s.kind, s.pos, s.facing).first()?.0;
+        let yaw = f64::from(facing_yaw(s.facing)).to_radians();
+        return Some([item[0] - yaw.cos() * 0.2, item[1] + 0.2, item[2] - yaw.sin() * 0.2]);
+    }
+    if inside(panel(size), [SLOT * 9.0 + 8.0, SLOT * 4.0 + 12.0], mouse) {
+        return None;
+    }
+    let near = |p: [f64; 3]| project(pose, fov, size, p).is_some_and(|q| (q[0] - mouse[0]).hypot(q[1] - mouse[1]) < 30.0);
+    if matches!(s.kind, Kind::Table | Kind::Crafter) {
+        if s.kind == Kind::Table && inside(book(size), BOOK, mouse) {
+            return None;
+        }
+        let result = result_point(s.pos, s.facing, time);
+        if near(result) {
+            return Some(towards(result, 0.14));
+        }
+        let top = f64::from(s.pos[1]) + 1.0;
+        let p = pointer_on(pose, fov, size, mouse, top)?;
+        let (dx, dz) = (p[0] - f64::from(s.pos[0]) - 0.5, p[2] - f64::from(s.pos[2]) - 0.5);
+        return (dx.abs() < 0.6 && dz.abs() < 0.6).then_some([p[0], top + 0.11, p[2]]);
+    }
+    let list = spots(s.kind, s.pos, s.facing);
+    if let Some(i) = spot_under(pose, fov, size, &list, mouse) {
+        return Some(towards(list[i].0, 0.14));
+    }
+    let result = result_spot(s.kind, s.pos, s.facing, time);
+    if near(result) {
+        return Some(towards(result, 0.14));
+    }
+    // Anywhere else on the station: just off its surface.
+    let ray = pointer_ray(pose, fov, size, mouse);
+    let min = [f64::from(s.pos[0]), f64::from(s.pos[1]), f64::from(s.pos[2])];
+    let k = ray_box(pose.0, ray, min, [min[0] + 1.0, min[1] + 1.0, min[2] + 1.0])?;
+    Some(towards([pose.0[0] + ray[0] * k, pose.0[1] + ray[1] * k, pose.0[2] + ray[2] * k], 0.12))
+}
+
+/// The player's own arm, from the lower corner of the view to where the hand is: it follows the
+/// pointer over the station, holds the stack picked up, and presses down on a click.
+fn draw_hand(game: &Game<'_>, draw: &mut super::native_world_draw::NativeWorldDraw) {
+    use glam::{DVec3, Mat4, Vec3};
+    let left = game.settings.main_hand_left;
+    let side = if left { -1.0 } else { 1.0 };
+    let Some((pose, hand, carried, flat)) = client(|c| {
+        let s = c.scene.as_ref()?;
+        if s.leaving.is_some() {
+            c.hand = None;
+            c.hand_out = false;
+            return None;
+        }
+        let pose = scene_pose(c, s);
+        let goal = hand_goal(game, c, s, pose);
+        let (carried, flat) = (s.carried, matches!(s.kind, Kind::Table | Kind::Crafter));
+        let (f, r, u) = basis(pose.1, pose.2);
+        let rest = [0, 1, 2].map(|i| pose.0[i] + f[i] * 0.45 + r[i] * 0.5 * side - u[i] * 1.05);
+        let now = Instant::now();
+        let dt = c.hand_at.map_or(0.0, |t| now.duration_since(t).as_secs_f32()).min(0.1);
+        c.hand_at = Some(now);
+        let (from, to) = (c.hand.unwrap_or(rest), goal.unwrap_or(rest));
+        let k = f64::from(1.0 - (-dt * 13.0).exp());
+        let mut hand = [0, 1, 2].map(|i| from[i] + (to[i] - from[i]) * k);
+        c.hand = Some(hand);
+        c.hand_out = goal.is_some();
+        // At rest it is out of sight: nothing to draw.
+        if goal.is_none() && (0..3).map(|i| (hand[i] - rest[i]).powi(2)).sum::<f64>() < 0.0009 {
+            return None;
+        }
+        // A click presses it down, away from the eye.
+        if let Some(t) = c.tap.map(|t| t.elapsed().as_secs_f32() / 0.22).filter(|t| *t < 1.0) {
+            let dip = f64::from((t * std::f32::consts::PI).sin()) * 0.075;
+            hand = [0, 1, 2].map(|i| hand[i] + f[i] * dip);
+        }
+        Some((pose, hand, carried, flat))
+    }) else {
+        return;
+    };
+    let slim = game.player_model.as_ref().is_some_and(|m| m.slim);
+    let Some(arm) = game.res.player_arm(slim, left).as_ref() else { return };
+    let (f, r, u) = basis(pose.1, pose.2);
+    let v = |a: [f64; 3]| DVec3::from_array(a);
+    let (eye, f, r, u, hand) = (v(pose.0), v(f), v(r), v(u), v(hand));
+    // The shoulder: below the view, on the hand's side.
+    let shoulder = eye + f * 0.5 + r * (0.46 * side) - u * 0.62;
+    let reach = hand - shoulder;
+    let len = reach.length();
+    if len < 0.05 {
+        return;
+    }
+    let d = reach / len;
+    // The back of the hand up, as the eye sees it.
+    let up = (u - d * u.dot(d)).try_normalize().unwrap_or(f);
+    let x = if left { up } else { -up };
+    let z = x.cross(d);
+    // The palm, in the arm's own frame: 9 of its 12 texels down from the shoulder's pivot.
+    let across = if slim { 0.5 } else { 1.0 } * if left { 1.0 } else { -1.0 };
+    let palm = Vec3::new((arm.pose[0] + across) / 16.0, (arm.pose[1] + 9.0) / 16.0, arm.pose[2] / 16.0);
+    // The arm at the size of a hand on the station, lying straight along its reach.
+    let size = 0.62f32;
+    let block = [hand.x.floor() as i32, hand.y.floor() as i32, hand.z.floor() as i32];
+    let light = horizon_client::block_entity_render::vertex_light(game.world.light(block[0], block[1], block[2]));
+    let sprites = &game.gui.atlas.sprites;
+    let skin = game
+        .player_model
+        .as_ref()
+        .and_then(|m| m.skin.as_deref())
+        .filter(|skin| sprites.contains_key(*skin))
+        .unwrap_or("entity/player/wide/steve");
+    let Some(rect) = sprites.get(skin).copied() else { return };
+    draw.push();
+    if draw.translate_world(hand.to_array()) {
+        let (xv, dv, zv) = (x.as_vec3(), d.as_vec3(), z.as_vec3());
+        let turn = Mat4::from_cols(xv.extend(0.0), dv.extend(0.0), zv.extend(0.0), glam::Vec4::W);
+        let m = draw.pose() * turn * Mat4::from_scale(Vec3::splat(size)) * Mat4::from_translation(-palm);
+        let straight = |p: &horizon_client::mobs::Part| {
+            let mut pose = p.pose;
+            pose[3] = 0.0;
+            pose[4] = 0.0;
+            pose[5] = 0.0;
+            pose
+        };
+        if m.is_finite() {
+            horizon_client::mobs::render_model(arm, m, &straight, [rect.u0, rect.v0, rect.u1, rect.v1], light, 0, draw.vertices_mut());
+        }
+        // Its sleeve goes on behind it as far as out of sight: the skin's rows at the shoulder,
+        // drawn out along the reach (the arm itself, then its outer layer).
+        draw.light = light;
+        let wide = if slim { 3.0f32 } else { 4.0 };
+        let far = -(len as f32 + 0.3);
+        let layers = [(if left { [32.0f32, 48.0] } else { [40.0, 16.0] }, 0.0f32), (if left { [48.0, 48.0] } else { [40.0, 32.0] }, 0.25)];
+        for (origin, grow) in layers {
+            let near = -(11.0 + grow) / 16.0 * size;
+            if far >= near {
+                break;
+            }
+            let (hx, hz) = ((wide / 2.0 + grow) / 16.0 * size, (2.0 + grow) / 16.0 * size);
+            // A box's four sides as a skin lays them out: its two side faces and its front and back.
+            let faces = [(xv, hx, hz, 0.0, 4.0), (-zv, hz, hx, 4.0, wide), (-xv, hx, hz, 4.0 + wide, 4.0), (zv, hz, hx, 8.0 + wide, wide)];
+            for (n, off, half, u, w) in faces {
+                let t = dv.cross(n);
+                let corner = |side: f32, y: f32| (n * off + t * (half * side) + dv * y).to_array();
+                let v = origin[1] + 5.0;
+                let uv = [(origin[0] + u) / 4.0, v / 4.0, (origin[0] + u + w) / 4.0, (v + 1.0) / 4.0];
+                game.native_draw_quad(&mut *draw, skin, [corner(-1.0, near), corner(-1.0, far), corner(1.0, far), corner(1.0, near)], uv, 0xFF_FFFF);
+            }
+        }
+    }
+    draw.pop();
+    // What it holds, at its fingers.
+    let Some(stack) = carried.and_then(|slot| game.inventory.get(slot).cloned().flatten()) else { return };
+    let (scale, _, block_model) = fitted(game, &stack, 0.15, 41);
+    let at = hand + d * (f64::from(size) * 0.25 + 0.04) - up * 0.03;
+    draw.push();
+    if draw.translate_world(at.to_array()) {
+        draw.light = light;
+        draw.rotate_about([0.0, 1.0, 0.0], 180.0 - pose.1, [0.0, 0.0, 0.0]);
+        if flat && !block_model {
+            draw.rotate_about([1.0, 0.0, 0.0], 90.0, [0.0, 0.0, 0.0]);
+        }
+        draw.scale([scale, scale, scale]);
+        game.native_draw_item(&mut *draw, &stack, DisplayContext::Fixed, None, 41);
     }
     draw.pop();
 }
@@ -2719,9 +2968,14 @@ fn station_draw(
         }
     }
     client(|c| {
+        // The hand carries what goes to the station; only what comes back flies.
+        let carries = c.hand_out;
         if let Some(s) = c.scene.as_mut() {
             s.flights.retain(|f| f.start.elapsed().as_secs_f32() < FLIGHT);
             for f in &s.flights {
+                if carries && inside(panel(size), [SLOT * 9.0 + 8.0, SLOT * 4.0 + 12.0], f.from) {
+                    continue;
+                }
                 let t = smooth(f.start.elapsed().as_secs_f32() / FLIGHT);
                 let arc = (t * std::f32::consts::PI).sin() * 30.0;
                 let p = [f.from[0] + (f.to[0] - f.from[0]) * t - 8.0, f.from[1] + (f.to[1] - f.from[1]) * t - 8.0 - arc];
@@ -2730,6 +2984,7 @@ fn station_draw(
         }
     });
     if let Some(slot) = carried
+        && !client(|c| c.hand_out)
         && let Some(Some(stack)) = game.inventory.get(slot)
     {
         draw_stack(game, batch, stack, [mouse[0] - 8.0, mouse[1] - 8.0]);

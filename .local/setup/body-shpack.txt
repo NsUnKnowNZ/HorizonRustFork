@@ -1,0 +1,71 @@
+$log = "$env:TEMP\horizon-native-test.log"
+function Pack($pack, $tag) {
+  "=== pack: $pack"
+  $env:HORIZON_SHADER_PACK = $pack
+  C launch --world NativeTest --wait --offscreen
+  for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = "Normal" }
+  C wait 20
+  Platform
+  C command "gamemode survival"
+  C command "kill @e[type=!player]"
+  C command "clear @s"
+  C command "setblock 204 150 205 minecraft:crafting_table"
+  C command "summon minecraft:text_display 203.0 151.6 205.5 {text:{text:'Break the block!',color:'gold'},billboard:'center',shadow:1,alignment:'center'}"
+  C command "summon minecraft:item 206.5 150.2 205.5 {Item:{id:'minecraft:diamond',count:1},PickupDelay:32767}"
+  C command "item replace entity @s hotbar.0 with minecraft:oak_planks 1"
+  C command "item replace entity @s hotbar.1 with minecraft:oak_planks 1"
+  C command "item replace entity @s hotbar.2 with minecraft:oak_planks 1"
+  C command "tp @s 204.5 150 207.3 180 35"
+  C wait 10
+  C look-at-block 204 150 205 south
+  C mouse right click
+  C wait 30
+  $l = Select-String -Path $log -Pattern 'cinematic_interactions\] scene at panel (-?\d+) (-?\d+) .* cells (.*)$' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $px=[int]$g[1].Value; $py=[int]$g[2].Value
+  $cells = @($g[3].Value.Trim().Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { [int]$_ })
+  foreach ($i in 0,1,2) { C click-at ($px + 13 + 18*$i) ($py + 71); C click-at $cells[2*$i] $cells[2*$i+1] }
+  C wait 20
+  C screenshot "$shots\sp-$tag-scene.png"
+  C key e tap
+  C wait 20
+  C command "tp @s 204.5 150 208.5 180 20"
+  C wait 20
+  C screenshot "$shots\sp-$tag-world.png"
+  C quit
+  Start-Sleep 6
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+}
+Pack 'Bliss_v2.1.2_(Chocapic13_Shaders_edit).zip' 'bliss'
+Pack 'BSL_v10.1.8.zip' 'bsl'
+Pack 'photon_v1.4.zip' 'photon'
+$env:HORIZON_SHADER_PACK = $null
+"=== OneBlock: the hint text and the upgrade counter"
+$w = "$repo\saves\OBTest"
+if (Test-Path $w) { Remove-Item -Recurse -Force $w }
+New-Item -ItemType Directory -Force "$w\datapacks" | Out-Null
+& robocopy "$repo\server-oneblock\oneblock\datapacks" "$w\datapacks" /E /NFL /NDL /NJH /NJS /NP | Out-Null
+C launch --world OBTest --wait --offscreen
+for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+C wait 100
+C command "setblock 0 60 0 minecraft:air"
+C wait 30
+C command "setblock 0 60 0 minecraft:air"
+C wait 30
+C command "setblock 0 60 3 minecraft:stone"
+C command "tp @s 0.5 61 3.5 180 -8"
+C wait 20
+C screenshot "$shots\obt-1-hint.png"
+C command "scoreboard players set #ob ob-upgrade-timer 10"
+C command "function one-block:main/up/upgrade-start"
+C wait 30
+C screenshot "$shots\obt-2-upgrade.png"
+C wait 110
+C screenshot "$shots\obt-3-upgrade.png"
+C wait 80
+C screenshot "$shots\obt-4-upgrade.png"
+C quit
+Start-Sleep 6
+Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Remove-Item -Recurse -Force $w -ErrorAction SilentlyContinue

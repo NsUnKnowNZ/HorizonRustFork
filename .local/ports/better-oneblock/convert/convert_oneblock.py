@@ -55,6 +55,9 @@ for root, _, files in os.walk(os.path.join(out, "data")):
             # 1.21.5+: text components in NBT are components, not JSON strings (text displays
             # showed the raw JSON).
             line2 = re.sub(r"text:'(\{.*?\})'(?=[,}])", lambda m: "text:" + m.group(1), line2)
+            # The same for a text set by `data modify ... text set value '{json}'` (the hints over
+            # the block, the upgrade and party counters): a JSON object is a compound as it stands.
+            line2 = re.sub(r"(text set value )'(\{.*\})'[ \t]*$", lambda m: m.group(1) + m.group(2).replace("\\'", "'"), line2)
             new_lines.append(line2)
         if new_lines != lines:
             changed += 1
