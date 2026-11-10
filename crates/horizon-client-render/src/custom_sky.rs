@@ -16,12 +16,15 @@ pub struct Image {
     pub rgba: Vec<u8>,
 }
 
-/// The pack's layers, by world, with one texture per layer (`images[i]` for the `i`th layer
-/// over all worlds, in `worlds` order).
+/// The pack's layers, by world, and their textures: `image_of[i]` is the texture of the `i`th layer
+/// (over all worlds, in `worlds` order).
 #[derive(Default)]
 pub struct CustomSky {
     worlds: Vec<(i32, Vec<SkyLayer>)>,
     pub images: Vec<Image>,
+    /// Each layer's texture in `images`, over all worlds in order. Layers naming the same
+    /// file share one (a FabricSkyboxes pack draws a few large pictures in many layers).
+    image_of: Vec<u16>,
 }
 
 /// One layer of a frame: which texture, with which blend, how bright and turned how.
@@ -56,14 +59,23 @@ impl CustomSky {
         }
         let mut out = Self::default();
         let mut texels = 0u64;
+        let mut sources: Vec<String> = Vec::new();
         for (world, sky) in skies.worlds {
             let mut layers = Vec::new();
             for layer in sky.layers {
+                let source = layer.source.to_string();
+                if let Some(at) = sources.iter().position(|s| *s == source) {
+                    out.image_of.push(at as u16);
+                    layers.push(layer);
+                    continue;
+                }
                 match crate::hud::decode(&root.join(&layer.source)) {
                     Ok((width, height, rgba))
                         if texels + u64::from(width) * u64::from(height) <= TEXEL_BUDGET =>
                     {
                         texels += u64::from(width) * u64::from(height);
+                        out.image_of.push(out.images.len() as u16);
+                        sources.push(source);
                         out.images.push(Image {
                             width,
                             height,
@@ -143,7 +155,7 @@ impl CustomSky {
                 Mat4::from_axis_angle(Vec3::from_array(layer.axis), turns * std::f32::consts::TAU)
             };
             out.push(Draw {
-                image: (first + i) as u16,
+                image: self.image_of[first + i],
                 blend: layer.blend,
                 brightness,
                 rotation,

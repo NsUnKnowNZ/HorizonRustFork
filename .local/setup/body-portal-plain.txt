@@ -1,0 +1,19 @@
+Launch
+C command "gamemode creative"
+C command "execute in minecraft:overworld run tp @s 1001.0 150 998.0 0 15"
+C wait 120
+C command "time set 6000"
+C screenshot "$shots\plain-front.png"
+C command "gamemode survival"
+C command "tp @s 1000.9 150 1000.2 0 5"
+C wait 10
+C key w down
+C wait 12
+C key w up
+C state
+C wait 80
+C screenshot "$shots\plain-nether.png"
+C command "gamemode creative"
+C command "execute in minecraft:overworld run tp @s 203.5 152 195.5 0 25"
+C wait 40
+C logs --lines 12

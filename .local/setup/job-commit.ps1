@@ -16,17 +16,21 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/setup/body-portal-door.txt .local/patches/horizon-portals/horizon-portals.patch
+git add -f .local/setup/job-commit.ps1 .local/setup/body-portal-plain.txt .local/patches/horizon-portals/horizon-portals.patch .local/patches/horizon-portals/README.md
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-A portal's surface stands in the middle of its frame
+See-through portals taken out; a custom sky's pictures are counted once
 
-Horizon Portals: the surface showing the other side stood at the face of the
-portal's blocks, so it covered the inner faces of the frame and the bottom
-obsidian looked removed. It now stands where the purple was, in the middle of
-the blocks, and the other side is cut at the same plane: the frame's inner
-faces show before it on this side and after it on the other, as one doorway.
-Tested with Complementary on (door-*.png).
+Horizon Portals: looking through a portal into the other dimension and walking
+straight through were glitchy in play (a third-person camera through the plane,
+half-loaded other sides, exits boxed in by rock), so they are removed at the
+user's request. The patch keeps frames up to 64x64, horizontal portals and no
+loading screen, and a Horizon client's player now goes through at once on
+touch. The last see-through patch is in history (205989ab1b).
+
+Custom sky: layers naming the same file share one texture. A FabricSkyboxes
+pack that draws seven 6-megapixel pictures in fifteen layers went past the
+texture budget and lost its sky.
 
 Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
