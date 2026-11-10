@@ -686,6 +686,9 @@ pub(super) struct Remote {
     tab_players: HashMap<u128, horizon_client::tab_list::TabPlayer>,
     /// Each listed profile's unpacked `textures` property.
     skin_textures: HashMap<u128, horizon_client::skins::Textures>,
+    /// Each listed profile's offline skin from a Horizon server (`skins::SHARED_SKIN`):
+    /// its sprite name, pixels and arms.
+    shared_skins: HashMap<u128, (String, std::sync::Arc<Vec<u8>>, bool)>,
     /// Active skin and cape from the services profile when the server sent none.
     own_profile: OwnProfile,
     /// The skin texture each profile's players show, once its download is ready.
@@ -1201,6 +1204,7 @@ impl Game<'_> {
             players: HashMap::new(),
             tab_players: HashMap::new(),
             skin_textures: HashMap::new(),
+            shared_skins: HashMap::new(),
             own_profile: OwnProfile::Idle,
             skins: HashMap::new(),
             skins_revision: 0,
@@ -1426,6 +1430,7 @@ impl Game<'_> {
             players: HashMap::new(),
             tab_players: HashMap::new(),
             skin_textures: HashMap::new(),
+            shared_skins: HashMap::new(),
             own_profile: OwnProfile::Idle,
             skins: HashMap::new(),
             skins_revision: 0,
@@ -5388,6 +5393,32 @@ impl Game<'_> {
                                     let textures =
                                         skins::unpack(&t.value, signature, &skins::TEXTURE_URIS);
                                     r.skin_textures.entry(e.uuid).or_insert(textures);
+                                } else if let Some(p) = e
+                                    .properties
+                                    .iter()
+                                    .find(|p| p.name == horizon_client::skins::SHARED_SKIN)
+                                {
+                                    use horizon_client::skins;
+                                    if let Some((rgba, slim)) = skins::base64_decode(&p.value)
+                                        .and_then(|b| skins::read_shared_skin(&b))
+                                    {
+                                        // Named by the pixels: a player back with another
+                                        // skin gets a new sprite.
+                                        let hash = {
+                                            use std::hash::{Hash, Hasher};
+                                            let mut h = std::collections::hash_map::DefaultHasher::new();
+                                            rgba.hash(&mut h);
+                                            h.finish()
+                                        };
+                                        let name = format!(
+                                            "horizon/shared_skin_{:032x}_{hash:016x}",
+                                            e.uuid
+                                        );
+                                        r.shared_skins.insert(
+                                            e.uuid,
+                                            (name, std::sync::Arc::new(rgba), slim),
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -5434,6 +5465,7 @@ impl Game<'_> {
                         r.chat_sessions.remove(&u);
                         r.chat_validators.remove(&u);
                         r.skin_textures.remove(&u);
+                        r.shared_skins.remove(&u);
                         r.listed.remove(&u);
                         r.attachments.remove(&Holder::Player(u));
                     }
@@ -5942,19 +5974,51 @@ impl Game<'_> {
                 resolved.push((uuid, skin));
             }
         }
+        // Another Horizon player's offline skin, which their server listed them with.
+        let shared: Vec<_> = self
+            .remote
+            .as_ref()
+            .map(|r| {
+                r.shared_skins
+                    .iter()
+                    .map(|(u, s)| (*u, s.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        for (uuid, (name, rgba, is_slim)) in shared {
+            if uuid == local || resolved.iter().any(|(u, _)| *u == uuid) {
+                continue;
+            }
+            if !self.skin_slots.contains(name.as_str())
+                || !self.gui.atlas.sprites.contains_key(name.as_str())
+            {
+                self.store_skin(name.clone(), (*rgba).clone());
+            }
+            if is_slim {
+                slim.insert(uuid);
+            }
+            resolved.push((uuid, name));
+        }
         // An offline name's skin from the launcher, where neither the server
         // nor an account gives the local player one.
         if !resolved.iter().any(|(u, _)| *u == local)
-            && let Some((rgba, is_slim)) = horizon_client::skins::offline_skin()
+            && let Some(offline) = horizon_client::skins::offline_skin()
         {
-            const OFFLINE: &str = "horizon/offline_skin";
-            if !self.skin_slots.contains(OFFLINE) || !self.gui.atlas.sprites.contains_key(OFFLINE) {
-                self.store_skin(OFFLINE.into(), rgba.clone());
+            // Named by its reading: a profile's new picture is a new sprite.
+            let name = format!(
+                "horizon/offline_skin_{}",
+                horizon_client::skins::offline_skin_generation()
+            );
+            let (rgba, is_slim) = &*offline;
+            if !self.skin_slots.contains(name.as_str())
+                || !self.gui.atlas.sprites.contains_key(name.as_str())
+            {
+                self.store_skin(name.clone(), rgba.clone());
             }
             if *is_slim {
                 slim.insert(local);
             }
-            resolved.push((local, OFFLINE.into()));
+            resolved.push((local, name));
         }
         // An offline name's cape from the launcher, where the profile has none.
         if !capes.contains_key(&local)

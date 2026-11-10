@@ -991,6 +991,21 @@ fn run(
         .encode(),
     )
     .map_err(e)?;
+    // An offline profile's skin, for a Horizon server to show the other players
+    // (skins::SHARED_SKIN); a signed-in account's skin comes from its profile instead.
+    if crate::auth::current().is_none()
+        && let Some(skin) = crate::skins::offline_skin()
+        && let Some(data) = crate::skins::shared_skin_payload(&skin.0, skin.1)
+    {
+        c.send(
+            &cfg::Serverbound::CustomPayload(cfg::CustomPayload {
+                channel: crate::skins::SHARED_SKIN.into(),
+                data,
+            })
+            .encode(),
+        )
+        .map_err(e)?;
+    }
     c.send(&cfg::Serverbound::ClientInformation(info).encode())
         .map_err(e)?;
     let (mut reader, writer) = c.split();

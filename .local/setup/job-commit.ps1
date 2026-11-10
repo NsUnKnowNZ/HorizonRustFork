@@ -16,28 +16,25 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .gitignore crates/horizon-core/src/rfs.rs docs/design/packed-roots.md
+git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .gitignore .local/setup/body-skins.txt
 git add -u -- "Play OneBlock Fresh (modded).bat" 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-Packed resource roots: one data file and one read layer; startup log fixes
+Offline skins: shown to other Horizon players, and changed without a restart
 
-Start-up. A content root (game files + resource packs + content mods) is no
-longer a mirror of 110,000 links and files: the merge notes what it writes,
-shares and keeps, then writes it all into the root's one horizon-data.bin, from
-memory, from the base's own data file and from the mods. Everything that reads
-a resource by path goes through horizon_core::rfs, which answers from the data
-file above the path or from the disk. The game folder's mods are packed into one
-.hmod each (HORIZON_PACK_MODS, make-game-folder.ps1). Measured with cold files:
-first start after a mod change 190 s -> 32 s (repo) / 36 s (game folder), next
-start 22-26 s -> 10 s to in-world. HORIZON_LOOSE_ROOT=1 builds the old mirror.
-docs/design/packed-roots.md has the design.
+A Horizon client without an account sends its profile's skin while it
+configures (horizon:skin: a version byte, an arms byte and the 64x64 pixels;
+no URL is fetched). A Horizon server (LAN, integrated or dedicated) lists the
+player with a profile property of that name, unless the profile has a signed
+`textures` one, and other Horizon clients draw it as that player's skin.
+Vanilla clients ignore the property and see the default skin.
 
-Startup log: model elements past -16..32 load (Handcrafted's trophies);
-FabricSkyboxes `overworld`/`end` skies are the game's own sky; CEM: `is_gliding`,
-salmon, guardian, wolf, small pufferfish, tropical fish pattern and horse armor
-part names, and a baby's or a moved part's misses are debug lines; a mod's
-namespaced game rule is a command word.
+The offline skin is read again when another profile is put in use or the
+profiles screen closes, under a new sprite name, so a new picture shows
+without restarting; 3D Skins follows the new name.
+
+Tested: a second game joined over LAN as SkinTester with its own picture; the
+host draws it with that skin and the guest sees its own arm in it.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV

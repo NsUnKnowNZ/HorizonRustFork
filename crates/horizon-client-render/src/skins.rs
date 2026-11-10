@@ -31,6 +31,39 @@ pub const TEXTURE_URIS: [&str; 2] = [
     "http://textures.minecraft.net/texture/{textureId}",
 ];
 
+/// An offline profile's skin as Horizon passes it around: the client sends it on this
+/// channel while it configures, and a Horizon server lists the player with a profile
+/// property of this name, so other Horizon players draw it. No URL is fetched: the
+/// pixels themselves travel, a version byte, a slim byte and 64x64 RGBA.
+pub const SHARED_SKIN: &str = "horizon:skin";
+const SHARED_SKIN_LEN: usize = 2 + 64 * 64 * 4;
+
+/// The payload of [`SHARED_SKIN`] for a 64x64 skin.
+pub fn shared_skin_payload(rgba: &[u8], slim: bool) -> Option<Vec<u8>> {
+    (rgba.len() == 64 * 64 * 4).then(|| {
+        let mut out = Vec::with_capacity(SHARED_SKIN_LEN);
+        out.extend([1, u8::from(slim)]);
+        out.extend_from_slice(rgba);
+        out
+    })
+}
+
+/// A [`SHARED_SKIN`] payload's pixels (opaque where vanilla's skins are) and arms, or
+/// `None` for anything else.
+pub fn read_shared_skin(payload: &[u8]) -> Option<(Vec<u8>, bool)> {
+    if payload.len() != SHARED_SKIN_LEN || payload[0] != 1 || payload[1] > 1 {
+        return None;
+    }
+    let skin = process_legacy_skin(64, 64, &payload[2..])?;
+    Some((skin, payload[1] == 1))
+}
+
+/// A [`SHARED_SKIN`] payload as a profile property's value.
+pub fn shared_skin_property(payload: &[u8]) -> String {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    STANDARD.encode(payload)
+}
+
 /// `java.util.Base64.getDecoder().decode`.
 pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
     use base64::{
@@ -729,10 +762,19 @@ pub fn offline_cape() -> Option<&'static [u8]> {
 /// The skin the launcher gives an offline name (`HORIZON_OFFLINE_SKIN`, a
 /// PNG's path, and `HORIZON_OFFLINE_SKIN_MODEL`, `classic` or `slim`;
 /// launcher/src/skins.rs): its 64x64 RGBA as `process_legacy_skin` lays it
-/// out, and whether it is slim. Read once.
-pub fn offline_skin() -> Option<&'static (Vec<u8>, bool)> {
-    static SKIN: std::sync::OnceLock<Option<(Vec<u8>, bool)>> = std::sync::OnceLock::new();
-    SKIN.get_or_init(|| {
+/// out, and whether it is slim. Read once, and again after [`reload_offline_skin`].
+pub fn offline_skin() -> Option<std::sync::Arc<(Vec<u8>, bool)>> {
+    use std::sync::atomic::Ordering;
+    type Read = Option<(u64, Option<std::sync::Arc<(Vec<u8>, bool)>>)>;
+    static SKIN: std::sync::Mutex<Read> = std::sync::Mutex::new(None);
+    let generation = OFFLINE_SKIN_GENERATION.load(Ordering::Relaxed);
+    let mut skin = SKIN.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((read, skin)) = &*skin
+        && *read == generation
+    {
+        return skin.clone();
+    }
+    let read = (|| {
         let (path, model) = match std::env::var_os("HORIZON_OFFLINE_SKIN").filter(|p| !p.is_empty())
         {
             Some(path) => (
@@ -744,8 +786,23 @@ pub fn offline_skin() -> Option<&'static (Vec<u8>, bool)> {
         read_offline_skin(&path, &model)
             .inspect_err(|e| eprintln!("Horizon: no offline skin ({}): {e}", path.display()))
             .ok()
-    })
-    .as_ref()
+            .map(std::sync::Arc::new)
+    })();
+    *skin = Some((generation, read.clone()));
+    read
+}
+
+static OFFLINE_SKIN_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Reads the offline skin again on its next use: another profile is in use, or its
+/// picture or arms changed.
+pub fn reload_offline_skin() {
+    OFFLINE_SKIN_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// How many times the offline skin was asked to be read again: what names its picture.
+pub fn offline_skin_generation() -> u64 {
+    OFFLINE_SKIN_GENERATION.load(std::sync::atomic::Ordering::Relaxed)
 }
 /// The skin of the offline profile in use, when it has one: `profiles/<name>.png` beside
 /// `horizon-player.txt`, which names the profile (`name:`) and its arms (`model:`).

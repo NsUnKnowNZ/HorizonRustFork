@@ -81,6 +81,7 @@ pub fn select(dir: &Path, profile: &Profile) -> io::Result<()> {
     if let Ok(mut cached) = CURRENT.lock() {
         *cached = None;
     }
+    crate::skins::reload_offline_skin();
     Ok(())
 }
 

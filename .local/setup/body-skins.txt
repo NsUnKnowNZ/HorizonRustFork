@@ -1,0 +1,27 @@
+Launch
+Platform
+C command "kill @e[type=!player]"
+C lan open 25599
+$pd = "$repo\.local\tmp\skin-test"
+$sock2 = "$env:TEMP\horizon-skin-b.json"
+Remove-Item $sock2 -ErrorAction SilentlyContinue
+$b = Start-Process "$repo\.local\native\target\fast\horizon-client.exe" -WorkingDirectory $repo -ArgumentList '--control','--control-socket',"`"$sock2`"",'--name','SkinTester','--player-dir',"`"$pd`"" -PassThru
+function B { "`n>>> B $args"; & $ctl --socket $sock2 --timeout 120 @args 2>&1 | ForEach-Object { "$_" } }
+for ($i = 0; $i -lt 60; $i++) { Start-Sleep 5; $r = & $ctl --socket $sock2 --timeout 10 screen 2>&1 | Out-String; if ($r -match 'title') { break } }
+B connect localhost:25599
+for ($i = 0; $i -lt 60; $i++) { Start-Sleep 3; $r = & $ctl --socket $sock2 --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break } }
+"B joined after $($i*3)s"
+C wait 60
+C command "gamemode creative SkinTester"
+C command "tp SkinTester 203.5 150 199.5 180 0"
+C command "tp @s 203.5 150.5 195.5 0 5"
+C wait 60
+C screenshot "$shots\skin-a-sees-b.png"
+B key f5
+B wait 30
+B screenshot "$shots\skin-b-self.png"
+B logs --lines 60 | Select-String -Pattern "skin" | ForEach-Object { "$_" }
+B quit
+Start-Sleep 5
+if (-not $b.HasExited) { Stop-Process -Id $b.Id -Force }
+C lan close

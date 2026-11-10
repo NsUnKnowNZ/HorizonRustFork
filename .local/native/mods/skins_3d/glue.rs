@@ -161,11 +161,12 @@ pub(super) fn frame(game: &mut Game<'_>) {
         if missing.contains(&location) {
             continue;
         }
-        if location == OFFLINE_SKIN
-            && let Some((rgba, _)) = horizon_client::skins::offline_skin()
-            && let Some((width, height)) = size(rgba.len())
+        // The offline profile's skin, named by its reading (`horizon/offline_skin_<n>`).
+        if location.starts_with(OFFLINE_SKIN)
+            && let Some(skin) = horizon_client::skins::offline_skin()
+            && let Some((width, height)) = size(skin.0.len())
         {
-            voxels::offer(&location, width, height, rgba);
+            voxels::offer(&location, width, height, &skin.0);
             continue;
         }
         if location.starts_with("skins/") {

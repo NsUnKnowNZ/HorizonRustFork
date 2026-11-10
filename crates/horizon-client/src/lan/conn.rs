@@ -1150,12 +1150,29 @@ fn note_channels(configured: &mut super::Configured, packet: &cfg::Serverbound) 
     }
 }
 
+/// A Horizon client's offline skin (`skins::SHARED_SKIN`) as the player's profile
+/// property, so the player list shows it to the other Horizon players. A profile with a
+/// `textures` property (an account's skin) keeps that one.
+fn take_shared_skin(properties: &mut Vec<login::Property>, payload: &[u8]) {
+    if crate::skins::read_shared_skin(payload).is_none()
+        || properties.iter().any(|p| p.name == "textures")
+    {
+        return;
+    }
+    properties.retain(|p| p.name != crate::skins::SHARED_SKIN);
+    properties.push(login::Property {
+        name: crate::skins::SHARED_SKIN.into(),
+        value: crate::skins::shared_skin_property(payload),
+        signature: None,
+    });
+}
+
 fn login_and_configure(
     c: &mut Connection,
     shared: &Arc<Shared>,
     uuid: u128,
     name: &str,
-    properties: Vec<login::Property>,
+    mut properties: Vec<login::Property>,
     address: std::net::SocketAddr,
 ) -> Result<Option<Parts>, String> {
     let e = |e: horizon_protocol::Error| e.to_string();
@@ -1247,6 +1264,9 @@ fn login_and_configure(
                     .unwrap_or(brand);
             }
             cfg::Serverbound::SelectKnownPacks(p) => break p.packs == vec![core.clone()],
+            cfg::Serverbound::CustomPayload(p) if p.channel == crate::skins::SHARED_SKIN => {
+                take_shared_skin(&mut properties, &p.data);
+            }
             _ => {}
         }
     };

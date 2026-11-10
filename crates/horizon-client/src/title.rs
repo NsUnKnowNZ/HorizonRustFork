@@ -4351,6 +4351,8 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
     fn profile_button(&mut self, id: u8) {
         use crate::profiles::{self, Profile};
         if id == 72 {
+            // A picture put in the skins folder while the screen was open is read again.
+            crate::skins::reload_offline_skin();
             self.mode = Mode::Main;
             return;
         }
