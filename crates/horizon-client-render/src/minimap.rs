@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 /// The image's side in texels.
 pub const SIZE: usize = 128;
 /// Marks a column the map cuts through (a wall at the player's height).
-const WALL: u8 = 0x80;
+pub(crate) const WALL: u8 = 0x80;
 /// Water's and lava's map colours (`MapColor.WATER`, `FIRE`).
 const WATER: u8 = 12;
 const LAVA: u8 = 4;
@@ -153,6 +153,12 @@ fn top_of(chunk: &Chunk, air: u32, layer: Layer) -> i32 {
         Layer::Below(head) => surface.min(head),
     }
 }
+/// One chunk's columns as `scan_tile` reads them: map colour (`| WALL`), height and water
+/// depth, `z * 16 + x` (the world map keeps these).
+pub(crate) fn scan_columns(chunk: &Chunk, palette: &Palette, air: u32, layer: Layer) -> ([u8; 256], [i16; 256], [u8; 256]) {
+    let t = scan_tile(chunk, palette, air, layer, 0);
+    (t.color, t.height, t.depth)
+}
 fn scan_tile(chunk: &Chunk, palette: &Palette, air: u32, layer: Layer, revision: u64) -> Tile {
     let top = top_of(chunk, air, layer);
     let mut tile = Tile {
@@ -216,7 +222,7 @@ impl View {
 }
 
 /// `MapColor.getColorFromPackedId` as RGBA.
-fn packed_rgba(id: u8, brightness: u8) -> [u8; 4] {
+pub(crate) fn packed_rgba(id: u8, brightness: u8) -> [u8; 4] {
     let id = usize::from(id);
     if id == 0 || id >= MAP_COLORS.len() {
         return [0; 4];
@@ -228,7 +234,7 @@ fn packed_rgba(id: u8, brightness: u8) -> [u8; 4] {
 }
 /// The map item's shading at scale 1: brighter facing a lower north
 /// neighbour, darker facing a higher one, dithered; water by depth.
-fn brightness(color: u8, height: i16, north: Option<i16>, depth: u8, parity: i32) -> u8 {
+pub(crate) fn brightness(color: u8, height: i16, north: Option<i16>, depth: u8, parity: i32) -> u8 {
     if color & WALL != 0 {
         return 3;
     }
@@ -392,7 +398,7 @@ impl Minimap {
     }
 }
 /// Chunk offsets at Chebyshev distance `ring`.
-fn ring_offsets(ring: i32) -> impl Iterator<Item = (i32, i32)> {
+pub(crate) fn ring_offsets(ring: i32) -> impl Iterator<Item = (i32, i32)> {
     (-ring..=ring).flat_map(move |dz| {
         (-ring..=ring)
             .filter(move |&dx| dx.abs() == ring || dz.abs() == ring)

@@ -1,0 +1,18 @@
+Launch
+C command "tp @s 203.5 155 200.5 0 20"
+C wait 200
+C key m tap
+C wait 20
+C screenshot "$shots\xmap-1.png"
+C drag-at 640 360 560 330 480 300
+C wait 5
+C scroll-at 640 360 -2
+C wait 10
+C screenshot "$shots\xmap-2-drag.png"
+C key esc tap
+C wait 10
+C screen
+Copy-Item -Force "$env:TEMP\horizon-native-test.log" "$shots\xmap.log"
+C quit
+Start-Sleep 8
+Get-ChildItem -Recurse "$repo\xaero","$env:TEMP\horizon-native-test*\xaero"  -ErrorAction SilentlyContinue | Select-Object -First 12 | ForEach-Object { "$($_.FullName) $($_.Length)" }

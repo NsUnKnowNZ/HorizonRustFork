@@ -16,31 +16,26 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .gitignore .local/native/mods/ftbultimine .local/setup/body-ult2.txt
+git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .gitignore .local/native/mods/xaeroworldmap .local/setup/body-xmap.txt crates/horizon-client-render/src/world_map.rs
 git add -u -- "Play OneBlock Fresh (modded).bat" 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-FTB Ultimine for Horizon; mods' world lines over shader packs
+Xaero's World Map for Horizon, on an engine world map store
 
-FTB Ultimine (a native mod, written from its documented behaviour): hold `
-while breaking a block and the matching blocks joined to it go too, at most
-64, each broken as the player breaks one (drops, experience, the tool's wear)
-for 0.1 exhaustion; it stops when the tool breaks or the food bar is empty.
-Shapes, picked by scrolling while the key is held: Shapeless, Small Tunnel,
-Small Square, Large Tunnel, Mining Tunnel, Escape Tunnel. The blocks that will
-go are outlined, and the shape and count are shown at the top left. Right-
-clicking a grown crop with the key held harvests its field and plants it again.
-The server half runs on Horizon servers (channel ftbultimine:state).
+horizon_client::world_map: a tile of map colours per chunk the player has seen
+(scanned as the minimap's: MapItem.update's colour, height and water depth),
+kept in region files of 32 by 32 chunks (r.<x>.<z>.hmap) and loaded as the
+map is looked at; compose() draws any area at any zoom, shaded as a map item.
 
-Native mods' world lines and box outlines were drawn into the world before a
-shader pack's programs, which then drew over them: they now also go over the
-pack's finished picture, depth tested against its depth, as the debug lines do.
+Xaero's World Map (a native mod, written from its documented behaviour): the
+chunks round the player go on the map as they load (the Nether's floor under
+its roof), saved under xaero/world-map/<world>/<dimension>/ every ten seconds
+and on leaving. M opens it full screen: drag to move, scroll to zoom (1/8 to
+16 blocks a pixel), Space back to the player; the player's arrow, the block
+under the pointer and its height.
 
-horizon-ctl `key grave` presses the ` key.
-
-Tested: a 5x3x3 coal vein broke at once with the stone beside it kept (45
-blocks, 61 coal); a 5x3 wheat field was harvested and replanted, the unripe
-plant left as it was.
+Tested: the map of the test world opened, moved, zoomed out to 1:4, and was
+saved (r.0.0.hmap) within fifteen seconds of play.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV

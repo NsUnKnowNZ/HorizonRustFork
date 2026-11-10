@@ -70,6 +70,7 @@ pub mod logging;
 pub mod menu_blur;
 pub mod mesher;
 pub mod minimap;
+pub mod world_map;
 pub mod mipmap;
 pub mod mod_browser;
 pub mod mod_list;
