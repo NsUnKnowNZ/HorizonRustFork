@@ -12483,7 +12483,7 @@ fn encode_screenshot(
     let (wu, hu) = (w as usize, h as usize);
     let mut pixels = Vec::with_capacity(wu * hu * 4);
     for y in 0..hu {
-        for px in data[y * row..y * row + wu * 4].chunks_exact(4) {
+        for px in data[y * row..y * row + wu * 4].as_chunks::<4>().0 {
             let (r, b) = if bgra { (px[2], px[0]) } else { (px[0], px[2]) };
             pixels.extend_from_slice(&[r, px[1], b, 255]);
         }
