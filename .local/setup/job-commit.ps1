@@ -16,21 +16,31 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .gitignore .local/setup/body-cam2.txt
+git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .gitignore .local/native/mods/ftbultimine .local/setup/body-ult2.txt
 git add -u -- "Play OneBlock Fresh (modded).bat" 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-Camerapture: a picture frame whose wall is gone drops its picture
+FTB Ultimine for Horizon; mods' world lines over shader packs
 
-Frames are records on the chunk, not entities, and nothing checked what they
-hung on: a frame stayed in the air after its wall was broken or replaced, drawn
-as a floating sheet (black before its picture loaded). As HangingEntity.tick
-does, every 100 ticks a frame with a block behind it that isn't solid breaks,
-with the item frame's break sound, and drops its picture (named as it was). A
-fixed frame stays; a wall in an unloaded chunk counts as there.
+FTB Ultimine (a native mod, written from its documented behaviour): hold `
+while breaking a block and the matching blocks joined to it go too, at most
+64, each broken as the player breaks one (drops, experience, the tool's wear)
+for 0.1 exhaustion; it stops when the tool breaks or the food bar is empty.
+Shapes, picked by scrolling while the key is held: Shapeless, Small Tunnel,
+Small Square, Large Tunnel, Mining Tunnel, Escape Tunnel. The blocks that will
+go are outlined, and the shape and count are shown at the top left. Right-
+clicking a grown crop with the key held harvests its field and plants it again.
+The server half runs on Horizon servers (channel ftbultimine:state).
 
-Tested: the two frames left floating in the test world dropped within five
-seconds of loading it.
+Native mods' world lines and box outlines were drawn into the world before a
+shader pack's programs, which then drew over them: they now also go over the
+pack's finished picture, depth tested against its depth, as the debug lines do.
+
+horizon-ctl `key grave` presses the ` key.
+
+Tested: a 5x3x3 coal vein broke at once with the stone beside it kept (45
+blocks, 61 coal); a 5x3 wheat field was harvested and replanted, the unripe
+plant left as it was.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV

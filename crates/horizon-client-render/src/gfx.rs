@@ -9282,8 +9282,14 @@ impl Renderer {
             .count() as u32;
         let debug_top = frame.debug_lines_on_top.len() as u32;
         let crosshair = frame.debug_crosshair.len() as u32;
-        if debug_depth + debug_top + crosshair > 0 {
-            let needed = u64::from(debug_depth + debug_top + crosshair);
+        // Native mods' world lines, after them: a shader pack's picture would cover them
+        // where they are drawn with the world, so they go over it as the debug lines do.
+        let primitive_lines = frame.world_primitives.lines.len() as u32;
+        let primitive_lines_through = frame.world_primitives.lines_through.len() as u32;
+        let primitive_first = debug_depth + debug_top + crosshair;
+        if primitive_first + primitive_lines + primitive_lines_through > 0 {
+            let needed =
+                u64::from(primitive_first + primitive_lines + primitive_lines_through);
             if needed > self.debug_line_capacity {
                 self.debug_line_capacity = needed.next_power_of_two();
                 self.debug_line_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -9296,6 +9302,8 @@ impl Renderer {
             let all: Vec<[f32; 8]> = debug_lines_opaque_first(frame.debug_lines)
                 .chain(frame.debug_lines_on_top)
                 .chain(frame.debug_crosshair)
+                .chain(frame.world_primitives.lines)
+                .chain(frame.world_primitives.lines_through)
                 .copied()
                 .collect();
             self.uploads.buffer(
@@ -11587,9 +11595,10 @@ impl Renderer {
                 &pages,
                 &mut terrain,
             );
-            // The debug lines (chunk borders, hitboxes, gizmos) over the pack's picture, those
-            // drawn with depth where the pack's depth (else the world's) has nothing nearer.
-            if debug_depth + debug_top > 0 {
+            // The debug lines (chunk borders, hitboxes, gizmos) and the mods' world lines over
+            // the pack's picture, those drawn with depth where the pack's depth (else the
+            // world's) has nothing nearer.
+            if debug_depth + debug_top + primitive_lines + primitive_lines_through > 0 {
                 let (nearest, gl) = match post.depth() {
                     Some(d) => (d.clone(), 1.0f32),
                     None => (depth.clone(), 0.0),
@@ -11642,6 +11651,15 @@ impl Renderer {
                 if debug_top > 0 {
                     pass.set_pipeline(&self.debug_over[1]);
                     pass.draw(0..4, debug_depth..debug_depth + debug_top);
+                }
+                if primitive_lines > 0 {
+                    pass.set_pipeline(&self.debug_over[0]);
+                    pass.draw(0..4, primitive_first..primitive_first + primitive_lines);
+                }
+                if primitive_lines_through > 0 {
+                    let first = primitive_first + primitive_lines;
+                    pass.set_pipeline(&self.debug_over[1]);
+                    pass.draw(0..4, first..first + primitive_lines_through);
                 }
             }
             self.pack_post = Some((dimension, Some(post)));

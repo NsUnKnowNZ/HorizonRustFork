@@ -1,0 +1,28 @@
+Launch
+Platform
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "fill 198 149 196 202 149 198 minecraft:farmland"
+C command "fill 198 150 196 202 150 198 minecraft:wheat[age=7]"
+C command "setblock 200 150 196 minecraft:wheat[age=3]"
+C command "tp @s 200.5 150 194.5 0 50"
+C wait 20
+C key grave down
+C wait 5
+C interact 200 150 197
+C wait 10
+C key grave up
+C command "execute if block 198 150 196 minecraft:wheat[age=0]"
+C command "execute if block 202 150 198 minecraft:wheat[age=0]"
+C command "execute if block 200 150 196 minecraft:wheat[age=3]"
+C inventory
+C command "gamemode creative"
+C command "setblock 204 150 205 bitsandbalance:acacia_step"
+C command "setblock 206 150 205 handcrafted:witch_trophy"
+C command "setblock 208 150 205 bitsandbalance:vertical_acacia_slab"
+C command "setblock 210 150 205 supplementaries:jar"
+C command "tp @s 207 151.2 202 0 25"
+C wait 40
+C screenshot "$shots\bnb-close.png"
+Copy-Item -Force "$env:TEMP\horizon-native-test.log" "$shots\ult2.log"

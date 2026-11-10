@@ -1694,6 +1694,7 @@ fn key_code(name: &str) -> Option<KeyCode> {
         "f6" => KeyCode::F6,
         "f11" => KeyCode::F11,
         "slash" | "/" => KeyCode::Slash,
+        "grave" | "backquote" | "`" => KeyCode::Backquote,
         "backspace" => KeyCode::Backspace,
         "pageup" => KeyCode::PageUp,
         "pagedown" => KeyCode::PageDown,
