@@ -16,35 +16,36 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .local/native/mods/farmersdelight .local/native/mods/cinematiczoom .local/setup/body-fdm3.txt .local/setup/body-zoom.txt
+git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .local/native/mods/farmersdelight .local/native/mods/handson_delight .local/setup/body-hod2.txt .local/setup/body-hod3.txt
 git add -u -- "Play OneBlock Fresh (modded).bat" 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-Farmer's Delight kitchen blocks and Cinematic Zoom for Horizon
+Hands-On Delight for Horizon: the pot and the board worked in place
 
-Farmer's Delight (a native mod over the farmersdelight content mod, written
-from its documented behaviour and its own recipes, tags, sounds and GUI
-texture; none of its code):
-- cutting board: holds one item; the tool a farmersdelight:cutting recipe
-  names cuts it (results pop out, the tool wears, the recipe's sound); an
-  empty hand takes it back. Items lie flat, blocks stand on it.
-- stove: lit when placed, relit by flint and steel or a fire charge, put
-  out by a shovel; six campfire-cookable items cook on its top and pop out.
-- cooking pot: six ingredients become a farmersdelight:cooking meal over a
-  heat source (farmersdelight:heat_sources, lit); the meal moves to the
-  output once its container is in place, or is served with it in hand. Its
-  own menu type and screen (progress arrow, heat flame); hoppers fill it
-  from the top and side and empty it from below; a tray over a fire.
-- Nourishment keeps hunger from going down; Comfort heals with no
-  saturation left.
+Hands-On Delight (a native mod over the farmersdelight one, written from its
+page and its showcase pictures; none of its code): a right click on a
+cooking pot or a cutting board flies the camera to it, hides the HUD and
+lays the hotbar along the station's front, with a recipe book beside it.
+Escape, E, a movement key or jump flies back.
+- Cooking pot: pick a hotbar stack and click the pot to tip it in (a right
+  click drops one); the ingredients float and swirl in a broth that browns
+  as it fills. Hold the button and circle in the pot to stir with a spoon:
+  each round hurries the cooking, steady wide rounds fill three stars, each
+  adding a quarter more servings. The book shows the meal the ingredients
+  point to and what is still missing; the meal card beside the pot serves
+  one into its container from the inventory.
+- Cutting board: put an item on it from the hotbar, pick up its tool and
+  drag it across the board; the pieces go to the inventory, the tool wears.
+Actions go to the server as mod messages and run on the player's tick, so
+LAN guests and servers check them.
 
-Cinematic Zoom (written from its documented behaviour): hold C to glide in,
-cinematic camera and letterbox bars while zoomed, the wheel sets 2x to 10x.
+Farmer's Delight: the pot's contents and stars are sent to clients when
+they change; stirring speeds the pot up and its stars add servings.
 
-Tested in the test world: cabbage cut into two leaves with a knife, an oak
-log stripped with an axe (bark too), raw beef cooked on the stove, mushroom
-stew and beef stew cooked in the pot over a stove and served into a bowl,
-a placed stove lit; the zoom and its bars in and out.
+Tested: carrots, potatoes and beef dropped in from the hotbar (a whole
+stack, then one); twelve rounds of stirring gave two stars and a beef stew
+of two servings; a cabbage cut on the board into two leaves in the
+inventory; leaving restored the camera and the HUD.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV

@@ -1,0 +1,64 @@
+Launch
+Platform
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "setblock 200 150 205 farmersdelight:stove[facing=south,lit=true]"
+C command "setblock 200 151 205 farmersdelight:cooking_pot[facing=south]"
+C command "setblock 202 150 205 farmersdelight:cutting_board[facing=south]"
+C command "item replace entity @s hotbar.0 with minecraft:carrot 5"
+C command "item replace entity @s hotbar.1 with minecraft:potato 5"
+C command "item replace entity @s hotbar.2 with minecraft:beef 3"
+C command "item replace entity @s hotbar.3 with farmersdelight:iron_knife"
+C command "item replace entity @s hotbar.4 with minecraft:bowl 4"
+C command "item replace entity @s hotbar.5 with farmersdelight:cabbage 3"
+C command "tp @s 200.5 150 202.5 0 30"
+C wait 40
+C look-at-block 200 151 205 north
+C mouse right click
+C wait 30
+function Scene {
+  $l = Select-String -Path "$env:TEMP\horizon-native-test.log" -Pattern 'scene at strip (-?\d+) (-?\d+) card (-?\d+) (-?\d+) middle (-?\d+) (-?\d+)' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $script:sx=[int]$g[1].Value; $script:sy=[int]$g[2].Value; $script:cx=[int]$g[3].Value; $script:cy=[int]$g[4].Value; $script:mx=[int]$g[5].Value; $script:my=[int]$g[6].Value
+  "scene: $($l.Line)"
+}
+Scene
+C click-at ($sx+40) $sy
+C click-at $mx $my
+C click-at $sx $sy
+C click-at $mx $my
+C click-at ($sx+20) $sy
+C click-at $mx $my right
+C click-at ($sx+20) $sy
+$pts = @(); for ($k=0; $k -le 48; $k++) { $a = $k*2*[math]::PI/16; $pts += [int]($mx+150*[math]::Cos($a)); $pts += [int]($my+95*[math]::Sin($a)) }
+for ($r=0; $r -lt 4; $r++) { & $ctl --socket "$env:TEMP\horizon-native-test.json" drag-at @pts | Out-Null }
+C wait 10
+C command "data get block 200 151 205"
+C screenshot "$shots\hod3-1-stir.png"
+C wait 150
+C command "data get block 200 151 205"
+C screenshot "$shots\hod3-2-meal.png"
+C click-at $cx $cy
+C wait 10
+C command "data get block 200 151 205"
+C command "data get entity @s Inventory"
+C key e tap
+C wait 20
+C command "tp @s 202.5 150 204.3 0 60"
+C wait 10
+C mouse right click
+C wait 30
+Scene
+C click-at ($sx+100) $sy
+C click-at $mx $my
+C wait 10
+C screenshot "$shots\hod3-3-board.png"
+C click-at ($sx+60) $sy
+C drag-at ($mx-90) $my ($mx-30) ($my+5) ($mx+30) ($my-5) ($mx+90) $my
+C wait 10
+C screenshot "$shots\hod3-4-cut.png"
+C command "data get block 202 150 205"
+C command "data get entity @s Inventory"
+C key e tap
+C wait 20

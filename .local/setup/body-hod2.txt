@@ -1,0 +1,49 @@
+Launch
+Platform
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "setblock 200 150 205 farmersdelight:stove[facing=south,lit=true]"
+C command "setblock 200 151 205 farmersdelight:cooking_pot[facing=south]"
+C command "setblock 202 150 205 farmersdelight:cutting_board[facing=south]"
+C command "item replace entity @s hotbar.0 with minecraft:carrot 5"
+C command "item replace entity @s hotbar.1 with minecraft:potato 5"
+C command "item replace entity @s hotbar.2 with minecraft:beef 3"
+C command "item replace entity @s hotbar.3 with farmersdelight:iron_knife"
+C command "item replace entity @s hotbar.4 with minecraft:bowl 4"
+C command "item replace entity @s hotbar.5 with farmersdelight:cabbage 3"
+C command "tp @s 200.5 150 202.5 0 30"
+C wait 40
+C look-at-block 200 151 205 north
+C mouse right click
+C wait 30
+C click-at 599 621
+C click-at 640 400
+C wait 5
+C click-at 559 621
+C click-at 640 400
+C wait 5
+C click-at 579 621
+C click-at 640 400 right
+C wait 10
+C screenshot "$shots\hod2-1-put.png"
+C command "data get block 200 151 205"
+C drag-at 790 390 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 640 295 697 302 746 322 778 353 790 390 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 639 295 697 302 746 322 778 353 790 389 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 639 295 697 302 746 322 778 353 790 389
+C drag-at 790 390 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 640 295 697 302 746 322 778 353 790 390 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 639 295 697 302 746 322 778 353 790 389 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 639 295 697 302 746 322 778 353 790 389
+C drag-at 790 390 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 640 295 697 302 746 322 778 353 790 390 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 639 295 697 302 746 322 778 353 790 389 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 639 295 697 302 746 322 778 353 790 389
+C drag-at 790 390 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 640 295 697 302 746 322 778 353 790 390 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 639 295 697 302 746 322 778 353 790 389 778 426 746 457 697 477 640 485 582 477 533 457 501 426 490 390 501 353 533 322 582 302 639 295 697 302 746 322 778 353 790 389
+C wait 10
+C command "data get block 200 151 205"
+C screenshot "$shots\hod2-2-stir.png"
+C wait 160
+C command "data get block 200 151 205"
+C screenshot "$shots\hod2-3-meal.png"
+C key e tap
+C wait 20
+C command "tp @s 202.5 150 204.3 0 60"
+C wait 10
+C mouse right click
+C wait 30
+C screenshot "$shots\hod2-4-board.png"
+C key e tap
+C wait 20

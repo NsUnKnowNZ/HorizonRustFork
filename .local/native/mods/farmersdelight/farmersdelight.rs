@@ -32,8 +32,8 @@ pub(super) const POT: &str = "farmersdelight:cooking_pot";
 const POT_MENU: &str = "farmersdelight:cooking_pot";
 const POT_GUI: &str = "farmersdelight:gui/cooking_pot";
 const CAMPFIRE: &str = "minecraft:campfire_cooking";
-const INPUTS: usize = 6;
-const MEAL: usize = 6;
+pub(super) const INPUTS: usize = 6;
+pub(super) const MEAL: usize = 6;
 const CONTAINER: usize = 7;
 const OUTPUT: usize = 8;
 const STOVE_SLOTS: usize = 6;
@@ -46,7 +46,7 @@ fn ours(block: &str) -> bool {
     matches!(block, BOARD | STOVE | POT)
 }
 
-fn key(s: &str) -> JavaString {
+pub(super) fn key(s: &str) -> JavaString {
     s.into()
 }
 
@@ -147,18 +147,18 @@ fn ingredient(game: &Game<'_>, v: &Value) -> Option<Ingredient> {
     game.native_recipe_ingredient(&Value::Array(list.into_iter().map(Value::String).collect()))
 }
 
-struct Cut {
-    input: Ingredient,
-    tool: Ingredient,
-    results: Vec<(ItemStack, f32)>,
-    sound: Option<String>,
+pub(super) struct Cut {
+    pub(super) input: Ingredient,
+    pub(super) tool: Ingredient,
+    pub(super) results: Vec<(ItemStack, f32)>,
+    pub(super) sound: Option<String>,
 }
 
-struct Meal {
-    inputs: Vec<Ingredient>,
-    result: ItemStack,
-    container: Option<String>,
-    time: i32,
+pub(super) struct Meal {
+    pub(super) inputs: Vec<Ingredient>,
+    pub(super) result: ItemStack,
+    pub(super) container: Option<String>,
+    pub(super) time: i32,
 }
 
 thread_local! {
@@ -184,7 +184,7 @@ fn parsed<T>(
     })
 }
 
-fn cuts(game: &Game<'_>) -> Rc<Vec<Cut>> {
+pub(super) fn cuts(game: &Game<'_>) -> Rc<Vec<Cut>> {
     parsed(game, &CUTS, "farmersdelight:cutting", |game, d| {
         let input = ingredient(game, &d["ingredients"])?;
         let tool = ingredient(game, &d["tool"])?;
@@ -201,7 +201,7 @@ fn cuts(game: &Game<'_>) -> Rc<Vec<Cut>> {
     })
 }
 
-fn meals(game: &Game<'_>) -> Rc<Vec<Meal>> {
+pub(super) fn meals(game: &Game<'_>) -> Rc<Vec<Meal>> {
     parsed(game, &MEALS, "farmersdelight:cooking", |game, d| {
         let inputs: Vec<Ingredient> = d["ingredients"]
             .as_array()?
@@ -226,7 +226,7 @@ fn meals(game: &Game<'_>) -> Rc<Vec<Meal>> {
 }
 
 /// Whether the ingredients take the stacks one each, in any order (a shapeless match).
-fn matches(ingredients: &[Ingredient], stacks: &[&ItemStack]) -> bool {
+pub(super) fn matches(ingredients: &[Ingredient], stacks: &[&ItemStack]) -> bool {
     fn assign(i: usize, ingredients: &[Ingredient], stacks: &[&ItemStack], used: &mut [bool]) -> bool {
         if i == stacks.len() {
             return true;
@@ -246,20 +246,20 @@ fn matches(ingredients: &[Ingredient], stacks: &[&ItemStack]) -> bool {
 }
 
 /// The container a meal is served in, when it has one.
-fn meal_container(game: &Game<'_>, meal: &ItemStack) -> Option<String> {
+pub(super) fn meal_container(game: &Game<'_>, meal: &ItemStack) -> Option<String> {
     meals(game).iter().find(|m| m.result.item == meal.item).and_then(|m| m.container.clone())
 }
 
 // ---- small helpers ----
 
-fn items_at(game: &Game<'_>, pos: [i32; 3]) -> Vec<Option<ItemStack>> {
+pub(super) fn items_at(game: &Game<'_>, pos: [i32; 3]) -> Vec<Option<ItemStack>> {
     match game.world.block_entities.get(&(pos[0], pos[1], pos[2])) {
         Some(BlockEntity::Mod(m)) => m.items.clone(),
         _ => Vec::new(),
     }
 }
 
-fn set_slot(game: &mut Game<'_>, pos: [i32; 3], slot: usize, stack: Option<ItemStack>) {
+pub(super) fn set_slot(game: &mut Game<'_>, pos: [i32; 3], slot: usize, stack: Option<ItemStack>) {
     game.native_with_mod_block_entity(pos, |m| {
         if m.items.len() <= slot {
             m.items.resize(slot + 1, None);
@@ -269,7 +269,7 @@ fn set_slot(game: &mut Game<'_>, pos: [i32; 3], slot: usize, stack: Option<ItemS
     game.native_block_entity_sync(pos);
 }
 
-fn one(stack: &ItemStack) -> ItemStack {
+pub(super) fn one(stack: &ItemStack) -> ItemStack {
     ItemStack { count: 1, ..stack.clone() }
 }
 
@@ -288,11 +288,11 @@ fn use_one_held(game: &mut Game<'_>) {
     game.guest_inventory_resend = true;
 }
 
-fn center(pos: [i32; 3], dy: f64) -> [f64; 3] {
+pub(super) fn center(pos: [i32; 3], dy: f64) -> [f64; 3] {
     [f64::from(pos[0]) + 0.5, f64::from(pos[1]) + dy, f64::from(pos[2]) + 0.5]
 }
 
-fn shrink(cell: &mut Option<ItemStack>, by: u32) {
+pub(super) fn shrink(cell: &mut Option<ItemStack>, by: u32) {
     if let Some(s) = cell {
         s.count = s.count.saturating_sub(by);
         if s.count == 0 {
@@ -302,7 +302,7 @@ fn shrink(cell: &mut Option<ItemStack>, by: u32) {
 }
 
 /// A roll in 0..1 from the game time, the place and a salt.
-fn roll(game: &Game<'_>, pos: [i32; 3], salt: u64) -> f32 {
+pub(super) fn roll(game: &Game<'_>, pos: [i32; 3], salt: u64) -> f32 {
     let mut x = (game.world.game_time as u64)
         ^ (pos[0] as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
         ^ (pos[1] as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
@@ -477,6 +477,11 @@ fn pot_click(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut bool) {
         game.swing_arm();
         return;
     }
+    // The menu opens on the main hand's turn; an off hand that serves nothing leaves the click.
+    if game.hand != Hand::Main {
+        *canceled = false;
+        return;
+    }
     if game.mod_menu_at((pos[0], pos[1], pos[2])).is_some() {
         game.open_menu(pos);
     }
@@ -562,7 +567,7 @@ fn heated(game: &Game<'_>, pos: [i32; 3]) -> bool {
         && game.native_block_property(below, "lit").is_none_or(|v| v == "true")
 }
 
-fn room_for(game: &Game<'_>, cell: &Option<ItemStack>, stack: &ItemStack) -> bool {
+pub(super) fn room_for(game: &Game<'_>, cell: &Option<ItemStack>, stack: &ItemStack) -> bool {
     match cell {
         None => true,
         Some(s) => {
@@ -572,7 +577,7 @@ fn room_for(game: &Game<'_>, cell: &Option<ItemStack>, stack: &ItemStack) -> boo
     }
 }
 
-fn add_to(cell: &mut Option<ItemStack>, stack: ItemStack) {
+pub(super) fn add_to(cell: &mut Option<ItemStack>, stack: ItemStack) {
     match cell {
         Some(s) => s.count += stack.count,
         None => *cell = Some(stack),
@@ -598,7 +603,14 @@ fn pot_tick(game: &mut Game<'_>, pos: [i32; 3], e: &mut ModBlockEntity) {
     match found {
         Some(meal) if hot && room_for(game, &e.items[MEAL], &meal.result) => {
             total = meal.time;
-            cook += 1;
+            // Hands-On Delight's stirring hurries the pot along.
+            let boost = match e.nbt.get(&key("Boost")) {
+                Some(Tag::Int(b)) => *b,
+                _ => 0,
+            };
+            let hurry = boost.min(3);
+            e.nbt.insert(key("Boost"), Tag::Int(boost - hurry));
+            cook += 1 + hurry;
             if cook % 60 == 1 {
                 game.native_play_sound_in_place("farmersdelight:block.cooking_pot.boil_soup", center(pos, 0.5), BLOCKS, 0.5, 1.0);
             }
@@ -615,7 +627,24 @@ fn pot_tick(game: &mut Game<'_>, pos: [i32; 3], e: &mut ModBlockEntity) {
                         game.spawn_item(ItemStack::new(&left, 1), center(pos, 0.7), [0.0, 0.2, 0.0], 10);
                     }
                 }
-                add_to(&mut e.items[MEAL], meal.result.clone());
+                // Each star of steady stirring adds a quarter more servings.
+                let stars = match e.nbt.get(&key("Stars")) {
+                    Some(Tag::Int(s)) => (*s).clamp(0, 3),
+                    _ => 0,
+                };
+                let mut result = meal.result.clone();
+                let extra = result.count as f32 * 0.25 * stars as f32;
+                let whole = extra.floor();
+                let max = game.items().get(&result.item).map_or(64, |i| i.max_stack);
+                result.count += whole as u32 + u32::from(roll(game, pos, 99) < extra - whole);
+                result.count = result.count.min(max);
+                if room_for(game, &e.items[MEAL], &result) {
+                    add_to(&mut e.items[MEAL], result);
+                } else {
+                    add_to(&mut e.items[MEAL], meal.result.clone());
+                }
+                e.nbt.insert(key("Stars"), Tag::Int(0));
+                e.nbt.insert(key("Steady"), Tag::Int(0));
             }
         }
         Some(meal) => {
@@ -643,17 +672,69 @@ fn pot_tick(game: &mut Game<'_>, pos: [i32; 3], e: &mut ModBlockEntity) {
     }
     e.nbt.insert(key("CookTime"), Tag::Int(cook));
     e.data = vec![cook, total, i32::from(hot)];
+    // Clients see the pot's contents (Hands-On Delight draws them): sent again when they change.
+    let sig = pot_signature(e);
+    if !matches!(e.nbt.get(&key("Sig")), Some(Tag::Int(s)) if *s == sig) {
+        e.nbt.insert(key("Sig"), Tag::Int(sig));
+        game.native_block_entity_sync(pos);
+    }
+}
+
+fn pot_signature(e: &ModBlockEntity) -> i32 {
+    let mut h: u32 = 2166136261;
+    let mut mix = |b: &[u8]| {
+        for x in b {
+            h = (h ^ u32::from(*x)).wrapping_mul(16777619);
+        }
+    };
+    for s in e.items.iter().take(MEAL + 1) {
+        match s {
+            Some(s) => {
+                mix(s.item.as_bytes());
+                mix(&s.count.to_le_bytes());
+            }
+            None => mix(&[0]),
+        }
+    }
+    if let Some(Tag::Int(stars)) = e.nbt.get(&key("Stars")) {
+        mix(&stars.to_le_bytes());
+    }
+    h as i32
+}
+
+/// A round of stirring (Hands-On Delight), `quality` 0 to 100: the pot cooks faster, and steady
+/// wide rounds fill its stars (one for every three, up to three).
+pub(super) fn stirred(game: &mut Game<'_>, pos: [i32; 3], quality: u8) {
+    game.native_with_mod_block_entity(pos, |m| {
+        let get = |m: &ModBlockEntity, k: &str| match m.nbt.get(&key(k)) {
+            Some(Tag::Int(v)) => *v,
+            _ => 0,
+        };
+        let boost = (get(m, "Boost") + 12).min(200);
+        let steady = get(m, "Steady") + i32::from(quality >= 60);
+        m.nbt.insert(key("Boost"), Tag::Int(boost));
+        m.nbt.insert(key("Steady"), Tag::Int(steady));
+        m.nbt.insert(key("Stars"), Tag::Int((steady / 3).min(3)));
+    });
 }
 
 // ---- clients ----
 
 /// What a client draws: the board's and the stove's items.
 pub(super) fn update_tag(entity: &ModBlockEntity, tag: &mut Option<Compound>) {
-    if tag.is_some() || !(entity.id == BOARD || entity.id == STOVE) {
+    if tag.is_some() || !(entity.id == BOARD || entity.id == STOVE || entity.id == POT) {
         return;
     }
     let mut c = Compound::default();
-    c.insert(key("Items"), horizon_items::item_nbt::encode_items(&entity.items));
+    let shown = if entity.id == POT { &entity.items[..entity.items.len().min(MEAL + 1)] } else { &entity.items[..] };
+    c.insert(key("Items"), horizon_items::item_nbt::encode_items(shown));
+    if entity.id == POT {
+        let stars = match entity.nbt.get(&key("Stars")) {
+            Some(Tag::Int(s)) => *s,
+            _ => 0,
+        };
+        c.insert(key("Stars"), Tag::Int(stars));
+    }
     *tag = Some(c);
 }
 
