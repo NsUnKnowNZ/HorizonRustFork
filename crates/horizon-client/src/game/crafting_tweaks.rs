@@ -1,5 +1,6 @@
-//! Crafting Tweaks (Better OneBlock): three buttons left of a crafting grid
-//! (the inventory's 2x2 and the crafting table's 3x3) that rotate the grid
+//! Crafting Tweaks (Better OneBlock): three buttons beside a crafting grid
+//! (left of the inventory's 2x2; over the arrow of the crafting table's 3x3,
+//! whose left side is the recipe book button's) that rotate the grid
 //! clockwise, balance each item evenly over the slots holding it, and clear
 //! the grid into the inventory. Each is a run of ordinary slot clicks
 //! (`tweak_click`), so it works on a server as in a local world.
@@ -37,14 +38,24 @@ impl Game<'_> {
     }
     /// The buttons, relative to the screen's origin.
     fn crafting_tweaks_buttons(&self) -> Vec<((f32, f32), Action)> {
-        let Some((grid, _)) = self.crafting_tweaks_grid() else {
+        let Some((grid, size)) = self.crafting_tweaks_grid() else {
             return Vec::new();
         };
         let (gx, gy) = self.slot_position(grid[0]);
         [Action::Rotate, Action::Balance, Action::Clear]
             .into_iter()
             .enumerate()
-            .map(|(k, a)| ((gx - BUTTON - 3.0, gy + k as f32 * (BUTTON + 2.0)), a))
+            .map(|(k, a)| {
+                let step = k as f32 * (BUTTON + 2.0);
+                // The crafting table's recipe book button sits left of its grid: there the
+                // buttons go in a row right of the grid's top, over the arrow.
+                let at = if size == 3 {
+                    (gx + 3.0 * 18.0 + 6.0 + step, gy)
+                } else {
+                    (gx - BUTTON - 3.0, gy + step)
+                };
+                (at, a)
+            })
             .collect()
     }
     pub(super) fn draw_crafting_tweaks(&self, batch: &mut HudBatch, ox: f32, oy: f32) {

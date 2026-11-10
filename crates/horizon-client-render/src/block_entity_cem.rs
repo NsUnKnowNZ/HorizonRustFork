@@ -3,8 +3,8 @@
 //! "Block entity name" table of OptiFine's `cem_model.txt`, and Entity Model Features' one-file
 //! `banner`), found and read as the mobs' are ([`horizon_optifine::cem::files`]). Each entry
 //! replaces or joins the boxes of the vanilla part it names and takes its `scale`; animations
-//! don't run yet. A `.jem`'s texture paints the models it reshapes instead of vanilla's when the
-//! atlas has it.
+//! don't run yet, so a file that has any keeps vanilla's model (see [`reshape_all`]). A `.jem`'s
+//! texture paints the models it reshapes instead of vanilla's when the atlas has it.
 //!
 //! An entry's part is OptiFine's name for it, else the vanilla part's own name. Trapped and
 //! ender chests take only their own file, and copper chests (no CEM name) keep vanilla's chest.
@@ -172,6 +172,8 @@ fn reshape_all(
     // Each file parsed once; which of its entries found a part in some model.
     let mut parsed: HashMap<&str, Option<EntityModel>> = HashMap::new();
     let mut used: BTreeMap<&str, Vec<bool>> = BTreeMap::new();
+    // Files posed by their animations, which don't run here: left out, each said once.
+    let mut animated: Vec<&str> = Vec::new();
     for t in TARGETS {
         let Some(model) = vanilla.get(t.base) else {
             continue;
@@ -197,6 +199,16 @@ fn reshape_all(
         let Some(Some(jem)) = parsed.get(path) else {
             continue;
         };
+        // A model with animations is built around them: Fresh Animations' chest hangs its
+        // boxes under a base its animations turn over and move to the block's middle
+        // (`base.rx = pi`, `base.tx = 8.01`). Drawn unposed it lies upside down in the floor
+        // half a block away, so until animations run here such a file keeps vanilla's model.
+        if jem.parts.iter().any(|p| !p.animations.is_empty()) {
+            if !animated.contains(&path) {
+                animated.push(path);
+            }
+            continue;
+        }
         let mut out = model.clone();
         let hits = apply(&mut out, jem, t.parts);
         // A file shared by several models (the conduit's, the pot's) paints only the models
@@ -213,6 +225,11 @@ fn reshape_all(
         if reshapes && let Some(texture) = jem.texture.as_deref().and_then(atlas_name) {
             textures.insert(t.key, texture);
         }
+    }
+    for path in animated {
+        log::warn!(
+            "Horizon: custom entity model {path}: a block entity's animations aren't run yet; vanilla's model is kept"
+        );
     }
     let mut unused = Vec::new();
     for (path, marks) in &used {
@@ -587,6 +604,22 @@ pub(crate) mod tests {
         assert!(textures.is_empty());
         // Each entry found its part in one of the models: no warning.
         assert_eq!(unused, Vec::new());
+    }
+
+    #[test]
+    fn a_file_with_animations_keeps_vanillas_model() {
+        // Fresh Animations' chest: the base's boxes hang under a bone its animations pose.
+        let file = format!(
+            r#"{{"models": [{{"part": "base", "rotate": [-180, 0, 0], {BOX}, "animations": [{{"base.rx": "pi", "base.tx": "8.01"}}]}}]}}"#
+        );
+        let root = pack("animated", &[("optifine/cem/chest.jem", file)]);
+        let vanilla: HashMap<_, _> = [("chest", chest())].into();
+        let result = reshape(&root, &vanilla);
+        fs::remove_dir_all(&root).unwrap();
+        let (models, textures) = result.unwrap();
+        let bottom = models["chest"].child("bottom").unwrap();
+        assert_eq!((bottom.polygons.len(), bottom.children.len()), (1, 0));
+        assert!(textures.is_empty());
     }
 
     #[test]

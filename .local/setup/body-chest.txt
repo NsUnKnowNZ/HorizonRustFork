@@ -1,0 +1,27 @@
+Launch
+Platform
+C command "kill @e[type=!minecraft:player]"
+C command "clear @s"
+C command "fill 196 150 199 210 151 201 minecraft:air"
+C command "setblock 203 150 200 minecraft:chest[facing=north]"
+C command "setblock 205 150 200 minecraft:chest[facing=north,type=left]"
+C command "setblock 206 150 200 minecraft:chest[facing=north,type=right]"
+C command "setblock 201 150 200 minecraft:ender_chest[facing=north]"
+C command "setblock 199 150 200 minecraft:trapped_chest[facing=north]"
+C command "setblock 208 150 200 minecraft:crafting_table"
+C command "tp @s 203.5 151 196.0 0 25"
+C wait 60
+C screenshot "$shots\chest-fix-2.png"
+C command "give @s minecraft:oak_planks 64"
+C command "give @s minecraft:stick 16"
+C command "give @s minecraft:white_wool 16"
+C command "gamemode survival"
+C command "tp @s 208.5 150 198.2 0 30"
+C wait 20
+C use-item
+C wait 30
+C ui
+C screenshot "$shots\crafting-gui-2.png"
+C key esc tap
+C wait 10
+C command "gamemode creative"

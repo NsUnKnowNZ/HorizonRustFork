@@ -1,0 +1,27 @@
+Launch
+C command "gamemode survival"
+C command "clear @s"
+C command "give @s minecraft:oak_planks 64"
+C command "give @s minecraft:stick 16"
+C command "recipe give @s *"
+C command "tp @s 208.5 150 198.2 0 30"
+C wait 20
+C use-item
+C wait 30
+C screenshot "$shots\ui-craft.png"
+C click-at 567 319
+C wait 20
+C click-at 540 297
+C wait 5
+C type oak chair
+C wait 20
+C click-at 528 320
+C wait 20
+C screenshot "$shots\ui-oakchair.png"
+C menu
+C key esc tap
+C wait 10
+C command "gamemode creative"
+C command "tp @s 203.5 151 196.0 0 25"
+C wait 40
+C screenshot "$shots\ui-chests.png"

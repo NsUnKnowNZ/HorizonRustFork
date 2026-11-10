@@ -81,30 +81,41 @@ fn dev_pack() -> Option<&'static str> {
         .as_deref()
 }
 
-/// Set once the picked pack's frames lost the graphics device: the pack stays off until Horizon
-/// starts again, so the world comes back without it instead of the game closing.
-static PACK_LOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// The packs whose frames lost the graphics device: each stays off until Horizon starts again,
+/// so the world comes back without it instead of the game closing. Only those: another pack
+/// picked afterwards runs, as the message about the lost one says.
+static LOST_PACKS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+fn pack_lost(pack: &str) -> bool {
+    LOST_PACKS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .any(|lost| lost == pack)
+}
 
 /// The device was lost with a pack running: that pack is turned off for this run. Its name, or
-/// None when no pack ran (or one was already turned off).
+/// None when no pack ran (or the one picked was already turned off).
 pub(super) fn drop_pack_after_device_loss(
     settings: &horizon_client::settings::Settings,
 ) -> Option<String> {
     let picked = picked_pack(settings).to_owned();
-    if picked.is_empty() || PACK_LOST.swap(true, std::sync::atomic::Ordering::Relaxed) {
+    if picked.is_empty() {
         return None;
     }
+    LOST_PACKS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(picked.clone());
     Some(picked)
 }
 
 fn picked_pack(settings: &horizon_client::settings::Settings) -> &str {
-    if PACK_LOST.load(std::sync::atomic::Ordering::Relaxed) {
-        return "";
-    }
-    active_pack(
+    let picked = active_pack(
         dev_pack().unwrap_or(&settings.horizon.shader_pack),
         &settings.mods,
-    )
+    );
+    if pack_lost(picked) { "" } else { picked }
 }
 
 /// What a renderer made now readies for the pack picked (`picked_pack`) before the first world
@@ -167,15 +178,12 @@ fn active_pack<'a>(picked: &'a str, mods: &horizon_client::mod_list::ModList) ->
 
 /// A selected pack may read resource-pack material maps, whether native or GLSL.
 pub(super) fn picks_material_pack(settings: &horizon_client::settings::Settings) -> bool {
-    if PACK_LOST.load(std::sync::atomic::Ordering::Relaxed) {
-        return false;
-    }
     let dev = std::env::var("HORIZON_SHADER_PACK").ok();
     let picked = active_pack(
         dev.as_deref().unwrap_or(&settings.horizon.shader_pack),
         &settings.mods,
     );
-    if picked.is_empty() {
+    if picked.is_empty() || pack_lost(picked) {
         return false;
     }
     let dir = Game::shader_packs_dir();
