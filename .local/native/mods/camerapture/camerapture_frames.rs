@@ -552,10 +552,56 @@ fn album_stack(game: &Game<'_>, player: u128, slot: usize) -> Option<ItemStack> 
 }
 
 /// `native_server_tick`: albums asked to open (outside the player's turn, as menus need).
+/// `HangingEntity.tick` and `canSurvive`: every 100 ticks a frame whose wall is gone (a block
+/// behind one of its cells isn't solid any more) breaks and drops its picture, as an item frame
+/// does. A fixed frame stays. A wall in a chunk that isn't loaded counts as there.
+fn drop_unsupported(game: &mut Game<'_>) {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static TICKS: AtomicU32 = AtomicU32::new(0);
+    if TICKS.fetch_add(1, Ordering::Relaxed) % 100 != 0 {
+        return;
+    }
+    let chunks: Vec<(i32, i32)> = game.world.chunks.keys().copied().collect();
+    for (cx, cz) in chunks {
+        let frames = frames_in(game, [cx, cz]);
+        for frame in frames {
+            if frame.fixed || supported(game, &frame) {
+                continue;
+            }
+            remove_frame(game, &frame);
+            sound(game, &frame, "minecraft:entity.item_frame.break");
+            let mut stack = cam::picture_stack(game, &frame.picture);
+            if let Some(name) = &frame.name {
+                stack.data_mut().custom_name = Some(Tag::String(name.as_str().into()));
+            }
+            let (m, f, _) = frame.plane();
+            game.spawn_item(stack, [m[0] + f[0] * 0.15, m[1], m[2] + f[2] * 0.15], [0.0, 0.1, 0.0], 10);
+        }
+    }
+}
+/// Whether every block behind the frame is solid (`HangingEntity.canSurvive`).
+fn supported(game: &Game<'_>, frame: &Frame) -> bool {
+    let (f, s) = (dir(frame.facing), side(frame.facing));
+    for i in 0..i32::from(frame.width) {
+        for j in 0..i32::from(frame.height) {
+            let wall = add(add(add(frame.at, s, i), [0, 1, 0], j), f, -1);
+            if !game.world.chunks.contains_key(&(wall[0] >> 4, wall[2] >> 4)) {
+                continue;
+            }
+            let state = game.world.block(wall[0], wall[1], wall[2]);
+            if !game.res.facts().get(state).legacy_solid {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 pub(crate) fn server_tick(game: &mut Game<'_>) {
     if game.remote.is_some() {
         return;
     }
+    drop_unsupported(game);
     let pending: Vec<(u128, usize)> = ALBUMS
         .lock()
         .unwrap_or_else(|e| e.into_inner())

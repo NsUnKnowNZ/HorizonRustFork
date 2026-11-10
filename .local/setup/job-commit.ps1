@@ -16,25 +16,21 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .gitignore .local/setup/body-skins.txt
+git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .gitignore .local/setup/body-cam2.txt
 git add -u -- "Play OneBlock Fresh (modded).bat" 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-Offline skins: shown to other Horizon players, and changed without a restart
+Camerapture: a picture frame whose wall is gone drops its picture
 
-A Horizon client without an account sends its profile's skin while it
-configures (horizon:skin: a version byte, an arms byte and the 64x64 pixels;
-no URL is fetched). A Horizon server (LAN, integrated or dedicated) lists the
-player with a profile property of that name, unless the profile has a signed
-`textures` one, and other Horizon clients draw it as that player's skin.
-Vanilla clients ignore the property and see the default skin.
+Frames are records on the chunk, not entities, and nothing checked what they
+hung on: a frame stayed in the air after its wall was broken or replaced, drawn
+as a floating sheet (black before its picture loaded). As HangingEntity.tick
+does, every 100 ticks a frame with a block behind it that isn't solid breaks,
+with the item frame's break sound, and drops its picture (named as it was). A
+fixed frame stays; a wall in an unloaded chunk counts as there.
 
-The offline skin is read again when another profile is put in use or the
-profiles screen closes, under a new sprite name, so a new picture shows
-without restarting; 3D Skins follows the new name.
-
-Tested: a second game joined over LAN as SkinTester with its own picture; the
-host draws it with that skin and the guest sees its own arm in it.
+Tested: the two frames left floating in the test world dropped within five
+seconds of loading it.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV

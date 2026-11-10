@@ -1,0 +1,29 @@
+Launch
+C command "tp @s 203.5 150 200.5 0 -10"
+C wait 140
+C screenshot "$shots\cam-6-after-fix.png"
+C command "kill @e[type=item,distance=..30]"
+C command "fill 198 150 206 208 154 206 minecraft:stone_bricks"
+C command "item replace entity @s hotbar.0 with camerapture:camera"
+C command "item replace entity @s hotbar.8 with minecraft:paper 16"
+C select 1
+C use-item
+C wait 20
+C mouse left click
+C wait 80
+C use-item
+C wait 10
+C select 2
+C command "tp @s 203.5 150 203.5 0 0"
+C look-at-block 203 151 206 north
+C key shift down
+C mouse right click
+C key shift up
+C wait 40
+C command "tp @s 203.5 150 200.5 0 -5"
+C wait 30
+C screenshot "$shots\cam-7-hung.png"
+C command "setblock 203 151 206 minecraft:air"
+C wait 120
+C screenshot "$shots\cam-8-wall-broken.png"
+Copy-Item -Force "$env:TEMP\horizon-native-test.log" "$shots\cam.log"
