@@ -4378,7 +4378,10 @@ impl PackPost {
     /// `depthtex0` as the frame left it, when the pack keeps one (GL's window depth, rows
     /// upside down), for what is drawn over the pack's picture.
     pub fn depth(&self) -> Option<&wgpu::TextureView> {
-        self.targets.as_ref().filter(|_| self.blit_depth).map(|t| &t.depth)
+        self.targets
+            .as_ref()
+            .filter(|_| self.blit_depth)
+            .map(|t| &t.depth)
     }
 
     /// The same before translucent terrain was drawn (`depthtex1`), when the pack keeps it.

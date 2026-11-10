@@ -138,7 +138,20 @@ impl Game<'_> {
         self.native_world_submit(&mut draw);
         self.resolve_inline_profiles(&draw.profiles);
         self.map_patches.extend(draw.patches);
-        out.extend(draw.draw.into_vertices());
+        // A shader pack draws the mods' models and items with its own block entity program:
+        // its gbuffers hold more than a colour, and only its programs know how (drawn by
+        // Horizon into them, they came out black or not at all under packs that pack their
+        // gbuffers). Text and the mods' own textures are not in the shared atlas: they stay
+        // Horizon's, as do the overlays its entity shader draws in its own way.
+        let mut packed = None;
+        for quad in draw.draw.into_vertices().chunks(4) {
+            let pack = !matches!(quad[0].layer & 0xffff, 2 | 4 | 6 | 9..=15 | 34 | 35 | 37..=44);
+            if packed != Some(pack) {
+                self.mark_stage(out.len(), if pack { "BLOCK_ENTITIES" } else { "NONE" });
+                packed = Some(pack);
+            }
+            out.extend_from_slice(quad);
+        }
     }
     /// Normal, depth-tested atlas quad under the current pose. UVs use 16
     /// texels per sprite side; color is [red, green, blue, alpha]. No model

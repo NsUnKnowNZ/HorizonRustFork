@@ -473,6 +473,64 @@ impl Game<'_> {
 }
 
 impl Game<'_> {
+    /// A text display's compound with the `score` pieces of its text replaced by the scores
+    /// they name; None when it has none.
+    fn display_text_resolved(&self, tag: &Tag) -> Option<Tag> {
+        let text = self.score_pieces_resolved(tag.get("text")?)?;
+        let Tag::Compound(mut compound) = tag.clone() else {
+            return None;
+        };
+        compound.insert("text".into(), text);
+        Some(Tag::Compound(compound))
+    }
+
+    /// `ScoreContents.resolve` over a text component kept as NBT: each `score` piece becomes
+    /// the score's number as its text (nothing for a holder with no score), through `extra`
+    /// and lists. None when the component has no such piece.
+    fn score_pieces_resolved(&self, component: &Tag) -> Option<Tag> {
+        match component {
+            Tag::Compound(compound) => {
+                let mut out = compound.clone();
+                let mut changed = false;
+                if let Some(score) = component.get("score") {
+                    let field = |key: &str| match score.get(key) {
+                        Some(Tag::String(s)) => s.to_string_lossy(),
+                        _ => String::new(),
+                    };
+                    let value = self
+                        .score
+                        .board
+                        .score(&field("name"), &field("objective"))
+                        .map_or_else(String::new, |s| s.value.to_string());
+                    out.remove(&horizon_world::nbt::JavaString::from("score"));
+                    out.insert("text".into(), Tag::String(value.as_str().into()));
+                    changed = true;
+                }
+                if let Some(extra) = component
+                    .get("extra")
+                    .and_then(|e| self.score_pieces_resolved(e))
+                {
+                    out.insert("extra".into(), extra);
+                    changed = true;
+                }
+                changed.then_some(Tag::Compound(out))
+            }
+            Tag::List(list) => {
+                let resolved: Vec<Option<Tag>> =
+                    list.iter().map(|t| self.score_pieces_resolved(t)).collect();
+                resolved.iter().any(Option::is_some).then(|| {
+                    Tag::List(
+                        list.iter()
+                            .zip(resolved)
+                            .map(|(old, new)| new.unwrap_or_else(|| old.clone()))
+                            .collect(),
+                    )
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// The synched data of a text, block or item display kept unsimulated,
     /// from its compound (`Display.readAdditionalSaveData`), with the
     /// defaults to send when a value goes back to one.
@@ -480,10 +538,15 @@ impl Game<'_> {
         use horizon_client::text_display::{display_data, text_display_data};
         let empty = Tag::Compound(Default::default());
         let (meta, defaults) = match e.kind.as_str() {
-            "minecraft:text_display" => (
-                text_display_data(tag, false),
-                text_display_data(&empty, true),
-            ),
+            "minecraft:text_display" => {
+                // `Display.TextDisplay.readAdditionalSaveData` resolves the text for the
+                // entity (`ComponentUtils.updateForEntity`): a `score` piece shows the score.
+                let resolved = self.display_text_resolved(tag);
+                (
+                    text_display_data(resolved.as_ref().unwrap_or(tag), false),
+                    text_display_data(&empty, true),
+                )
+            }
             "minecraft:block_display" => {
                 // DATA_BLOCK_STATE_ID, air by default.
                 let state = |t: Option<BlockStateId>| {

@@ -848,19 +848,26 @@ pub fn load_post(
         });
     // Translucent entities and particles blend (OQ-23). Particles keep vanilla's alpha cut at
     // 0.1; translucent entities lose only fully transparent texels (a shadow fades out).
+    // A program the pack draws without blending (`blend.<program> = off`: the fallback to
+    // `gbuffers_entities` of a pack whose gbuffers hold packed values) cannot fade a texel
+    // out, and its alpha is not the texel's alone: it keeps the cutout test at 0.1, or the
+    // clear texels of a text display's glyphs are written whole.
     let translucent =
         |names: &[&str],
          cut: f32,
          gbuffers: &mut dyn FnMut(&[&str], &GbuffersInputs) -> Option<PostProgram>| {
             let i = inputs.entities.as_ref()?;
-            let mut i = i.clone();
-            i.alpha_test = Some(crate::AlphaTest {
-                op: ">",
-                reference: cut,
-            });
-            gbuffers(names, &i).map(|mut p| {
-                p.blend = blend(properties, &p.name).unwrap_or(Some(TRANSLUCENT_BLEND));
-                p
+            names.iter().find_map(|&name| {
+                let own = blend(properties, name).unwrap_or(Some(TRANSLUCENT_BLEND));
+                let mut i = i.clone();
+                i.alpha_test = Some(crate::AlphaTest {
+                    op: ">",
+                    reference: if own.is_none() { cut.max(0.1) } else { cut },
+                });
+                gbuffers(&[name], &i).map(|mut p| {
+                    p.blend = own;
+                    p
+                })
             })
         };
     let mut gbuffers_dyn = |names: &[&str], i: &GbuffersInputs| gbuffers(names, Group::Gbuffers, i);

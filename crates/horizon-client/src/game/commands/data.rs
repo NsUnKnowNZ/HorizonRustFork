@@ -559,11 +559,22 @@ impl Game<'_> {
             }
             Target::Other(id) => {
                 let uuid = self.uuid_for(id);
+                // A marker or a display is kept as its compound: `Entity.load` is the new
+                // compound at its position and rotation (`Display.readAdditionalSaveData`
+                // reads the rest, which the tracker sends from the compound).
                 let marker = self
                     .others
                     .iter_mut()
                     .find(|o| {
-                        o.id == id && matches!(o.kind.as_str(), "minecraft:marker" | "marker")
+                        o.id == id
+                            && matches!(
+                                o.kind.as_str(),
+                                "minecraft:marker"
+                                    | "marker"
+                                    | "minecraft:text_display"
+                                    | "minecraft:block_display"
+                                    | "minecraft:item_display"
+                            )
                     })
                     .ok_or_else(stale)?;
                 let position = entity_nbt::position(&tag).ok_or_else(stale)?;
@@ -571,6 +582,12 @@ impl Game<'_> {
                 marker.position = position;
                 marker.yaw = yaw;
                 marker.pitch = pitch;
+                if marker.kind == "minecraft:item_display" {
+                    marker.item_transformation =
+                        crate::game::native_entities::ItemDisplayTransformation::from_tag(
+                            tag.get("transformation"),
+                        );
+                }
                 // Keep the existing marker identity even when the input edits UUID or id.
                 set_key(&mut tag, "UUID", Tag::IntArray(uuid.to_vec()));
                 set_key(&mut tag, "id", Tag::String(marker.kind.as_str().into()));

@@ -3315,33 +3315,32 @@ impl Renderer {
             label: Some("Debug lines over a shader pack"),
             source: wgpu::ShaderSource::Wgsl(DEBUG_OVER.into()),
         });
-        let debug_over_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Debug lines over a shader pack"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+        let debug_over_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Debug lines over a shader pack"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
                     },
-                    // A depth view through an unfilterable float binding.
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
+                    count: None,
+                },
+                // A depth view through an unfilterable float binding.
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
                     },
-                ],
-            });
+                    count: None,
+                },
+            ],
+        });
         let debug_over_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Debug lines over a shader pack"),
@@ -7355,7 +7354,10 @@ impl Renderer {
         std::result::Result<Option<(Vec<String>, Vec<String>)>, pack_post::Refused>,
     )> {
         // A pack built ahead is kept until the player is in its dimension.
-        if self.pack_ahead.as_ref().is_some_and(|a| a.thread.is_finished())
+        if self
+            .pack_ahead
+            .as_ref()
+            .is_some_and(|a| a.thread.is_finished())
             && let Some(ahead) = self.pack_ahead.take()
         {
             match ahead.thread.join() {
@@ -9293,8 +9295,7 @@ impl Renderer {
         let primitive_lines_through = frame.world_primitives.lines_through.len() as u32;
         let primitive_first = debug_depth + debug_top + crosshair;
         if primitive_first + primitive_lines + primitive_lines_through > 0 {
-            let needed =
-                u64::from(primitive_first + primitive_lines + primitive_lines_through);
+            let needed = u64::from(primitive_first + primitive_lines + primitive_lines_through);
             if needed > self.debug_line_capacity {
                 self.debug_line_capacity = needed.next_power_of_two();
                 self.debug_line_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -11458,8 +11459,10 @@ impl Renderer {
                 }
                 pass.set_bind_group(0, &self.group, &[]);
             }
-            // LevelRenderer.executeSeeThrough, after the rest of the world.
-            if see_through_quads > 0 {
+            // LevelRenderer.executeSeeThrough, after the rest of the world. Under a shader
+            // pack it is drawn over the pack's picture instead (`Overlay::see_through`): the
+            // pack's programs draw over what this pass leaves where nothing wrote depth.
+            if see_through_quads > 0 && !pack_post {
                 pass.set_pipeline(&self.see_through_pipeline);
                 pass.set_bind_group(0, &self.entity_group, &[]);
                 pass.set_vertex_buffer(0, self.entity_buffer.slice(..));
@@ -11724,6 +11727,10 @@ impl Renderer {
                     real: false,
                     hand_drawn: !pack_draws_hand,
                     hand_view_proj,
+                    see_through: (
+                        see_through_quads * u32::from(pack_post),
+                        ((world_quads + additive_quads + hand_quads) * 4) as i32,
+                    ),
                 };
                 self.draw_overlay(&mut encoder, frame, &generated_view, generated, &overlay);
             }
@@ -11776,6 +11783,10 @@ impl Renderer {
             real: true,
             hand_drawn: !pack_draws_hand,
             hand_view_proj,
+            see_through: (
+                see_through_quads * u32::from(pack_post),
+                ((world_quads + additive_quads + hand_quads) * 4) as i32,
+            ),
         };
         let readback =
             self.draw_overlay(&mut encoder, frame, &view_target, &target_texture, &overlay);
@@ -12059,6 +12070,38 @@ impl Renderer {
         // HDR output's layered frame keeps the world after the hand and the camera overlays,
         // as light (`Hdr::layered`); else it is kept here, before them.
         let layered = self.hdr.as_ref().is_some_and(|h| h.layered());
+        // RenderPipelines.TEXT_SEE_THROUGH over a shader pack's picture: no depth test, so
+        // nothing of the pack's is needed, and the text is as vanilla draws it whatever the
+        // pack does with its buffers.
+        if overlay.see_through.0 > 0 {
+            let attachments = [Some(wgpu::RenderPassColorAttachment {
+                view: view_target,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })];
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("See-through text over a shader pack"),
+                color_attachments: &attachments,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                ..Default::default()
+            });
+            pass.set_pipeline(&self.see_through_pipeline);
+            pass.set_bind_group(0, &self.entity_group, &[]);
+            pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.set_vertex_buffer(0, self.entity_buffer.slice(..));
+            pass.draw_indexed(0..overlay.see_through.0 * 6, overlay.see_through.1, 0..1);
+        }
         if let Some(hdr) = &self.hdr {
             if layered {
                 hdr.begin(&self.queue, !frame.title);
@@ -12810,9 +12853,15 @@ fn hdr10_to_rgb16(pixels: &[[u8; 4]]) -> Vec<u8> {
 pub(crate) fn square_downscale(pixels: &[u8], width: u32, height: u32, size: [u32; 2]) -> Vec<u8> {
     let [tw, th] = size;
     let (cw, ch) = if u64::from(width) * u64::from(th) > u64::from(height) * u64::from(tw) {
-        ((u64::from(height) * u64::from(tw) / u64::from(th)) as u32, height)
+        (
+            (u64::from(height) * u64::from(tw) / u64::from(th)) as u32,
+            height,
+        )
     } else {
-        (width, (u64::from(width) * u64::from(th) / u64::from(tw)) as u32)
+        (
+            width,
+            (u64::from(width) * u64::from(th) / u64::from(tw)) as u32,
+        )
     };
     let (cw, ch) = (cw.clamp(1, width), ch.clamp(1, height));
     let (cx, cy) = ((width - cw) / 2, (height - ch) / 2);
@@ -13104,6 +13153,9 @@ struct Overlay {
     hand_drawn: bool,
     /// Camera-relative world to clip space for the hand: its own field of view and the bob.
     hand_view_proj: Mat4,
+    /// See-through text (name tags, text displays) to draw over a shader pack's picture: its
+    /// quads and first vertex. No quads without a pack, where the world's pass draws it.
+    see_through: (u32, i32),
 }
 
 pub(crate) fn world_projection(fov_degrees: f32, aspect: f32, far: f32) -> Mat4 {
