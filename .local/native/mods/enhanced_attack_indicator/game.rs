@@ -55,5 +55,11 @@ fn progress(game: &super::Game<'_>) -> Option<f32> {
 }
 
 pub(super) fn frame(game: &mut super::Game<'_>) {
+    // The frame hook runs on the title screen too: with no player there is no attack to
+    // show, and a world's tables (the held item's attack speed) may not be loaded yet.
+    if game.player.is_none() {
+        state::set(None);
+        return;
+    }
     state::set(progress(game));
 }

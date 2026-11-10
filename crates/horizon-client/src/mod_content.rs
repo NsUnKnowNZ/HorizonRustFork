@@ -2230,6 +2230,25 @@ impl Overlay<'_> {
         fs::write(path, bytes)?;
         Ok(())
     }
+    /// A mod's own file `source` as `rel`, shared as the base's files are (a link, or a copy
+    /// where none can be made) instead of read and written again. Reading is what a merge
+    /// waits for: an antivirus scans a file the first time it is opened, about 13 ms each
+    /// measured on Windows, a quarter of an hour for a pack's 84,000 files; a link opens
+    /// nothing. The root is replaced name by name (`write`), so a shared file is never written
+    /// through, and a mod file edited in place changes the stamp, which builds another root.
+    fn link(&self, rel: &str, source: &Path) -> Result<()> {
+        let rel = Path::new(rel);
+        if let Some(parent) = rel.parent() {
+            self.dir(parent)?;
+        }
+        let path = self.out.join(rel);
+        if fs::symlink_metadata(&path).is_ok() {
+            fs::remove_file(&path)?;
+        }
+        // A link's target is read from where the link is: a relative one would dangle.
+        link(&std::path::absolute(source)?, &path)?;
+        Ok(())
+    }
 }
 fn out_path(overlay: &Overlay<'_>, rel: &str) -> PathBuf {
     overlay.out.join(rel)
@@ -2497,6 +2516,42 @@ fn tables(base: &Path, plan: &Plan, overlay: &Overlay<'_>) -> Result<()> {
     Ok(())
 }
 
+/// A structure template among a mod's files (`data/<namespace>/structure/<path>.nbt`): its
+/// namespace and path.
+fn structure_template(file: &str) -> Option<(&str, &str)> {
+    file.strip_prefix("data/")
+        .and_then(|r| r.split_once("/structure/"))
+        .filter(|(_, path)| path.ends_with(".nbt"))
+}
+
+/// How far a build is through the mods' files, said in the log every two seconds: the boot
+/// screen shows the log's last lines, so a long merge does not look like a frozen window.
+struct MergeProgress {
+    total: usize,
+    done: std::cell::Cell<usize>,
+    said: std::cell::Cell<std::time::Instant>,
+}
+impl MergeProgress {
+    fn start(total: usize) -> Self {
+        Self {
+            total,
+            done: std::cell::Cell::new(0),
+            said: std::cell::Cell::new(std::time::Instant::now()),
+        }
+    }
+    fn step(&self) {
+        self.done.set(self.done.get() + 1);
+        if self.said.get().elapsed() >= std::time::Duration::from_secs(2) {
+            self.said.set(std::time::Instant::now());
+            log::info!(
+                "Horizon: merging mods: {} of {} files",
+                self.done.get(),
+                self.total
+            );
+        }
+    }
+}
+
 /// Builds the content root for `mods` over `base` in `out`. Returns the
 /// warnings for the log: the shared tags a mod replaced.
 pub fn build(base: &Path, mods: &[ContentMod], out: &Path) -> Result<Vec<String>> {
@@ -2524,12 +2579,31 @@ pub fn build(base: &Path, mods: &[ContentMod], out: &Path) -> Result<Vec<String>
     let mut additions: BTreeMap<&str, Vec<Addition>> = BTreeMap::new();
     let mut modifiers = Vec::new();
     let mut atlases: BTreeMap<String, Vec<J>> = BTreeMap::new();
+    let merge = MergeProgress::start(mods.iter().map(|m| m.content.files.len()).sum());
     for m in mods {
         let declarations = format!("data/{}/horizon/", m.id);
         let mut reader = m.content.reader()?;
         for file in &m.content.files {
-            let bytes = reader.read(file)?;
+            merge.step();
             let is_tag = file.starts_with("data/") && file.contains("/tags/");
+            let merged = (is_tag && file.ends_with(".json"))
+                || (file.starts_with("assets/minecraft/atlases/") && file.ends_with(".json"));
+            if !merged {
+                // Its declarations are read as tables, not files of the root.
+                if file.starts_with(&declarations) {
+                    continue;
+                }
+                // Most files go in as they are: a folder mod's are shared, not read. Only
+                // what the merge itself reads below is opened.
+                let read_here = biomes::is_modifier(file)
+                    || worldgen_entry(file).is_some()
+                    || structure_template(file).is_some();
+                if !read_here && let Some(source) = reader.source_path(file)? {
+                    overlay.link(file, &source)?;
+                    continue;
+                }
+            }
+            let bytes = reader.read(file)?;
             if is_tag && file.ends_with(".json") {
                 let doc: J = serde_json::from_slice(&bytes).map_err(|e| format!("{file}: {e}"))?;
                 let Some(J::Arr(values)) = doc.get("values") else {
@@ -2561,11 +2635,7 @@ pub fn build(base: &Path, mods: &[ContentMod], out: &Path) -> Result<Vec<String>
                         Some(addition) => additions.entry(bundle).or_default().push(addition),
                         None => entries.push((id, text)),
                     }
-                } else if let Some(template) = file
-                    .strip_prefix("data/")
-                    .and_then(|r| r.split_once("/structure/"))
-                    .filter(|(_, path)| path.ends_with(".nbt"))
-                {
+                } else if let Some(template) = structure_template(file) {
                     // The worldgen loader's templates: worldgen/structure/<ns>/<path>.nbt.
                     let (ns, path) = template;
                     overlay.write(&format!("worldgen/structure/{ns}/{path}"), &bytes)?;

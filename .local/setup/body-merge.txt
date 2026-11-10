@@ -1,0 +1,7 @@
+$t0 = Get-Date
+Launch
+"WORLD READY AFTER $([int]((Get-Date) - $t0).TotalSeconds) s"
+C command "tp @s 202.5 151 196.5 0 25"
+C wait 60
+C screenshot "$shots\merge-check.png"
+C logs --lines 12

@@ -755,7 +755,11 @@ impl Game<'_> {
     }
     /// The item whose attack damage and speed modifiers the player has (`attack_item`).
     pub(super) fn attack_item_info(&self) -> Option<&horizon_client::items::ItemInfo> {
-        self.items().get(self.attack_item.as_deref()?)
+        // The item first: with none there is nothing to look up, and the items table is not
+        // there to ask before a world's resources are in (a mod's frame hook on the title
+        // screen reaches this).
+        let item = self.attack_item.as_deref()?;
+        self.items().get(item)
     }
 
     /// `Player.attack`: the attack damage attribute, with the held weapon's

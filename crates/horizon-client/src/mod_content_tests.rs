@@ -4788,3 +4788,31 @@ fn worldgen_entry_reads_both_feature_folders() {
         None
     );
 }
+
+#[test]
+fn a_folder_mods_file_is_shared_and_a_later_write_leaves_it_alone() {
+    let scratch = std::env::temp_dir().join(format!("horizon-overlay-link-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&scratch);
+    let (base, out) = (scratch.join("base"), scratch.join("out"));
+    let source = scratch.join("mod/assets/m/textures/a.png");
+    fs::create_dir_all(base.join("assets")).unwrap();
+    fs::write(base.join("assets/keep.txt"), "base").unwrap();
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "pixels").unwrap();
+    let overlay = Overlay::new(&base, &out).unwrap();
+    overlay.link("assets/m/textures/a.png", &source).unwrap();
+    assert_eq!(
+        fs::read(out.join("assets/m/textures/a.png")).unwrap(),
+        b"pixels"
+    );
+    // The base's files beside it are still there.
+    assert_eq!(fs::read(out.join("assets/keep.txt")).unwrap(), b"base");
+    // A write replaces the name: the mod's own file is not written through.
+    overlay.write("assets/m/textures/a.png", b"other").unwrap();
+    assert_eq!(fs::read(&source).unwrap(), b"pixels");
+    assert_eq!(
+        fs::read(out.join("assets/m/textures/a.png")).unwrap(),
+        b"other"
+    );
+    fs::remove_dir_all(&scratch).unwrap();
+}

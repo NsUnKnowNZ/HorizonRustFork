@@ -543,6 +543,16 @@ pub enum FileReader<'a> {
     Zip(Box<zip::ZipArchive<std::fs::File>>),
 }
 impl FileReader<'_> {
+    /// Where a folder mod keeps content file `name` on disk, for a reader that can share the
+    /// file instead of copying its bytes; none for a packaged mod (its files are in the
+    /// archive) and for content declared in code.
+    pub fn source_path(&self, name: &str) -> Result<Option<std::path::PathBuf>, String> {
+        check_path(name)?;
+        Ok(match self {
+            Self::Dir(root) if !root.as_os_str().is_empty() => Some(root.join(name)),
+            _ => None,
+        })
+    }
     /// One content file's bytes.
     pub fn read(&mut self, name: &str) -> Result<Vec<u8>, String> {
         check_path(name)?;

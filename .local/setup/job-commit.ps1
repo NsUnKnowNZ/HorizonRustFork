@@ -16,17 +16,22 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/prune_compat.py .local/setup/charm_chest_items.py .local/setup/body-ui2.txt .local/setup/body-charm.txt .local/setup/body-ui.txt .local/setup/body-chest.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
+git add -f .local/setup/prune_compat.py .local/setup/charm_chest_items.py .local/setup/body-ui2.txt .local/setup/body-charm.txt .local/setup/body-merge.txt .local/setup/body-ui.txt .local/setup/body-chest.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-A content mod's wood chests are drawn (Charm's azalea, bamboo, acacia...)
+Mod files are linked into the content root, not copied; a crash after a merge fixed
 
-- block_entity_render: `<namespace>:<wood>_chest` and `trapped_<wood>_chest` are
-  chests, drawn from `<namespace>:entity/chest/<wood>_normal` or `_trapped` and
-  the double chest's `_left` and `_right`
-- hud: the chests atlas takes files from every namespace, not only Minecraft's
-- item_render: a special chest model's namespaced texture finds its sprite
-- old test-game cache folders removed from the working machine (not tracked)
+- mod_content: a folder mod's files are shared with the root as the base's are
+  (hard link on Windows, symlink on Unix, copy as fallback). Only what the merge
+  parses is read: tags, atlases, biome modifiers, worldgen entries, structure
+  templates. A friend's first start spent 16 minutes reading 84,000 files, about
+  13 ms each on first open; a link opens nothing.
+- the log says "merging mods: N of M files" every two seconds; the boot screen
+  shows the log, so a long merge no longer looks frozen
+- hand: attack_item_info looks at the attack item before the items table, which
+  is not there before a world's resources load (a frame hook on the title screen
+  reached it: "world resources joined before entry")
+- Enhanced Attack Indicator: its frame hook does nothing without a player
 
 Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
@@ -44,11 +49,11 @@ $env:CARGO_TARGET_DIR = "$env:TEMP\horizon-verify-target"
 (Get-Process -Id $PID).PriorityClass = "BelowNormal"
 & cargo check --locked -p horizon-client 2>&1 | ForEach-Object { "$_" } | Select-String -Pattern "^error|Finished|-->|could not|failed|panicked" | Select-Object -First 40 | ForEach-Object { "$_" }
 "CLEAN CHECK EXIT $LASTEXITCODE"
+& cargo test --locked -p horizon-client --lib a_folder_mods_file_is_shared 2>&1 | ForEach-Object { "$_" } | Select-String -Pattern "^error|test result|FAILED|panicked|failed" | Select-Object -First 20 | ForEach-Object { "$_" }
+"LINK TEST EXIT $LASTEXITCODE"
 Pop-Location
 Remove-Item Env:CARGO_TARGET_DIR
 git worktree remove --force $wt 2>&1 | ForEach-Object { "$_" }
 Remove-Item -Recurse -Force "$env:TEMP\horizon-verify-target" -ErrorAction SilentlyContinue
 git status --short --untracked-files=no 2>&1 | Select-Object -First 20 | ForEach-Object { "$_" }
-"--- old content caches"
-Get-ChildItem .horizon-cache\mod-content -Directory | Sort-Object LastWriteTime -Descending | Select-Object -Skip 3 | ForEach-Object { Remove-Item -Recurse -Force $_.FullName; "removed cache $($_.Name)" }
 "=== JOB DONE"
