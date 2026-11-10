@@ -1,6 +1,7 @@
 //! Optional, texture-matched overlays drawn full bright over their base texture in the same
 //! terrain fragment: native mods' (`<ns>:emissive/...`) and OptiFine's emissive block textures
 //! (`block/stone_e.png` beside `block/stone.png`). No extra draw calls or world light changes.
+use horizon_core::rfs::RPath as _;
 use crate::sprites::Sprites;
 use std::{collections::BTreeMap, path::Path};
 
@@ -22,7 +23,7 @@ pub fn load(root: &Path, sprites: &mut Sprites) {
     names.sort();
     for name in names {
         let file = crate::atlas_sources::texture_path(root, &name, "textures");
-        if std::fs::metadata(file).is_ok_and(|m| m.len() <= 1 << 20) {
+        if horizon_core::rfs::metadata(file).is_ok_and(|m| m.len() <= 1 << 20) {
             let _ = sprites.insert(root, &name);
         }
     }
@@ -77,7 +78,7 @@ pub fn load_optifine(root: &Path, sprites: &mut Sprites) -> Vec<(String, String)
                 (overlay, file)
             }
         };
-        if !std::fs::metadata(&file).is_ok_and(|m| m.is_file()) {
+        if !horizon_core::rfs::metadata(&file).is_ok_and(|m| m.r_is_file()) {
             continue;
         }
         if pairs.len() == MAX - NATIVE {
@@ -87,7 +88,7 @@ pub fn load_optifine(root: &Path, sprites: &mut Sprites) -> Vec<(String, String)
             );
             break;
         }
-        if std::fs::metadata(&file).is_ok_and(|m| m.len() > 1 << 20) {
+        if horizon_core::rfs::metadata(&file).is_ok_and(|m| m.len() > 1 << 20) {
             log::warn!("Horizon: emissive overlay {overlay} is over 1 MiB, skipped");
             continue;
         }

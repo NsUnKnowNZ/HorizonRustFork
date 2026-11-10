@@ -398,7 +398,7 @@ impl Game<'_> {
         self.advancement_tree();
         let progress = self
             .adv_path()
-            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|p| horizon_core::rfs::read_to_string(p).ok())
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())
             .map(|v| Progress::from_json(&v))
             .unwrap_or_default();

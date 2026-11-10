@@ -16,7 +16,7 @@ fn config() -> &'static Config {
     static CELL: OnceLock<Config> = OnceLock::new();
     CELL.get_or_init(|| {
         let path = std::path::Path::new(CONFIG);
-        let text = std::fs::read_to_string(path).unwrap_or_else(|_| {
+        let text = horizon_core::rfs::read_to_string(path).unwrap_or_else(|_| {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
@@ -33,7 +33,7 @@ fn config() -> &'static Config {
 
 /// The registry's trim materials and patterns (the prepared game data's).
 fn ids(root: &std::path::Path, kind: &str) -> Vec<Arc<str>> {
-    let mut out: Vec<Arc<str>> = std::fs::read_dir(root.join("data/minecraft").join(kind))
+    let mut out: Vec<Arc<str>> = horizon_core::rfs::read_dir(root.join("data/minecraft").join(kind))
         .into_iter()
         .flatten()
         .flatten()

@@ -3,8 +3,11 @@
 //! warnings logged; and the atlas name of a model's texture. Shared by the mobs' and the block
 //! entities' models.
 
+use horizon_core::rfs::RPath as _;
 use super::model::{EntityModel, MAX_BYTES, parse_jem};
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{collections::BTreeMap, path::Path};
+#[cfg(test)]
+use std::fs;
 
 /// Every `.jem` of the CEM folders by model name, sorted, each name's files best first:
 /// `emf/cem` before `optifine/cem` whichever form either uses, and within one folder the flat
@@ -12,7 +15,7 @@ use std::{collections::BTreeMap, fs, path::Path};
 pub fn jem_files(root: &Path) -> BTreeMap<String, Vec<String>> {
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for base in ["assets/minecraft/emf/cem", "assets/minecraft/optifine/cem"] {
-        let Ok(entries) = fs::read_dir(root.join(base)) else {
+        let Ok(entries) = horizon_core::rfs::read_dir(root.join(base)) else {
             continue;
         };
         let (mut flat, mut nested) = (Vec::new(), Vec::new());
@@ -20,12 +23,12 @@ pub fn jem_files(root: &Path) -> BTreeMap<String, Vec<String>> {
             let name = e.file_name().to_string_lossy().into_owned();
             if let Some(model) = name.strip_suffix(".jem") {
                 // A directory named `x.jem` isn't a model.
-                if e.path().is_file() {
+                if e.path().r_is_file() {
                     flat.push((model.to_owned(), format!("{base}/{name}")));
                 }
             } else {
                 let path = format!("{base}/{name}/{name}.jem");
-                if root.join(&path).is_file() {
+                if root.join(&path).r_is_file() {
                     nested.push((name, path));
                 }
             }
@@ -60,7 +63,7 @@ pub fn load_jem(root: &Path, path: &str) -> Option<EntityModel> {
                 "Horizon: custom entity model {path}: its texture {texture} is outside \
                  assets/minecraft/textures/, so not in the atlas: the vanilla one draws"
             );
-        } else if !root.join(texture).is_file() {
+        } else if !root.join(texture).r_is_file() {
             log::warn!(
                 "Horizon: custom entity model {path}: its texture {texture} doesn't exist, \
                  so not in the atlas: the vanilla one draws"
@@ -73,11 +76,11 @@ pub fn load_jem(root: &Path, path: &str) -> Option<EntityModel> {
 /// A pack file's text, None when it's missing or larger than a model may read: its size is
 /// checked before anything is read.
 fn read_small(path: &Path) -> Option<String> {
-    let len = fs::metadata(path).ok()?.len();
+    let len = horizon_core::rfs::metadata(path).ok()?.len();
     if len > MAX_BYTES as u64 {
         return None;
     }
-    fs::read_to_string(path).ok()
+    horizon_core::rfs::read_to_string(path).ok()
 }
 
 /// The atlas name of a texture resource path: `assets/minecraft/textures/entity/x.png` is

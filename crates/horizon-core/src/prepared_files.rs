@@ -67,6 +67,8 @@ pub struct PreparedFiles {
     file: File,
     names: Box<str>,
     entries: Box<[Entry]>,
+    /// When the file was written.
+    modified: Option<std::time::SystemTime>,
 }
 
 impl PreparedFiles {
@@ -87,6 +89,63 @@ impl PreparedFiles {
         let (offset, len) = self.entries[i].data;
         let mut bytes = vec![0; len.min(max) as usize];
         Some(read_at(&self.file, &mut bytes, offset).map(|()| bytes))
+    }
+    /// Whether this holds the file `name`.
+    pub fn has(&self, name: &str) -> bool {
+        self.len_of(name).is_some()
+    }
+    /// The length of the file `name`; `None` when this doesn't hold it.
+    pub fn len_of(&self, name: &str) -> Option<u64> {
+        let i = self
+            .entries
+            .binary_search_by(|e| self.name(e).cmp(name))
+            .ok()?;
+        Some(self.entries[i].data.1)
+    }
+    /// Whether this holds a file under the folder `dir`.
+    pub fn has_folder(&self, dir: &str) -> bool {
+        let prefix = format!("{dir}/");
+        let start = self
+            .entries
+            .partition_point(|e| self.name(e) < prefix.as_str());
+        self.entries
+            .get(start)
+            .is_some_and(|e| self.name(e).starts_with(&prefix))
+    }
+    /// What the folder `dir` has in it, in name order: each file with its length,
+    /// each folder with `None`.
+    pub fn children(&self, dir: &str) -> Vec<(String, Option<u64>)> {
+        let prefix = format!("{dir}/");
+        let mut out = Vec::new();
+        let mut at = self
+            .entries
+            .partition_point(|e| self.name(e) < prefix.as_str());
+        while let Some(e) = self.entries.get(at) {
+            let Some(rest) = self.name(e).strip_prefix(&prefix) else {
+                break;
+            };
+            match rest.split_once('/') {
+                None => {
+                    out.push((rest.to_owned(), Some(e.data.1)));
+                    at += 1;
+                }
+                Some((folder, _)) => {
+                    out.push((folder.to_owned(), None));
+                    // Past the folder's files: `0` is the byte after `/`.
+                    let past = format!("{prefix}{folder}0");
+                    at += self.entries[at..].partition_point(|e| self.name(e) < past.as_str());
+                }
+            }
+        }
+        out
+    }
+    /// Every file this holds, in name order.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.entries.iter().map(|e| self.name(e))
+    }
+    /// When this was written: how old its files are.
+    pub fn modified(&self) -> Option<std::time::SystemTime> {
+        self.modified
     }
     /// The files under `dir` (`/`-separated, from the root) and its
     /// subfolders, in name order, by their names from the root; `None` when
@@ -158,10 +217,12 @@ impl PreparedFiles {
                 }
             })
             .collect();
+        let modified = file.metadata().and_then(|m| m.modified()).ok();
         let files = Self {
             file,
             names: names.into(),
             entries,
+            modified,
         };
         // Every name in the pool, in strict order; every file's bytes inside the file.
         let mut last: Option<&str> = None;
@@ -182,10 +243,24 @@ impl PreparedFiles {
     }
 }
 
+type Opened = Vec<(PathBuf, Option<Arc<PreparedFiles>>)>;
+static OPENED: Mutex<Opened> = Mutex::new(Vec::new());
+
+/// Forgets what [`open`] found for `root`: its file has just been written.
+fn forget(root: &Path) {
+    OPENED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .retain(|(r, _)| r != root);
+}
+
+/// The folders a root's data file holds, with their subfolders.
+pub fn folders() -> &'static [&'static str] {
+    &FOLDERS
+}
+
 /// `root`'s file, opened once per process; `None` when it has no usable one.
 pub fn open(root: &Path) -> Option<Arc<PreparedFiles>> {
-    type Opened = Vec<(PathBuf, Option<Arc<PreparedFiles>>)>;
-    static OPENED: Mutex<Opened> = Mutex::new(Vec::new());
     let mut opened = OPENED.lock().unwrap_or_else(PoisonError::into_inner);
     if let Some((_, files)) = opened.iter().find(|(r, _)| r == root) {
         return files.clone();
@@ -277,6 +352,23 @@ pub fn write(root: &Path) -> io::Result<()> {
 /// delays each file's first open, and scans several at once when several are
 /// asked for. The threads run at normal priority: not for a game being played.
 pub fn write_with_readers(root: &Path, readers: usize) -> io::Result<()> {
+    write_from(root, readers, &|_| None)
+}
+
+/// Whether a root's data file holds `name` (`/`-separated, from the root).
+pub fn holds(name: &str) -> bool {
+    holds_file(name)
+}
+
+/// Where [`write_from`] may take a file's bytes from instead of opening it: `None` reads it
+/// from the root's folder.
+pub type Source<'a> = &'a (dyn Fn(&str) -> Option<io::Result<Vec<u8>>> + Sync);
+
+/// [`write_with_readers`] for a root whose maker already has many of its files' bytes (a merge
+/// that just wrote them, another root's data file): `given` gives those by name, and only
+/// the others are opened. A file whose bytes are not as long as the file in the folder
+/// fails the write.
+pub fn write_from(root: &Path, readers: usize, given: Source<'_>) -> io::Result<()> {
     let source = fs::read(root.join(SOURCE))?;
     let canonical = fs::canonicalize(root)?;
     let root_bytes = canonical.as_os_str().as_encoded_bytes();
@@ -325,7 +417,7 @@ pub fn write_with_readers(root: &Path, readers: usize) -> io::Result<()> {
                 .as_slice(),
         )?;
         for batch in files.chunks(READ_BATCH) {
-            for bytes in read_listed(batch, readers)? {
+            for bytes in read_listed(batch, readers, given)? {
                 out.write_all(&bytes)?;
             }
         }
@@ -337,16 +429,132 @@ pub fn write_with_readers(root: &Path, readers: usize) -> io::Result<()> {
     if result.is_err() {
         let _ = fs::remove_file(&tmp);
     }
+    forget(root);
     result
+}
+
+/// What [`write_packed`] takes a file's bytes from, by name.
+pub type Bytes<'a> = &'a (dyn Fn(&str) -> io::Result<Vec<u8>> + Sync);
+
+/// Write `root`'s file for a root that keeps its files nowhere else: the files are
+/// `names` (`/`-separated, from the root; the ones this holds are kept), each with the
+/// bytes `bytes_of` gives. The root's folder need not have any of them: what reads the
+/// root reads this (`crate::rfs`). As [`write_with_readers`], through a temporary file.
+pub fn write_packed(
+    root: &Path,
+    mut names: Vec<String>,
+    readers: usize,
+    bytes_of: Bytes<'_>,
+) -> io::Result<()> {
+    use std::io::Seek;
+    names.retain(|n| holds_file(n));
+    names.sort();
+    names.dedup();
+    let source = fs::read(root.join(SOURCE))?;
+    let canonical = fs::canonicalize(root)?;
+    let root_bytes = canonical.as_os_str().as_encoded_bytes();
+    let pool_len: usize = names.iter().map(String::len).sum();
+    let index_start = HEADER as u64 + pad(root_bytes.len() as u64) + pad(source.len() as u64);
+    let data_start = index_start + (names.len() * ENTRY) as u64 + pad(pool_len as u64);
+    let tmp = root.join(format!("{FILE_NAME}.{}.tmp", std::process::id()));
+    remove_abandoned(root);
+    let result = (|| {
+        let mut out = BufWriter::new(File::create(&tmp)?);
+        out.write_all(&MAGIC)?;
+        out.write_all(&VERSION.to_le_bytes())?;
+        out.write_all(
+            &u32::try_from(names.len())
+                .map_err(io::Error::other)?
+                .to_le_bytes(),
+        )?;
+        for len in [root_bytes.len(), source.len(), pool_len] {
+            out.write_all(&(len as u64).to_le_bytes())?;
+        }
+        write_padded(&mut out, root_bytes)?;
+        write_padded(&mut out, &source)?;
+        // The index is written once every file's length is known: after the files.
+        out.write_all(&vec![0; names.len() * ENTRY])?;
+        write_padded(&mut out, names.concat().as_bytes())?;
+        let mut lens = Vec::with_capacity(names.len());
+        for batch in names.chunks(READ_BATCH) {
+            for bytes in read_named(batch, readers, bytes_of)? {
+                out.write_all(&bytes)?;
+                lens.push(bytes.len() as u64);
+            }
+        }
+        out.seek(io::SeekFrom::Start(index_start))?;
+        let (mut name_at, mut data_at) = (0u32, data_start);
+        for (name, len) in names.iter().zip(&lens) {
+            out.write_all(&name_at.to_le_bytes())?;
+            out.write_all(&(name.len() as u32).to_le_bytes())?;
+            out.write_all(&data_at.to_le_bytes())?;
+            out.write_all(&len.to_le_bytes())?;
+            name_at += name.len() as u32;
+            data_at += len;
+        }
+        out.into_inner()
+            .map_err(io::IntoInnerError::into_error)?
+            .sync_all()?;
+        fs::rename(&tmp, root.join(FILE_NAME))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    forget(root);
+    result
+}
+
+/// The bytes of `names`, in their order, read on up to `readers` threads.
+fn read_named(names: &[String], readers: usize, bytes_of: Bytes<'_>) -> io::Result<Vec<Vec<u8>>> {
+    if readers <= 1 || names.len() < 2 {
+        return names.iter().map(|n| bytes_of(n)).collect();
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let parts: Vec<io::Result<Vec<(usize, Vec<u8>)>>> = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..readers.min(names.len()))
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut read = Vec::new();
+                    loop {
+                        let at = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(name) = names.get(at) else {
+                            return Ok(read);
+                        };
+                        read.push((at, bytes_of(name)?));
+                    }
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .map(|w| {
+                w.join()
+                    .unwrap_or_else(|_| Err(io::Error::other("a reader panicked")))
+            })
+            .collect()
+    });
+    let mut out: Vec<Option<Vec<u8>>> = names.iter().map(|_| None).collect();
+    for part in parts {
+        for (at, bytes) in part? {
+            out[at] = Some(bytes);
+        }
+    }
+    out.into_iter()
+        .map(|b| b.ok_or_else(|| io::Error::other("a file was not read")))
+        .collect()
 }
 
 /// How many files [`write_with_readers`] holds in memory at once.
 const READ_BATCH: usize = 512;
 
 /// `files`' bytes in their order, read on `readers` threads.
-fn read_listed(files: &[(String, PathBuf, u64)], readers: usize) -> io::Result<Vec<Vec<u8>>> {
+fn read_listed(
+    files: &[(String, PathBuf, u64)],
+    readers: usize,
+    source: Source<'_>,
+) -> io::Result<Vec<Vec<u8>>> {
     if readers <= 1 {
-        return files.iter().map(read_listed_file).collect();
+        return files.iter().map(|f| read_listed_file(f, source)).collect();
     }
     let next = AtomicUsize::new(0);
     std::thread::scope(|scope| {
@@ -359,7 +567,7 @@ fn read_listed(files: &[(String, PathBuf, u64)], readers: usize) -> io::Result<V
                         let Some(file) = files.get(at) else {
                             return Ok(read);
                         };
-                        read.push((at, read_listed_file(file)?));
+                        read.push((at, read_listed_file(file, source)?));
                     }
                 })
             })
@@ -377,8 +585,14 @@ fn read_listed(files: &[(String, PathBuf, u64)], readers: usize) -> io::Result<V
     })
 }
 
-fn read_listed_file((_, path, len): &(String, PathBuf, u64)) -> io::Result<Vec<u8>> {
-    let bytes = fs::read(path)?;
+fn read_listed_file(
+    (name, path, len): &(String, PathBuf, u64),
+    source: Source<'_>,
+) -> io::Result<Vec<u8>> {
+    let bytes = match source(name) {
+        Some(bytes) => bytes?,
+        None => fs::read(path)?,
+    };
     // Changed since it was listed: the offsets would be wrong.
     if bytes.len() as u64 != *len {
         return Err(io::Error::other(format!("{} changed", path.display())));
@@ -532,8 +746,8 @@ mod tests {
         let root = root("reader-error");
         let gone = root.join("gone");
         let listed = [("gone".to_owned(), gone, 1)];
-        assert!(read_listed(&listed, 1).is_err());
-        assert!(read_listed(&listed, 4).is_err());
+        assert!(read_listed(&listed, 1, &|_| None).is_err());
+        assert!(read_listed(&listed, 4, &|_| None).is_err());
         fs::remove_dir_all(&root).unwrap();
     }
 

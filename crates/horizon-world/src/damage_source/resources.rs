@@ -1,4 +1,5 @@
 //! DamageType.DIRECT_CODEC resources and TagLoader's world pack stack.
+use horizon_core::rfs::RPath as _;
 use super::{Catalog, DamageTypeId, Definition, Scaling, invalid, string};
 use crate::{
     loot::PackOverlay,
@@ -11,14 +12,14 @@ use std::{collections::BTreeMap, fs, io, path::Path};
 /// `json_folder` also reads prepared vanilla files from horizon-data.bin.
 pub fn resource_files(root: &Path, kind: &str) -> io::Result<BTreeMap<String, Vec<u8>>> {
     let mut files = BTreeMap::new();
-    let namespaces = match fs::read_dir(root.join("data")) {
+    let namespaces = match horizon_core::rfs::read_dir(root.join("data")) {
         Ok(entries) => entries,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(files),
         Err(e) => return Err(e),
     };
     for namespace in namespaces {
         let namespace = namespace?;
-        if !namespace.path().is_dir() {
+        if !namespace.path().r_is_dir() {
             continue;
         }
         let ns = namespace.file_name().to_string_lossy().into_owned();
@@ -44,8 +45,8 @@ pub fn resource_tags<T: Clone + Ord>(
 ) -> io::Result<BTreeMap<String, Vec<T>>> {
     let mut files: BTreeMap<String, Vec<Vec<u8>>> = BTreeMap::new();
     let exported = root.join("damage-tags.json");
-    if exported.exists() {
-        let value: Value = serde_json::from_slice(&fs::read(exported)?)?;
+    if exported.r_exists() {
+        let value: Value = serde_json::from_slice(&horizon_core::rfs::read(exported)?)?;
         for (id, json) in value
             .as_object()
             .ok_or_else(|| invalid("expected damage tags"))?
@@ -177,7 +178,7 @@ impl Catalog {
     /// The exported vanilla definitions plus ordinary resource-root and
     /// enabled world-pack files. No definition is published on codec failure.
     pub fn load(root: &Path, overlay: &PackOverlay<'_>) -> io::Result<Self> {
-        let catalog = serde_json::from_slice(&fs::read(root.join("damage-catalog.json"))?)?;
+        let catalog = serde_json::from_slice(&horizon_core::rfs::read(root.join("damage-catalog.json"))?)?;
         // Resolve tags only after custom definitions have joined the registry.
         Self::from_json(&catalog, &serde_json::json!({}))?.with_packs(root, overlay)
     }

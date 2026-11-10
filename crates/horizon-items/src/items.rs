@@ -1,6 +1,7 @@
 //! Items from vanilla's default-component reports, block<->item mapping,
 //! tool mining rules and block loot tables (`LootTable`/`LootPool` semantics
 //! for the condition, entry and modifier types used by block drops).
+use horizon_core::rfs::RPath as _;
 use crate::{Result, blocks::BlockFacts};
 use horizon_core::random::RandomSource;
 use horizon_world::loot::PackOverlay;
@@ -8,10 +9,11 @@ use horizon_world::registry::{BlockRegistry, BlockStateId};
 use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
-    fs,
     path::Path,
     sync::Arc,
 };
+#[cfg(test)]
+use std::fs;
 
 fn tool_number(value: &horizon_world::nbt::Tag) -> Option<f32> {
     horizon_world::datafix::dynamic::as_number(value).map(|n| n.float_value())
@@ -347,7 +349,7 @@ pub struct ItemStack {
 /// `order`'s items in the registry's order (`command-registries.json`'s
 /// `items`, exported from the game); `order` itself when that is missing.
 fn registry_order(root: &Path, order: &[Arc<str>]) -> Vec<Arc<str>> {
-    let listed: Vec<String> = fs::read(root.join("command-registries.json"))
+    let listed: Vec<String> = horizon_core::rfs::read(root.join("command-registries.json"))
         .ok()
         .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
         .and_then(|v| serde_json::from_value(v["items"].clone()).ok())
@@ -465,12 +467,12 @@ fn parse_instrument(v: &Value) -> Instrument {
 }
 fn load_instruments(root: &Path) -> HashMap<String, Instrument> {
     let mut instruments = HashMap::new();
-    let Ok(dir) = fs::read_dir(root.join("data/minecraft/instrument")) else {
+    let Ok(dir) = horizon_core::rfs::read_dir(root.join("data/minecraft/instrument")) else {
         return instruments;
     };
     for entry in dir.flatten() {
         let path = entry.path();
-        let (Some(stem), Ok(bytes)) = (path.file_stem().and_then(|s| s.to_str()), fs::read(&path))
+        let (Some(stem), Ok(bytes)) = (path.file_stem().and_then(|s| s.to_str()), horizon_core::rfs::read(&path))
         else {
             continue;
         };
@@ -483,12 +485,12 @@ fn load_instruments(root: &Path) -> HashMap<String, Instrument> {
 }
 fn load_songs(root: &Path) -> HashMap<String, Song> {
     let mut songs = HashMap::new();
-    let Ok(dir) = fs::read_dir(root.join("data/minecraft/jukebox_song")) else {
+    let Ok(dir) = horizon_core::rfs::read_dir(root.join("data/minecraft/jukebox_song")) else {
         return songs;
     };
     for entry in dir.flatten() {
         let path = entry.path();
-        let (Some(stem), Ok(bytes)) = (path.file_stem().and_then(|s| s.to_str()), fs::read(&path))
+        let (Some(stem), Ok(bytes)) = (path.file_stem().and_then(|s| s.to_str()), horizon_core::rfs::read(&path))
         else {
             continue;
         };
@@ -561,7 +563,7 @@ pub(crate) fn load_tag_lists(
     // Vanilla's tags; with content mods also the convention (`c`) tags and the mods' own.
     for namespace in crate::content_namespaces::tag_namespaces(root) {
         let dir = root.join(format!("data/{namespace}/tags/{kind}"));
-        if dir.exists() {
+        if dir.r_exists() {
             walk(&dir, &namespace, &mut raw)?;
         }
     }
@@ -775,7 +777,7 @@ impl Items {
         struct Fields {
             block: Option<String>,
         }
-        let bindings = match fs::read(root.join("block-behaviours.json")) {
+        let bindings = match horizon_core::rfs::read(root.join("block-behaviours.json")) {
             Ok(bytes) => serde_json::from_slice::<Bindings>(&bytes)?,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Bindings::default(),
             Err(error) => return Err(error.into()),
@@ -806,7 +808,7 @@ impl Items {
         let raw = horizon_world::item_defaults::shared(root)?;
         let entity_tags = load_tags(root, "entity_type", overlay)?;
         let path = root.join(MOD_CRAFT_REMAINDERS);
-        let mod_remainders: HashMap<String, String> = match fs::read(&path) {
+        let mod_remainders: HashMap<String, String> = match horizon_core::rfs::read(&path) {
             Ok(bytes) => {
                 serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", path.display()))?
             }
@@ -2676,11 +2678,11 @@ mod bucket_use_tests {
 pub(crate) fn prepared_items() -> Option<Items> {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../.local/horizon-client/26.3");
-    if !root.join("items.json").exists() {
+    if !root.join("items.json").r_exists() {
         return None;
     }
     let (registry, _) =
-        BlockRegistry::from_facts_json_with_flags(fs::File::open(root.join("facts.json")).ok()?)
+        BlockRegistry::from_facts_json_with_flags(horizon_core::rfs::File::open(root.join("facts.json")).ok()?)
             .ok()?;
     let facts = BlockFacts::load(&root, &registry).ok()?;
     Items::load(&root, &registry, &facts, &PackOverlay::NONE).ok()

@@ -9,6 +9,7 @@
 //! A chunk it doesn't have may be in the player's Bobby cache of the same
 //! level (`Bobby`), only ever read; past both, the server's BlueMap may fill
 //! in (`bluemap`).
+use horizon_core::rfs::RPath as _;
 use crate::{
     blocks::BlockFacts,
     bluemap::{BlueMap, Found},
@@ -117,7 +118,7 @@ pub fn bobby_level_dir(
         return None;
     }
     let names = [bare.to_owned(), format!("{bare}_25565")];
-    let mut servers: Vec<PathBuf> = std::fs::read_dir(root)
+    let mut servers: Vec<PathBuf> = horizon_core::rfs::read_dir(root)
         .ok()?
         .flatten()
         .filter(|entry| {
@@ -132,7 +133,7 @@ pub fn bobby_level_dir(
     servers
         .into_iter()
         .map(|server| server.join(hashed_seed.to_string()).join(level_path(level)))
-        .find(|dir| dir.is_dir())
+        .find(|dir| dir.r_is_dir())
 }
 
 /// `<namespace>/<path>` of a level key.

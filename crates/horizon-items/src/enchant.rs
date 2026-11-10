@@ -3,6 +3,7 @@
 //! rules used by the enchanting table, display names, and evaluation of the
 //! value/attribute effect components (`LevelBasedValue`, `EnchantmentValueEffect`
 //! and the loot-condition subset that enchantment requirements use).
+use horizon_core::rfs::RPath as _;
 use crate::items::{ItemStack, Items};
 use horizon_core::random::{LegacyRandom, RandomSource};
 use serde_json::Value;
@@ -268,10 +269,10 @@ impl Enchantments {
         // Content mods' enchantments (`data/<namespace>/enchantment/`), as the loot tables of
         // every namespace are read: a mod's book and its effects are in the registry with
         // vanilla's.
-        let mut namespaces: Vec<_> = std::fs::read_dir(root.join("data"))
+        let mut namespaces: Vec<_> = horizon_core::rfs::read_dir(root.join("data"))
             .map(|dir| {
                 dir.flatten()
-                    .filter(|e| e.path().is_dir())
+                    .filter(|e| e.path().r_is_dir())
                     .filter_map(|e| e.file_name().into_string().ok())
                     .filter(|ns| ns != "minecraft")
                     .collect()
@@ -280,7 +281,7 @@ impl Enchantments {
         namespaces.sort();
         for ns in namespaces {
             let dir = root.join("data").join(&ns).join("enchantment");
-            if !dir.is_dir() {
+            if !dir.r_is_dir() {
                 continue;
             }
             if let Ok(folder) = horizon_world::json_folder::read(&dir) {
@@ -997,7 +998,7 @@ pub mod tests {
             let path = root.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(&path, serde_json::to_vec(value).unwrap()).unwrap();
-            std::fs::read(path).unwrap()
+            horizon_core::rfs::read(path).unwrap()
         };
         let definition = |description: &str, max_level| {
             json!({

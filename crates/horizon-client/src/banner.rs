@@ -4,7 +4,7 @@
 //! six-layer limit and the result stack).
 use crate::{block_entity_render::DYES, items::ItemStack, items::Items};
 use serde_json::Value;
-use std::{collections::HashMap, fs, path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 pub use horizon_items::banner_layer::{BannerLayer, layers_from_nbt, layers_to_nbt};
 
@@ -40,7 +40,7 @@ fn read_tag(root: &Path, name: &str, depth: u32) -> Vec<Arc<str>> {
         "data/minecraft/tags/banner_pattern/{}.json",
         name.trim_start_matches("minecraft:")
     ));
-    let Some(v) = fs::read(path)
+    let Some(v) = horizon_core::rfs::read(path)
         .ok()
         .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
     else {
@@ -62,7 +62,7 @@ fn read_tag(root: &Path, name: &str, depth: u32) -> Vec<Arc<str>> {
 impl Banners {
     pub fn load(root: &Path) -> Self {
         let mut banners = Self::default();
-        let mut files: Vec<_> = fs::read_dir(root.join("data/minecraft/banner_pattern"))
+        let mut files: Vec<_> = horizon_core::rfs::read_dir(root.join("data/minecraft/banner_pattern"))
             .into_iter()
             .flatten()
             .flatten()
@@ -74,7 +74,7 @@ impl Banners {
             let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
-            let Some(v) = fs::read(&path)
+            let Some(v) = horizon_core::rfs::read(&path)
                 .ok()
                 .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
             else {

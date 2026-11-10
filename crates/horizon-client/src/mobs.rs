@@ -116,7 +116,7 @@ use horizon_core::{
 };
 use horizon_world::block_collision::BlockCollisionRegistry;
 use serde_json::Value;
-use std::{collections::HashMap, fs, path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 #[derive(Clone, Debug)]
 pub struct Polygon {
@@ -510,7 +510,7 @@ impl MobTypes {
         models_needed: bool,
         document: Option<&EntityModelDocument>,
     ) -> crate::Result<Self> {
-        let bytes = fs::read(root.join("entity-types.json"))?;
+        let bytes = horizon_core::rfs::read(root.join("entity-types.json"))?;
         let types: Value = serde_json::from_slice(&bytes)?;
         let exact = exact_attributes(&bytes);
         let models = models_needed
@@ -539,7 +539,7 @@ impl MobTypes {
         // The Allay's InventoryCarrier loading needs item limits before a
         // Game exists. Other mob-only resource sets need no item data.
         let items: HashMap<String, Value> = if types.get("minecraft:allay").is_some() {
-            serde_json::from_slice(&fs::read(root.join("items.json"))?)?
+            serde_json::from_slice(&horizon_core::rfs::read(root.join("items.json"))?)?
         } else {
             HashMap::new()
         };
@@ -4549,7 +4549,7 @@ pub struct EntityModelDocument(Arc<Value>);
 
 impl EntityModelDocument {
     pub fn load(root: &Path) -> crate::Result<Self> {
-        Ok(Self(Arc::new(serde_json::from_slice(&fs::read(
+        Ok(Self(Arc::new(serde_json::from_slice(&horizon_core::rfs::read(
             root.join("entity-models.json"),
         )?)?)))
     }

@@ -263,7 +263,7 @@ impl Sprite {
 
 /// A sprite's `gui.scaling` when it is a nine_slice (border a number or `{left, top, right, bottom}`).
 fn read_nine(meta: &std::path::Path) -> Option<[f32; 6]> {
-    let text = std::fs::read_to_string(meta).ok()?;
+    let text = horizon_core::rfs::read_to_string(meta).ok()?;
     let v: serde_json::Value = serde_json::from_str(&text).ok()?;
     let s = v.get("gui")?.get("scaling")?;
     if s.get("type")?.as_str()? != "nine_slice" {
@@ -693,7 +693,7 @@ pub fn reloaded() {
 /// Every `assets/<namespace>/jade_themes/**.json` under the game's resource root, the packs' and content mods' included.
 fn pack_theme_files(root: &std::path::Path) -> Vec<(String, std::path::PathBuf)> {
     let mut out = Vec::new();
-    let Ok(namespaces) = std::fs::read_dir(root.join("assets")) else {
+    let Ok(namespaces) = horizon_core::rfs::read_dir(root.join("assets")) else {
         return out;
     };
     for ns in namespaces.flatten() {
@@ -701,10 +701,10 @@ fn pack_theme_files(root: &std::path::Path) -> Vec<(String, std::path::PathBuf)>
         let base = ns.path().join("jade_themes");
         let mut stack = vec![base.clone()];
         while let Some(dir) = stack.pop() {
-            let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+            let Ok(entries) = horizon_core::rfs::read_dir(&dir) else { continue };
             for e in entries.flatten() {
                 let p = e.path();
-                if p.is_dir() {
+                if horizon_core::rfs::is_dir(&p) {
                     stack.push(p);
                 } else if p.extension().is_some_and(|x| x == "json")
                     && let Ok(rel) = p.strip_prefix(&base)
@@ -724,7 +724,7 @@ fn load(game: &Game<'_>) -> Loaded {
     let root = game.options.resources.clone();
     let mut themes: Vec<Rc<Theme>> = JAR_THEMES.iter().filter_map(|(id, text)| Theme::parse(&root, id, text).map(Rc::new)).collect();
     for (id, path) in pack_theme_files(&root) {
-        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let Ok(text) = horizon_core::rfs::read_to_string(&path) else { continue };
         let Some(theme) = Theme::parse(&root, &id, &text) else { continue };
         themes.retain(|t| t.id != id);
         themes.push(Rc::new(theme));

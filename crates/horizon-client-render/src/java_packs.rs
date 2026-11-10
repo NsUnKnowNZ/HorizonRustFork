@@ -3,6 +3,7 @@
 //! game or instance folder per line) that Horizon's own `resourcepacks/` and `shaderpacks/`
 //! lack are copied in, and a pack Java has a newer copy of is copied again. Packs are never
 //! removed or changed in the Java folders. A line `off` in the file turns it off.
+use horizon_core::rfs::RPath as _;
 use std::path::{Path, PathBuf};
 
 const LIST: &str = "horizon-java-folders.txt";
@@ -23,7 +24,7 @@ fn default_java_dir() -> Option<PathBuf> {
 /// The Java folders to import from, and whether importing is on.
 fn sources(game: &Path) -> Vec<PathBuf> {
     let list = game.join(LIST);
-    let text = std::fs::read_to_string(&list).unwrap_or_else(|_| {
+    let text = horizon_core::rfs::read_to_string(&list).unwrap_or_else(|_| {
         let text = "# Java Edition game or instance folders whose resourcepacks/ and shaderpacks/\n\
                     # Horizon copies in at start (Java's own .minecraft is always looked at).\n\
                     # A line `off` turns importing off.\n";
@@ -41,17 +42,17 @@ fn sources(game: &Path) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = default_java_dir().into_iter().collect();
     out.extend(lines.iter().map(PathBuf::from));
     let here = game.canonicalize().ok();
-    out.retain(|p| p.is_dir() && p.canonicalize().ok() != here);
+    out.retain(|p| p.r_is_dir() && p.canonicalize().ok() != here);
     out.dedup();
     out
 }
 
 fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(to)?;
-    for entry in std::fs::read_dir(from)? {
+    for entry in horizon_core::rfs::read_dir(from)? {
         let entry = entry?;
         let target = to.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
+        if entry.file_type()?.r_is_dir() {
             copy_dir(&entry.path(), &target)?;
         } else {
             std::fs::copy(entry.path(), target)?;
@@ -61,14 +62,14 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 fn modified(p: &Path) -> Option<std::time::SystemTime> {
-    std::fs::metadata(p).and_then(|m| m.modified()).ok()
+    horizon_core::rfs::metadata(p).and_then(|m| m.modified()).ok()
 }
 
 /// Copies in the Java packs the game folder `game` lacks (or has older copies of).
 pub fn import(game: &Path) {
     for source in sources(game) {
         for kind in KINDS {
-            let Ok(entries) = std::fs::read_dir(source.join(kind)) else {
+            let Ok(entries) = horizon_core::rfs::read_dir(source.join(kind)) else {
                 continue;
             };
             let dest = game.join(kind);
@@ -76,7 +77,7 @@ pub fn import(game: &Path) {
                 let from = entry.path();
                 let name = entry.file_name();
                 let lower = name.to_string_lossy().to_lowercase();
-                let is_dir = from.is_dir();
+                let is_dir = from.r_is_dir();
                 // Packs (folders and zips), and a shader pack's chosen options (`<pack>.txt`).
                 let wanted = is_dir
                     || lower.ends_with(".zip")

@@ -1524,7 +1524,7 @@ mod portal_links {
         let mut guard = LINKS.lock().ok()?;
         if guard.as_ref().is_none_or(|l| l.root != root) {
             let mut links = HashMap::new();
-            if let Ok(text) = std::fs::read_to_string(file(root)) {
+            if let Ok(text) = horizon_core::rfs::read_to_string(file(root)) {
                 for line in text.lines() {
                     let n: Vec<i32> = line.split_whitespace().filter_map(|w| w.parse().ok()).collect();
                     if let [a, ax, ay, az, b, bx, by, bz] = n[..] {

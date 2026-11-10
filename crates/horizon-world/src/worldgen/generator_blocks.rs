@@ -1,6 +1,7 @@
 //! Optional block-behavior registries used by feature placement: physical
 //! properties, face support, collision and survival rules. Loaded from the
 //! bundle's `blocks/` directory (Java-exported, see crates/horizon-prepare).
+use horizon_core::rfs::RPath as _;
 use super::generator::GeneratorError;
 use crate::{
     block_collision::BlockCollisionRegistry,
@@ -13,7 +14,6 @@ use crate::{
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
     path::Path,
     sync::Arc,
 };
@@ -98,7 +98,7 @@ impl BlockBehavior {
         tags: &BTreeMap<String, Vec<String>>,
         fluid_tags: &BTreeMap<String, Vec<String>>,
     ) -> Result<Option<Self>, GeneratorError> {
-        if !dir.join("block-properties.nbt").exists() {
+        if !dir.join("block-properties.nbt").r_exists() {
             return Ok(None);
         }
         let read = |name: &str| -> Result<BlockTableFile<'static>, GeneratorError> {
@@ -106,7 +106,7 @@ impl BlockBehavior {
                 .map_err(|e| resource(format!("{name}: {e}")))
         };
         let json = |name: &str| -> Result<Value, GeneratorError> {
-            Ok(serde_json::from_str(&fs::read_to_string(dir.join(name))?)?)
+            Ok(serde_json::from_str(&horizon_core::rfs::read_to_string(dir.join(name))?)?)
         };
         // The support table reads on its own thread while the collision and
         // property tables (which need the collisions) read on this one.

@@ -260,7 +260,7 @@ impl Game<'_> {
             std::fs::write(path, serde_json::to_vec(&rows)?)?;
         }
         let mut out = String::new();
-        for line in std::fs::read_to_string(script)?.lines() {
+        for line in horizon_core::rfs::read_to_string(script)?.lines() {
             if line.trim().is_empty() {
                 continue;
             }
@@ -960,7 +960,7 @@ impl Game<'_> {
                         g.save_stats();
                         let uuid = g.level.player_uuid.ok_or("merchant stats UUID")?;
                         let path = super::stats::player_json(&g.world_root, "stats", uuid);
-                        let raw = std::fs::read_to_string(path)?;
+                        let raw = horizon_core::rfs::read_to_string(path)?;
                         let saved: Value = serde_json::from_str(&raw)?;
                         let value = |ty: &str, key: &str| saved["stats"][ty][key].as_i64().unwrap_or(0);
                         Ok((json!({"uuid":uuid,"books":value("minecraft:crafted","minecraft:bookshelf"),

@@ -1,5 +1,6 @@
 //! Players coming and going: joining (P1's world through memory, or P1's server) as a profile
 //! it picks (`split_profiles`), dropping out.
+use horizon_core::rfs::RPath as _;
 use super::*;
 use horizon_client::{
     controller_notice::{Notice, NoticeId, Priority},
@@ -299,7 +300,7 @@ impl Split<'_> {
         }
         let profile = profiles.join(&name);
         let options = profile.join("options.txt");
-        let mut settings = if options.exists() {
+        let mut settings = if options.r_exists() {
             horizon_client::settings::Settings::load(&options)
         } else {
             std::fs::create_dir_all(&profile)?;

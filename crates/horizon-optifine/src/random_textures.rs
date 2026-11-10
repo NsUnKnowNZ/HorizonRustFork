@@ -29,6 +29,7 @@
 //! source was read.
 
 use std::collections::{BTreeMap, HashMap};
+#[cfg(test)]
 use std::fs;
 use std::path::Path;
 
@@ -99,7 +100,7 @@ impl RandomTextures {
 
     fn scan_files(root: &Path) -> Self {
         let mut found: HashMap<String, [Source; FOLDERS.len()]> = HashMap::new();
-        let Ok(namespaces) = fs::read_dir(root.join("assets")) else {
+        let Ok(namespaces) = horizon_core::rfs::read_dir(root.join("assets")) else {
             return Self::default();
         };
         let mut namespaces: Vec<String> = namespaces
@@ -149,9 +150,9 @@ impl RandomTextures {
                 // A real rules file is a few KB, and parsing grows with the square of its size:
                 // a bigger or unreadable one holds no rules, so the texture keeps its default.
                 let path = root.join(&file);
-                let text = fs::metadata(&path)
+                let text = horizon_core::rfs::metadata(&path)
                     .is_ok_and(|m| m.len() <= MAX_PROPERTIES)
-                    .then(|| fs::read(&path).ok())
+                    .then(|| horizon_core::rfs::read(&path).ok())
                     .flatten()
                     .map(decode)
                     .unwrap_or_default();

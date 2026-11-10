@@ -2,6 +2,7 @@
 //! player (health, food, xp, deaths, kills, statistics), score holders for
 //! entities, the selector options `scores=`, `team=` and `tag=`, the
 //! commands' [`Env`] and the sidebar.
+use horizon_core::rfs::RPath as _;
 use super::{Game, chat::PLAYER_NAME, commands::Target};
 use horizon_client::actions::Action;
 use horizon_client::{
@@ -164,7 +165,7 @@ impl Game<'_> {
         // The border is saved with its level (`save_level`).
         let path = self.scoreboard_path();
         let board = &self.score.board;
-        if board == &Scoreboard::default() && !path.exists() {
+        if board == &Scoreboard::default() && !path.r_exists() {
             return;
         }
         if let Err(e) = save::write_dat(

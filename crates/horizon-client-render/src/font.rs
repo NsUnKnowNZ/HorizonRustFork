@@ -6,6 +6,7 @@
 //! ab_glyph). Glyphs drawn at run time go into a reserved atlas region.
 //! Vanilla glyph metrics (ascent, oversampling, advances, bold/shadow
 //! offsets), styled drawing and StringSplitter-style line wrapping.
+use horizon_core::rfs::RPath as _;
 use crate::{
     hud::Rect,
     text::{Span, Style, Text, legacy_format},
@@ -207,12 +208,12 @@ fn parse_hex(text: &[u8], out: &mut HashMap<u32, HexGlyph>) {
 /// A resource file's bytes, from `root` or, when the overlay lacks it, from
 /// the game's own resources below (`defaults`).
 fn read_resource(root: &Path, defaults: Option<&Path>, path: &str) -> Option<Vec<u8>> {
-    std::fs::read(root.join(path))
+    horizon_core::rfs::read(root.join(path))
         .ok()
-        .or_else(|| defaults.and_then(|d| std::fs::read(d.join(path)).ok()))
+        .or_else(|| defaults.and_then(|d| horizon_core::rfs::read(d.join(path)).ok()))
 }
 fn read_json(root: &Path, path: &str) -> Option<serde_json::Value> {
-    serde_json::from_slice(&std::fs::read(root.join(path)).ok()?).ok()
+    serde_json::from_slice(&horizon_core::rfs::read(root.join(path)).ok()?).ok()
 }
 fn resource_path(id: &str, folder: &str, ext: &str) -> String {
     let (ns, path) = id.split_once(':').unwrap_or(("minecraft", id));
@@ -559,10 +560,10 @@ fn load_hex(root: &Path, defaults: Option<&Path>, p: &serde_json::Value) -> Hash
 /// The ids of every font definition (`font/**/*.json` of each namespace).
 fn font_ids(root: &Path) -> Vec<String> {
     fn walk(dir: &Path, prefix: &str, out: &mut Vec<String>) {
-        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        for entry in horizon_core::rfs::read_dir(dir).into_iter().flatten().flatten() {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().into_owned();
-            if path.is_dir() {
+            if path.r_is_dir() {
                 walk(&path, &format!("{prefix}{name}/"), out);
             } else if let Some(stem) = name.strip_suffix(".json") {
                 out.push(format!("{prefix}{stem}"));
@@ -570,7 +571,7 @@ fn font_ids(root: &Path) -> Vec<String> {
         }
     }
     let mut ids = Vec::new();
-    for ns in std::fs::read_dir(root.join("assets"))
+    for ns in horizon_core::rfs::read_dir(root.join("assets"))
         .into_iter()
         .flatten()
         .flatten()

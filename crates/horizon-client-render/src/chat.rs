@@ -663,7 +663,7 @@ impl Chat {
     /// start the chat's history (`ChatComponent`'s constructor).
     pub fn load_history(&mut self, game_folder: &std::path::Path) {
         let file = game_folder.join(COMMAND_HISTORY_FILE);
-        if let Ok(text) = std::fs::read_to_string(&file) {
+        if let Ok(text) = horizon_core::rfs::read_to_string(&file) {
             self.commands = text.lines().map(str::to_owned).collect();
             self.recent.extend(self.commands.iter().cloned());
         }

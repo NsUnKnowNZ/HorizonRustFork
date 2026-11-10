@@ -3,6 +3,7 @@
 //! ingredients to stacks, as `StackedContents.canCraft`), the special and
 //! transmuting crafting recipes (`CustomRecipe` and friends), and
 //! furnace-type cooking lookups.
+use horizon_core::rfs::RPath as _;
 use crate::{
     Result,
     item_data::StackData,
@@ -1479,7 +1480,7 @@ impl Recipes {
         }
         for namespace in crate::mod_content::namespaces(root) {
             let dir = root.join(format!("data/{namespace}/recipe"));
-            if dir.is_dir() {
+            if dir.r_is_dir() {
                 for file in &crate::json_folder::read(&dir)?.files {
                     sources.push((format!("{namespace}:{}", file.name), file.bytes()?.to_vec()));
                 }

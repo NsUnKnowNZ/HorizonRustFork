@@ -5,6 +5,7 @@
 //! notes, redstone dust, totem, end rod, biome ash and spores, falling leaves,
 //! spells and dragon breath. Constructors, ticks, sizes, colours and light
 //! follow the vanilla classes; sprite sets come from `particles/*.json`.
+use horizon_core::rfs::RPath as _;
 use crate::{
     blocks::{BlockFacts, Fluid},
     collisions::SceneCollisions,
@@ -1513,10 +1514,10 @@ impl ParticleEngine {
     /// and a native mod's (`assets/<namespace>/particles/<name>.json`).
     fn load_sprites(&mut self, root: &Path) {
         let assets = root.join("assets");
-        if let Ok(namespaces) = std::fs::read_dir(&assets) {
+        if let Ok(namespaces) = horizon_core::rfs::read_dir(&assets) {
             for namespace in namespaces.flatten() {
                 let ns = namespace.file_name().to_string_lossy().into_owned();
-                if ns == "minecraft" || !namespace.path().is_dir() {
+                if ns == "minecraft" || !namespace.path().r_is_dir() {
                     continue;
                 }
                 self.load_mod_sprites(&ns, &namespace.path().join("particles"));
@@ -1552,7 +1553,7 @@ impl ParticleEngine {
     /// A namespace's particle JSONs that vanilla has no type for: each becomes
     /// one sprite set under `<ns>:<file name>`.
     fn load_mod_sprites(&mut self, ns: &str, dir: &Path) {
-        let Ok(files) = std::fs::read_dir(dir) else {
+        let Ok(files) = horizon_core::rfs::read_dir(dir) else {
             return;
         };
         for file in files.flatten() {
@@ -1567,7 +1568,7 @@ impl ParticleEngine {
             if ParticleType::from_name(&key).is_some() {
                 continue;
             }
-            let Ok(bytes) = std::fs::read(&path) else {
+            let Ok(bytes) = horizon_core::rfs::read(&path) else {
                 continue;
             };
             let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else {

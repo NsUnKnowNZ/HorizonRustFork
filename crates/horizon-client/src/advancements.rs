@@ -187,7 +187,7 @@ impl Tree {
     /// own: the top pack's file for each id replaces it.
     pub fn load_with(data: &Path, overlay: &horizon_world::loot::PackOverlay) -> Tree {
         let mut tree = Tree::default();
-        let Ok(namespaces) = std::fs::read_dir(data) else {
+        let Ok(namespaces) = horizon_core::rfs::read_dir(data) else {
             return tree;
         };
         // One JSON per id, the packs' over the game's own. Through `json_folder`: from

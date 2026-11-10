@@ -271,7 +271,7 @@ impl GameRules {
         Self::load_with_features(world, &[])
     }
     pub fn load_with_features(world: &Path, features: &[String]) -> Self {
-        let Ok(bytes) = fs::read(world.join("data/minecraft/game_rules.dat")) else {
+        let Ok(bytes) = horizon_world::rfs::read(world.join("data/minecraft/game_rules.dat")) else {
             return Self::with_features(features);
         };
         let Ok(raw) = Compression::Gzip.decode(&bytes, 16 << 20) else {

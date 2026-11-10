@@ -4,13 +4,15 @@
 //! `replace` and `subtitle` fields, files that do not exist being dropped, and
 //! `WeighedSoundEvents.getSound` drawing `nextInt(totalWeight)` from the sound
 //! instance's random.
+use horizon_core::rfs::RPath as _;
 use horizon_core::random::RandomSource;
 use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
-    fs,
     path::Path,
 };
+#[cfg(test)]
+use std::fs;
 
 /// `SoundManager.EMPTY_SOUND_LOCATION`.
 pub const EMPTY: &str = "minecraft:empty";
@@ -233,7 +235,7 @@ fn sound_files(namespace: &Path) -> HashSet<String> {
     let mut files = HashSet::new();
     let mut stack = vec![namespace.join("sounds")];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
+        let Ok(entries) = horizon_core::rfs::read_dir(&dir) else {
             continue;
         };
         for e in entries.flatten() {
@@ -243,9 +245,9 @@ fn sound_files(namespace: &Path) -> HashSet<String> {
                 continue;
             };
             let (dir, file) = if kind.is_symlink() {
-                (path.is_dir(), path.is_file())
+                (path.r_is_dir(), path.r_is_file())
             } else {
-                (kind.is_dir(), kind.is_file())
+                (kind.r_is_dir(), kind.r_is_file())
             };
             if dir {
                 stack.push(path);
@@ -261,7 +263,7 @@ impl SoundRegistry {
     /// validated against `assets/<namespace>/sounds/`.
     pub fn load(root: &Path) -> Self {
         let assets = root.join("assets");
-        let mut namespaces: Vec<String> = fs::read_dir(&assets)
+        let mut namespaces: Vec<String> = horizon_core::rfs::read_dir(&assets)
             .into_iter()
             .flatten()
             .flatten()
@@ -277,7 +279,7 @@ impl SoundRegistry {
         let exists = |ns: &str, path: &str| files.get(ns).is_some_and(|f| f.contains(path));
         let mut registry = Self::default();
         for namespace in &namespaces {
-            let Ok(text) = fs::read(assets.join(namespace).join("sounds.json")) else {
+            let Ok(text) = horizon_core::rfs::read(assets.join(namespace).join("sounds.json")) else {
                 continue;
             };
             registry.add_file(namespace, &text, &exists);

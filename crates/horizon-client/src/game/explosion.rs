@@ -1145,7 +1145,7 @@ impl Game<'_> {
             sibling: bool,
         }
         let cases: Vec<Case> =
-            serde_json::from_str(&std::fs::read_to_string(directory.join("inputs.json"))?)?;
+            serde_json::from_str(&horizon_core::rfs::read_to_string(directory.join("inputs.json"))?)?;
         let mut output = Vec::new();
         for case in cases {
             self.dropped.clear();

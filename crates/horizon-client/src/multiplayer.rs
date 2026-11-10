@@ -694,7 +694,7 @@ pub fn add_official_server(game_dir: &Path) -> std::io::Result<()> {
     let (name, address) = OFFICIAL_SERVER;
     let marker = game_dir.join(OFFICIAL_MARKER);
     // A marker that is there but can't be read: offered already, at an address not known.
-    let offered = match std::fs::read_to_string(&marker) {
+    let offered = match horizon_core::rfs::read_to_string(&marker) {
         Ok(text) => Some(text),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(_) => Some(String::new()),
@@ -734,7 +734,7 @@ const PARTNER_MARKER: &str = "horizon_partner_servers.txt";
 /// official server (last when the list doesn't have it), unless the list has its address.
 pub fn add_partner_servers(game_dir: &Path) -> std::io::Result<()> {
     let marker = game_dir.join(PARTNER_MARKER);
-    let offered = match std::fs::read_to_string(&marker) {
+    let offered = match horizon_core::rfs::read_to_string(&marker) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         // Can't tell what was offered: offer nothing rather than twice.

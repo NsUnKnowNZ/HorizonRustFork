@@ -264,7 +264,7 @@ impl WorldRequest {
         }
 
         // Persist new metadata on the worker too, before publishing the world.
-        if !save_root.join("level.dat").exists() {
+        if !save_root.join("level.dat").r_exists() {
             level.write(&save_root)?;
         }
         Ok(PreparedWorld {

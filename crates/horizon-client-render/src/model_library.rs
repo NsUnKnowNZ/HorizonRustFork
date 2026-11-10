@@ -1,4 +1,5 @@
 //! Parsed resource models for one startup or resource-pack reload.
+use horizon_core::rfs::RPath as _;
 use crate::Result;
 use horizon_assets::{
     model::CuboidModel,
@@ -6,10 +7,11 @@ use horizon_assets::{
 };
 use std::{
     collections::BTreeMap,
-    fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
+#[cfg(test)]
+use std::fs;
 
 #[derive(Default)]
 pub struct ParsedModels {
@@ -41,7 +43,7 @@ impl AssetReader for RootAssets {
 impl ParsedModels {
     /// Every `models/**.json` of a namespace directory, by identifier.
     pub fn load(root: &Path) -> Self {
-        let Ok(namespaces) = fs::read_dir(root.join("assets")) else {
+        let Ok(namespaces) = horizon_core::rfs::read_dir(root.join("assets")) else {
             return Self {
                 root: root.to_owned(),
                 ..Self::default()
@@ -55,7 +57,7 @@ impl ParsedModels {
             let base = ns.path().join("models");
             let mut stack = vec![base.clone()];
             while let Some(dir) = stack.pop() {
-                let Ok(entries) = fs::read_dir(&dir) else {
+                let Ok(entries) = horizon_core::rfs::read_dir(&dir) else {
                     continue;
                 };
                 for e in entries.flatten() {
@@ -63,8 +65,8 @@ impl ParsedModels {
                     // The entry's own type saves a stat per file; a link
                     // (content roots link into the base) is followed.
                     let is_dir = match e.file_type() {
-                        Ok(t) if !t.is_symlink() => t.is_dir(),
-                        _ => path.is_dir(),
+                        Ok(t) if !t.is_symlink() => t.r_is_dir(),
+                        _ => path.r_is_dir(),
                     };
                     if is_dir {
                         stack.push(path);

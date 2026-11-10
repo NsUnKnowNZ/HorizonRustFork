@@ -1,5 +1,6 @@
 //! Data packs in the game: functions (`/function`, `/return`, tick and load
 //! tags, `/schedule`), predicates, `/reload` and `/datapack`.
+use horizon_core::rfs::RPath as _;
 use super::{
     Game,
     commands::{
@@ -422,7 +423,7 @@ impl Game<'_> {
                 ])
             })
             .collect();
-        if events.is_empty() && !self.schedule_path().exists() {
+        if events.is_empty() && !self.schedule_path().r_exists() {
             return;
         }
         let _ = save::write_dat(
@@ -890,7 +891,7 @@ impl Game<'_> {
         }
         let datapacks = self.world_root.join("datapacks");
         let pack = datapacks.join(&id);
-        if pack.exists() {
+        if pack.r_exists() {
             return Err(err("commands.datapack.create.already_exists", &[&id]));
         }
         // The data pack version (SharedConstants), written as a bare major

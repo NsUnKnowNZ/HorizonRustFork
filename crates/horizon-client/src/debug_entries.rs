@@ -221,7 +221,7 @@ impl DebugEntries {
             file: Some(file.clone()),
             ..Self::default()
         };
-        let Ok(text) = std::fs::read_to_string(&file) else {
+        let Ok(text) = horizon_core::rfs::read_to_string(&file) else {
             return entries;
         };
         match Self::parse(&text) {

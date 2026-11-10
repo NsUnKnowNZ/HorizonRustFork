@@ -20,6 +20,7 @@
 //! order, each file's filters in order. A pack's file replaces a file of the
 //! same id, as any data file does. A filter with an unknown key or no action
 //! is skipped with a warning, so a typo never matches every recipe.
+use horizon_core::rfs::RPath as _;
 use horizon_world::loot::PackOverlay;
 use serde_json::Value;
 use std::path::Path;
@@ -109,13 +110,13 @@ impl RecipeFilters {
 }
 
 fn read_dir(dir: &Path, prefix: &str, out: &mut std::collections::BTreeMap<String, Vec<u8>>) {
-    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+    for entry in horizon_core::rfs::read_dir(dir).into_iter().flatten().flatten() {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
-        if path.is_dir() {
+        if path.r_is_dir() {
             read_dir(&path, &format!("{prefix}{name}/"), out);
         } else if let Some(stem) = name.strip_suffix(".json")
-            && let Ok(bytes) = std::fs::read(&path)
+            && let Ok(bytes) = horizon_core::rfs::read(&path)
         {
             out.insert(format!("{prefix}{stem}"), bytes);
         }

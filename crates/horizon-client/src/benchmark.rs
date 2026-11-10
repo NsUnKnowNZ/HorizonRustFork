@@ -6,6 +6,7 @@
 //! The scenes, the world (seed 1234, creative) and every step and figure match `tools/perf_bench.py`,
 //! so reports from the two can be compared.
 
+use horizon_core::rfs::RPath as _;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 use std::thread;
@@ -320,10 +321,10 @@ fn run(control: &Control, setup: Setup) -> Result<PathBuf, String> {
 /// Removes the previous run's world, never one the benchmark didn't create.
 fn replace_world(game_dir: &Path) -> Result<(), String> {
     let world = game_dir.join("saves").join(WORLD);
-    if !world.exists() {
+    if !world.r_exists() {
         return Ok(());
     }
-    if !world.join(MARKER).exists() {
+    if !world.join(MARKER).r_exists() {
         return Err(format!(
             "{} exists and was not created by the benchmark: rename it",
             world.display()

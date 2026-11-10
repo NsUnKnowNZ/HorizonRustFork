@@ -472,8 +472,8 @@ impl ProcessMemory {
     /// counters on Windows; `None` elsewhere.
     pub fn read() -> Option<Self> {
         if cfg!(target_os = "linux") {
-            let status = std::fs::read_to_string("/proc/self/status").ok()?;
-            let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+            let status = horizon_core::rfs::read_to_string("/proc/self/status").ok()?;
+            let meminfo = horizon_core::rfs::read_to_string("/proc/meminfo").ok()?;
             return Self::parse(&status, &meminfo);
         }
         let [used, allocated, max] = horizon_threads::process_memory::usage()?;

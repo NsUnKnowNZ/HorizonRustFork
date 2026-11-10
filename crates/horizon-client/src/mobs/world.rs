@@ -558,7 +558,7 @@ pub(crate) fn with_resource_test_world(
     build: impl FnOnce(&mut crate::world::World, &horizon_world::registry::BlockRegistry),
     f: impl FnOnce(&MobWorld<'_>, &super::MobTypes),
 ) -> bool {
-    if !root.join("entity-types.json").exists() || !root.join("movement-properties.nbt").exists() {
+    if !root.join("entity-types.json").r_exists() || !root.join("movement-properties.nbt").r_exists() {
         return false;
     }
     let assets = crate::assets::Assets::load(root).unwrap();

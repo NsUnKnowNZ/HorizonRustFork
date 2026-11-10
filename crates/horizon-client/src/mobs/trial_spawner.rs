@@ -8,6 +8,7 @@
 //! order; what the spawner asks of the level goes through
 //! [`TrialSpawnerLevel`], so the game and a differential test world answer the
 //! same questions.
+use horizon_core::rfs::RPath as _;
 use super::{
     spawn_rules::{self, Reason},
     spawn_selection,
@@ -174,16 +175,16 @@ static REGISTRY: OnceLock<HashMap<String, TrialConfig>> = OnceLock::new();
 pub fn load_registry(root: &Path) {
     REGISTRY.get_or_init(|| {
         let mut out = HashMap::new();
-        let Ok(namespaces) = std::fs::read_dir(root.join("data")) else {
+        let Ok(namespaces) = horizon_core::rfs::read_dir(root.join("data")) else {
             return out;
         };
         for ns in namespaces.flatten() {
             let base = ns.path().join("trial_spawner");
             let mut stack = vec![base.clone()];
             while let Some(dir) = stack.pop() {
-                for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                for entry in horizon_core::rfs::read_dir(&dir).into_iter().flatten().flatten() {
                     let path = entry.path();
-                    if path.is_dir() {
+                    if path.r_is_dir() {
                         stack.push(path);
                         continue;
                     }
@@ -195,7 +196,7 @@ pub fn load_registry(root: &Path) {
                     ) else {
                         continue;
                     };
-                    let config = std::fs::read(&path)
+                    let config = horizon_core::rfs::read(&path)
                         .ok()
                         .and_then(|b| serde_json::from_slice(&b).ok())
                         .and_then(|v| TrialConfig::decode(&crate::scoreboard::json_to_tag(&v)));

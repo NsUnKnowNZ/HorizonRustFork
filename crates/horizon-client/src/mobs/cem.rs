@@ -132,7 +132,11 @@ impl CemModels {
             if rules.iter().any(|r| !r.blocks.is_empty()) {
                 standing_species.push(kind.to_owned());
             }
-            let mut layer = CemLayer::build(part, jem, name, &rules);
+            // A baby on its adult's file has fewer parts than the file names, and this
+            // version's babies are models of their own that older files can't match: not
+            // faults of the file.
+            let fallback = layer_key(name) != key || key.contains("_baby");
+            let mut layer = CemLayer::build(part, jem, name, &rules, fallback);
             // A fallback onto another layer (the cat's collar from `cat`) takes the geometry
             // only: the layer keeps its own texture.
             if layer_suffix(&key) != layer_suffix(&layer_key(name)) {
@@ -171,11 +175,11 @@ fn set_rule_species(species: Vec<String>) {
 /// A pack file's text, None when it's missing or larger than a model may read: its size is
 /// checked before anything is read.
 fn read_small(path: &Path) -> Option<String> {
-    let len = std::fs::metadata(path).ok()?.len();
+    let len = horizon_core::rfs::metadata(path).ok()?.len();
     if len > MAX_BYTES as u64 {
         return None;
     }
-    std::fs::read_to_string(path).ok()
+    horizon_core::rfs::read_to_string(path).ok()
 }
 
 /// One `optifine/cem/<name>.properties` random-model rule: `models.<n>` selects the model
@@ -500,6 +504,8 @@ fn vanilla_part(model: &str, part: &str) -> String {
             .map(|i| format!("segment{}", i - 1))
             .or_else(|| n("wing").map(|i| format!("layer{}", i - 1))),
         ("endermite", _) => n("body").map(|i| format!("segment{}", i - 1)),
+        // OptiFine's guardian `body` is the vanilla root's `head`, which holds the rest.
+        ("guardian" | "elder_guardian", "body") => Some("head".into()),
         ("guardian" | "elder_guardian", _) => n("spine")
             .map(|i| format!("spike{}", i - 1))
             .or_else(|| n("tail").map(|i| format!("tail{}", i - 1))),
@@ -520,7 +526,11 @@ fn vanilla_part(model: &str, part: &str) -> String {
         ("cat" | "ocelot" | "cat_collar", "tail") => Some("tail1".into()),
         ("bat", "outer_right_wing") => Some("right_wing_tip".into()),
         ("bat", "outer_left_wing") => Some("left_wing_tip".into()),
-        ("cod" | "tropical_fish_a" | "tropical_fish_b", "fin_back" | "fin_top") => {
+        (
+            "cod" | "tropical_fish_a" | "tropical_fish_b" | "tropical_fish_pattern_a"
+            | "tropical_fish_pattern_b",
+            "fin_back" | "fin_top",
+        ) => {
             Some("top_fin".into())
         }
         // The big and medium pufferfish have blue fins; the small one has plain `right_fin`s
@@ -534,6 +544,16 @@ fn vanilla_part(model: &str, part: &str) -> String {
         (_, "fin_left") => Some("left_fin".into()),
         (_, "fin_bottom") => Some("bottom_fin".into()),
         ("cod", "tail") => Some("tail_fin".into()),
+        // The small pufferfish's eyes and tail fin.
+        ("puffer_fish_small", "eye_right") => Some("right_eye".into()),
+        ("puffer_fish_small", "eye_left") => Some("left_eye".into()),
+        ("puffer_fish_small", "tail") => Some("back_fin".into()),
+        // WolfModel's mane is its `upper_body`.
+        ("wolf" | "wolf_armor" | "wolf_collar", "mane") => Some("upper_body".into()),
+        // SalmonModel's fins: the top fin of each half and the tail fin.
+        ("salmon" | "salmon_small" | "salmon_large", "fin_back_1") => Some("top_front_fin".into()),
+        ("salmon" | "salmon_small" | "salmon_large", "fin_back_2") => Some("top_back_fin".into()),
+        ("salmon" | "salmon_small" | "salmon_large", "tail") => Some("back_fin".into()),
         ("sniffer", _) => part
             .strip_prefix("middle_")
             .and_then(|side| side.strip_suffix("_leg"))
@@ -545,10 +565,10 @@ fn vanilla_part(model: &str, part: &str) -> String {
         ("strider" | "strider_saddle", _) => part
             .strip_prefix("hair_")
             .map(|rest| format!("{rest}_bristle")),
-        ("horse" | "donkey" | "mule" | "skeleton_horse" | "zombie_horse", "neck") => {
+        ("horse" | "horse_armor" | "donkey" | "mule" | "skeleton_horse" | "zombie_horse", "neck") => {
             Some("head_parts".into())
         }
-        ("horse" | "donkey" | "mule" | "skeleton_horse" | "zombie_horse", "mouth") => {
+        ("horse" | "horse_armor" | "donkey" | "mule" | "skeleton_horse" | "zombie_horse", "mouth") => {
             Some("upper_mouth".into())
         }
         _ => None,
@@ -556,10 +576,26 @@ fn vanilla_part(model: &str, part: &str) -> String {
     renamed.unwrap_or_else(|| part.to_owned())
 }
 
+/// A part an older version's file names that this version's model draws elsewhere or no
+/// longer has: a horse's tack, which is its saddle layer's now, and the baby legs the adult
+/// horse used to carry. A file naming one is written for both versions, not wrong.
+fn moved_part(model: &str, target: &str) -> bool {
+    let part = target.split('.').next().unwrap_or(target);
+    // The happy ghast's harness file also moves the ghast's body, which is another layer.
+    if model == "happy_ghast_harness" {
+        return true;
+    }
+    matches!(model, "horse" | "donkey" | "mule" | "skeleton_horse" | "zombie_horse" | "horse_armor")
+        && (matches!(
+            part,
+            "saddle" | "headpiece" | "left_rein" | "right_rein" | "left_bit" | "right_bit" | "noseband"
+        ) || part.starts_with("child_"))
+}
+
 impl CemLayer {
     /// `vanilla` reshaped by `jem`, the model `name`'s file, whose random-model `rules`
     /// feed the animations' `rule_index`.
-    fn build(vanilla: &Part, jem: &EntityModel, name: &str, rules: &[Rule]) -> Self {
+    fn build(vanilla: &Part, jem: &EntityModel, name: &str, rules: &[Rule], fallback: bool) -> Self {
         let model = name.replace("_baby", "");
         let mut out = vanilla.clone();
         let mut count = 0;
@@ -593,7 +629,11 @@ impl CemLayer {
             };
             let bone = part(&p.bone, &mut count, &mut ids, &mut anchors);
             let Some(node) = find_mut(&mut out, &target) else {
-                log::warn!("Horizon: custom entity model {name}: no part {}", p.part);
+                if fallback || moved_part(&model, &p.part) {
+                    log::debug!("Horizon: custom entity model {name}: no part {} here", p.part);
+                } else {
+                    log::warn!("Horizon: custom entity model {name}: no part {}", p.part);
+                }
                 continue;
             };
             if !p.attach {
@@ -618,7 +658,8 @@ impl CemLayer {
             vanilla: &|p| vanilla_part(&model, p),
             ids: &ids,
         };
-        let animation = super::cem_anim::compile_animation(name, &names, &entries, rules);
+        let quiet = |target: &str| fallback || moved_part(&model, target);
+        let animation = super::cem_anim::compile_animation(name, &names, &entries, rules, &quiet);
         Self {
             model: Arc::new(out),
             animation,

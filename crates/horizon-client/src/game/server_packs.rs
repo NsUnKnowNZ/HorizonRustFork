@@ -3,6 +3,7 @@
 //! and `DownloadedPackSource` as `Minecraft` drives it): the prompt, the
 //! server list's setting, downloads into `downloads/`, and a resource reload
 //! with the server's packs on top of the player's own.
+use horizon_core::rfs::RPath as _;
 use super::{Game, packs::ReloadKind};
 use horizon_client::{
     Result,
@@ -220,7 +221,7 @@ impl Game<'_> {
             .join(folder)
             .join("resourcepacks")
             .join("resources.zip");
-        if path.is_file() {
+        if path.r_is_file() {
             self.server_packs.packs.local_world();
             self.server_packs.packs.push_local(WORLD_PACK_ID, path);
         }

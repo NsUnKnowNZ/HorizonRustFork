@@ -2,6 +2,7 @@
 //! mined, items used/crafted/broken/picked up/dropped and mobs killed or
 //! killed by, saved to `players/stats/<uuid>.json`, plus the phantom
 //! spawner that reads the time since rest (`PhantomSpawner`).
+use horizon_core::rfs::RPath as _;
 use super::{Dim, Game};
 use horizon_core::geometry::Vec3;
 use horizon_core::random::RandomSource;
@@ -110,7 +111,7 @@ impl Stats {
     }
     /// `ServerStatsCounter.parseLocal`: the counters of a stats file.
     pub(super) fn read(path: &Path) -> Self {
-        let json = std::fs::read_to_string(path)
+        let json = horizon_core::rfs::read_to_string(path)
             .ok()
             .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
             .unwrap_or_default();
@@ -196,7 +197,7 @@ fn valid_path_segment(segment: &str) -> bool {
 /// that fails leaves the old one in place.
 pub(super) fn locate_player_json(world: &Path, dir: &str, uuid: [i32; 4], name: &str) -> PathBuf {
     let uuid_file = player_json(world, dir, uuid);
-    if uuid_file.exists() {
+    if uuid_file.r_exists() {
         return uuid_file;
     }
     let file = format!("{name}.json");
@@ -204,7 +205,7 @@ pub(super) fn locate_player_json(world: &Path, dir: &str, uuid: [i32; 4], name: 
         return uuid_file;
     }
     let named = uuid_file.with_file_name(&file);
-    if !named.is_file() {
+    if !named.r_is_file() {
         return uuid_file;
     }
     match std::fs::rename(&named, &uuid_file) {

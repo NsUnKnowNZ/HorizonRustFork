@@ -4816,3 +4816,58 @@ fn a_folder_mods_file_is_shared_and_a_later_write_leaves_it_alone() {
     );
     fs::remove_dir_all(&scratch).unwrap();
 }
+
+#[test]
+fn a_packed_overlay_keeps_its_files_in_the_data_file() {
+    use horizon_core::rfs;
+    let scratch =
+        std::env::temp_dir().join(format!("horizon-overlay-packed-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&scratch);
+    let (base, out) = (scratch.join("base"), scratch.join("out"));
+    let source = scratch.join("mod/assets/m/textures/a.png");
+    fs::create_dir_all(base.join("assets/a/sounds")).unwrap();
+    fs::write(base.join("horizon-resources.json"), "{}").unwrap();
+    fs::write(base.join("items.json"), "[]").unwrap();
+    fs::write(base.join("assets/keep.txt"), "base").unwrap();
+    fs::write(base.join("assets/a/sounds/s.ogg"), "ogg").unwrap();
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "pixels").unwrap();
+    let overlay = Overlay::with(&base, &out, true).unwrap();
+    overlay.link("assets/m/textures/a.png", &source).unwrap();
+    overlay.link("assets/m/textures/b.png", &source).unwrap();
+    overlay.write("assets/m/lang/en_us.json", b"{}").unwrap();
+    overlay.write("assets/m/sounds/x.ogg", b"x").unwrap();
+    // What the merge asks of the root so far.
+    assert!(overlay.has("assets/keep.txt"));
+    assert!(overlay.has("assets/m/textures/a.png"));
+    assert!(!overlay.has("assets/none.txt"));
+    assert_eq!(overlay.bytes("assets/m/lang/en_us.json").unwrap().unwrap(), b"{}");
+    assert_eq!(overlay.bytes("assets/m/textures/a.png").unwrap().unwrap(), b"pixels");
+    assert_eq!(overlay.bytes("assets/keep.txt").unwrap().unwrap(), b"base");
+    assert!(overlay.bytes("assets/none.txt").unwrap().is_none());
+    // A write replaces the name: the mod's own file is not written through.
+    overlay.write("assets/m/textures/a.png", b"other").unwrap();
+    overlay.pack().unwrap();
+    assert_eq!(fs::read(&source).unwrap(), b"pixels");
+    // What the data file holds is not in the folder; sounds and tables are.
+    for held in ["assets/keep.txt", "assets/m/textures/a.png", "assets/m/lang/en_us.json"] {
+        assert!(!out.join(held).exists(), "{held}");
+    }
+    assert_eq!(fs::read(out.join("assets/a/sounds/s.ogg")).unwrap(), b"ogg");
+    assert_eq!(fs::read(out.join("assets/m/sounds/x.ogg")).unwrap(), b"x");
+    assert_eq!(fs::read(out.join("items.json")).unwrap(), b"[]");
+    assert!(out.join(PACKED).exists());
+    // The game reads the root as a folder all the same.
+    assert_eq!(rfs::read(out.join("assets/keep.txt")).unwrap(), b"base");
+    assert_eq!(rfs::read(out.join("assets/m/textures/a.png")).unwrap(), b"other");
+    assert_eq!(rfs::read(out.join("assets/m/textures/b.png")).unwrap(), b"pixels");
+    assert_eq!(rfs::read(out.join("assets/m/lang/en_us.json")).unwrap(), b"{}");
+    assert!(rfs::is_dir(out.join("assets/m/textures")));
+    let names: Vec<String> = rfs::read_dir(out.join("assets/m"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(names, ["lang", "sounds", "textures"]);
+    fs::remove_dir_all(&scratch).unwrap();
+}

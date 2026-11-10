@@ -8,17 +8,20 @@
 //! maps are kept as found (structure search is not run); conditions that
 //! need an entity, tool or damage source fail when the context has none, as
 //! they do for containers.
+use horizon_core::rfs::RPath as _;
 use crate::{lazy_json::LazyJson, nbt::Tag};
 use horizon_core::random::{LegacyRandom, RandomSource};
 use serde_json::Value;
 use std::{
     cell::RefCell,
     collections::HashMap,
-    fs, io,
+    io,
     path::Path,
     rc::Rc,
     sync::{Arc, Mutex, Weak},
 };
+#[cfg(test)]
+use std::fs;
 
 /// Raw files a world's data packs add over the game's own data, by
 /// `<kind>/<ns>:<path>` (a `recipe/minecraft:stick` key names the file
@@ -526,7 +529,7 @@ pub fn shared_tables(root: &Path, overlay: &PackOverlay) -> io::Result<Arc<LootT
         let mut hasher = DefaultHasher::new();
         root.hash(&mut hasher);
         let data = root.join("data");
-        let mut namespaces: Vec<_> = fs::read_dir(&data)
+        let mut namespaces: Vec<_> = horizon_core::rfs::read_dir(&data)
             .into_iter()
             .flatten()
             .flatten()
@@ -591,12 +594,12 @@ pub fn native_loot_table_load(id: &str, table: &mut Value) {
 }
 
 fn load_kind(data: &Path, kind: &str, out: &mut HashMap<String, Value>) -> io::Result<()> {
-    let Ok(entries) = fs::read_dir(data) else {
+    let Ok(entries) = horizon_core::rfs::read_dir(data) else {
         return Ok(());
     };
     let mut namespaces: Vec<String> = entries
         .flatten()
-        .filter(|e| e.path().is_dir())
+        .filter(|e| e.path().r_is_dir())
         .filter_map(|e| e.file_name().to_str().map(str::to_owned))
         .collect();
     namespaces.sort();
@@ -609,7 +612,7 @@ fn load_kind(data: &Path, kind: &str, out: &mut HashMap<String, Value>) -> io::R
 /// Every file's path, size and modification time under `dir`, in name order.
 fn hash_files(dir: &Path, hasher: &mut impl std::hash::Hasher) {
     use std::hash::Hash;
-    let Ok(entries) = fs::read_dir(dir) else {
+    let Ok(entries) = horizon_core::rfs::read_dir(dir) else {
         return;
     };
     let mut entries: Vec<_> = entries.flatten().collect();
@@ -619,7 +622,7 @@ fn hash_files(dir: &Path, hasher: &mut impl std::hash::Hasher) {
         let Ok(meta) = entry.metadata() else {
             continue;
         };
-        if meta.is_dir() {
+        if meta.r_is_dir() {
             hash_files(&path, hasher);
         } else {
             path.hash(hasher);

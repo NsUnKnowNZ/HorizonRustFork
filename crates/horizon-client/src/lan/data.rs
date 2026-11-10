@@ -2,6 +2,7 @@
 //! network order, with their data for clients that do not know the vanilla
 //! pack) and the tags of every registry, loaded from the prepared resources
 //! (`data/minecraft/...`) and the registries report.
+use horizon_core::rfs::RPath as _;
 use crate::chunk::LevelShapes;
 use horizon_protocol::{
     packets::configuration::{RegistryData, RegistryEntry, RegistryTags, TagEntry, UpdateTags},
@@ -425,7 +426,7 @@ impl SyncData {
         Self::merge_pack_tags(&mut tags, &root, overlay, &builtin, &dynamic);
         Self::merge_damage_tags(&mut tags, resources, overlay, &builtin, &dynamic)?;
         drop(tags_step);
-        let content_identity = if resources.join(crate::content_identity::MARKER).exists()
+        let content_identity = if resources.join(crate::content_identity::MARKER).r_exists()
             || horizon_protocol::item::custom::entries().next().is_some()
         {
             Some(
@@ -725,7 +726,7 @@ impl SyncData {
         keys.sort();
         for key in keys {
             let dir = tag_root.join(key.trim_start_matches("minecraft:"));
-            if !dir.is_dir() {
+            if !dir.r_is_dir() {
                 continue;
             }
             let mut files = BTreeMap::new();

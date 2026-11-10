@@ -1,6 +1,7 @@
 //! Mods in the game (`docs/mods.md`): content mods' blocks, items, data and
 //! assets (`content_root`), and the Mods page's rows. Code mods are native
 //! (`native_hooks.rs`); WebAssembly code mods don't run any more.
+use horizon_core::rfs::RPath as _;
 use super::Game;
 use horizon_client::{
     lang,
@@ -109,7 +110,7 @@ pub(super) fn register_build() {
         .collect();
     let built = std::env::current_exe()
         .ok()
-        .and_then(|exe| std::fs::read_to_string(exe.with_file_name(BUILD_INFO)).ok());
+        .and_then(|exe| horizon_core::rfs::read_to_string(exe.with_file_name(BUILD_INFO)).ok());
     for (id, version) in built.as_deref().map(build_info_mods).unwrap_or_default() {
         if !native.iter().any(|(other, _)| *other == id) {
             native.push((id, version));
@@ -263,6 +264,7 @@ pub(super) fn content_root(
             if announce {
                 horizon_protocol::mod_list::set_local(announced);
                 horizon_client::mod_transfer::set_sources(sources);
+                horizon_client::mod_transfer::pack_on_request();
             }
             if out != root {
                 log::info!(
@@ -295,8 +297,8 @@ fn announced_entry(
     use horizon_mods::Side;
     use horizon_protocol::mod_list;
     use sha2::{Digest, Sha256};
-    let sha256 = if path.is_file() {
-        std::fs::read(path)
+    let sha256 = if path.r_is_file() {
+        horizon_core::rfs::read(path)
             .ok()
             .map(|bytes| Sha256::digest(bytes).into())
     } else {
@@ -402,7 +404,7 @@ pub(super) fn built_with_native_mods() -> bool {
         || !crate::mod_api::mods().is_empty()
         || std::env::current_exe()
             .ok()
-            .and_then(|exe| std::fs::read_to_string(exe.with_file_name(BUILD_INFO)).ok())
+            .and_then(|exe| horizon_core::rfs::read_to_string(exe.with_file_name(BUILD_INFO)).ok())
             .is_some_and(|built| build_lists_mods(&built))
 }
 
@@ -456,7 +458,7 @@ fn not_built(dir: &std::path::Path, built: &str, rows: &[Installed]) -> Vec<Inst
             .as_array()
             .is_some_and(|mods| mods.iter().any(|m| m["id"] == id))
     };
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
+    let mut paths: Vec<PathBuf> = horizon_core::rfs::read_dir(dir)
         .map(|d| d.flatten().map(|e| e.path()).collect())
         .unwrap_or_default();
     paths.retain(|p| p.extension().is_some_and(|e| e == "hnmod"));
@@ -538,7 +540,7 @@ impl Game<'_> {
         self.sync_native_switches();
         let built = std::env::current_exe()
             .ok()
-            .and_then(|exe| std::fs::read_to_string(exe.with_file_name(BUILD_INFO)).ok())
+            .and_then(|exe| horizon_core::rfs::read_to_string(exe.with_file_name(BUILD_INFO)).ok())
             .unwrap_or_default();
         let built_mods = native_mods_detail(&built);
         let built_with_mods = built_mods.is_some();
@@ -682,7 +684,7 @@ impl Game<'_> {
         }
         let names = std::mem::take(&mut self.mods.stopped).join(", ");
         let seen = Self::game_dir().join(mod_list::DIR).join(NOTICE_SEEN);
-        if seen.exists() {
+        if seen.r_exists() {
             return;
         }
         self.system_message(Text::literal(format!(

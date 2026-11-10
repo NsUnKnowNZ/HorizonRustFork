@@ -361,7 +361,7 @@ impl Settings {
             .unwrap_or_default();
         let extras_text = path
             .parent()
-            .and_then(|dir| fs::read_to_string(dir.join(crate::extras::FILE)).ok())
+            .and_then(|dir| horizon_core::rfs::read_to_string(dir.join(crate::extras::FILE)).ok())
             .unwrap_or_default();
         let mut extras = crate::extras::Extras::parse(&extras_text);
         // The enabled mods are the game folder's, shared by its players (`--player-dir`).
@@ -369,7 +369,7 @@ impl Settings {
             .parent()
             .map(|dir| crate::mod_list::ModList::load(&crate::logging::shared_dir(dir)))
             .unwrap_or_default();
-        let mut settings = match fs::read(path) {
+        let mut settings = match horizon_core::rfs::read(path) {
             Ok(bytes) => {
                 let text = String::from_utf8_lossy(&bytes);
                 extras.read_old_options(&extras_text, &text);

@@ -3,6 +3,7 @@
 //! root, valid only while the `textures` trees still have the same paths,
 //! sizes and modification times and the format version is the same; anything
 //! else (missing, corrupt, stale, unwritable) means the normal decoding path.
+use horizon_core::rfs::RPath as _;
 use crate::mipmap::Strategy;
 use std::{
     collections::HashMap,
@@ -41,10 +42,10 @@ pub(crate) struct SpriteCache {
 /// summed so the directory order does not matter.
 fn fingerprint(root: &Path) -> Option<u64> {
     fn walk(dir: &Path, base: &Path, sum: &mut u64) -> Option<()> {
-        for entry in fs::read_dir(dir).ok()? {
+        for entry in horizon_core::rfs::read_dir(dir).ok()? {
             let entry = entry.ok()?;
             let meta = entry.metadata().ok()?;
-            if meta.is_dir() {
+            if meta.r_is_dir() {
                 walk(&entry.path(), base, sum)?;
                 continue;
             }
@@ -57,9 +58,9 @@ fn fingerprint(root: &Path) -> Option<u64> {
         Some(())
     }
     let mut sum = 0;
-    for namespace in fs::read_dir(root.join("assets")).ok()? {
+    for namespace in horizon_core::rfs::read_dir(root.join("assets")).ok()? {
         let textures = namespace.ok()?.path().join("textures");
-        if textures.is_dir() {
+        if textures.r_is_dir() {
             walk(&textures, root, &mut sum)?;
         }
     }
@@ -72,7 +73,7 @@ impl SpriteCache {
     pub fn open(root: &Path) -> Option<Self> {
         let fingerprint = fingerprint(root)?;
         let path = root.join(FILE);
-        let entries = fs::read(&path)
+        let entries = horizon_core::rfs::read(&path)
             .ok()
             .and_then(|bytes| parse(&bytes, fingerprint))
             .unwrap_or_default();

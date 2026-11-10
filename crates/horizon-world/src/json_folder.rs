@@ -5,11 +5,14 @@
 //! costs. The first reader lists and reads the folder; later readers share
 //! those bytes for as long as one of them holds the [`Folder`], then it is
 //! gone (nothing is kept past the load).
+use horizon_core::rfs::RPath as _;
 use std::{
-    fs, io,
+    io,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, Weak},
 };
+#[cfg(test)]
+use std::fs;
 
 /// One file: its path inside the folder without `.json` (`a/b`, as an id has
 /// it), the file, and its bytes or the error reading it gave.
@@ -55,7 +58,7 @@ pub fn read(dir: &Path) -> io::Result<Arc<Folder>> {
         None => list(dir)?
             .into_iter()
             .map(|(name, path)| {
-                let bytes = fs::read(&path)
+                let bytes = horizon_core::rfs::read(&path)
                     .map(Vec::into_boxed_slice)
                     .map_err(|e| (e.kind(), e.to_string()));
                 File { name, path, bytes }
@@ -105,7 +108,7 @@ fn prepared(dir: &Path) -> Option<Vec<File>> {
 /// what it found.
 pub fn list(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
     let mut files = Vec::new();
-    let mut stack = vec![fs::read_dir(dir)?];
+    let mut stack = vec![horizon_core::rfs::read_dir(dir)?];
     while let Some(entries) = stack.pop() {
         for entry in entries {
             let entry = match entry {
@@ -116,8 +119,8 @@ pub fn list(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
                 }
             };
             let path = entry.path();
-            if path.is_dir() {
-                match fs::read_dir(&path) {
+            if path.r_is_dir() {
+                match horizon_core::rfs::read_dir(&path) {
                     Ok(list) => stack.push(list),
                     Err(e) => log::warn!("Horizon: failed to list {}: {e}", path.display()),
                 }

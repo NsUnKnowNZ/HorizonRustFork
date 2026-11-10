@@ -65,7 +65,7 @@ mod tests {
                 .components()
                 .any(|component| component == std::path::Component::ParentDir)
         );
-        assert_eq!(fs::read(target.join("marker")).unwrap(), b"pack scan");
+        assert_eq!(horizon_core::rfs::read(target.join("marker")).unwrap(), b"pack scan");
         assert_eq!(
             fs::canonicalize(target).unwrap(),
             fs::canonicalize(&folder).unwrap()

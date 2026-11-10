@@ -14,7 +14,7 @@ static HIDDEN: Mutex<Option<[bool; 4]>> = Mutex::new(None);
 pub(super) fn hidden() -> [bool; 4] {
     let mut guard = HIDDEN.lock().unwrap_or_else(|e| e.into_inner());
     *guard.get_or_insert_with(|| {
-        let v: serde_json::Value = std::fs::read_to_string(CONFIG)
+        let v: serde_json::Value = horizon_core::rfs::read_to_string(CONFIG)
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())
             .unwrap_or(serde_json::Value::Null);

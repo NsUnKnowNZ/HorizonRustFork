@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, HashMap};
 /// The values the player chose for pack `name`'s options (`shaderpacks/<name>.txt`).
 fn chosen_shader_options(name: &str) -> BTreeMap<String, String> {
     let file = Game::shader_packs_dir().join(horizon_shaders::chosen_file(name));
-    std::fs::read_to_string(file)
+    horizon_core::rfs::read_to_string(file)
         .map(|text| horizon_shaders::parse_chosen(&text))
         .unwrap_or_default()
 }
@@ -397,7 +397,7 @@ impl Game<'_> {
                         // the game's own resources.
                         let resources = self.options.resources.clone();
                         let read = |namespace: &str, path: &str| {
-                            std::fs::read(resources.join("assets").join(namespace).join(path)).ok()
+                            horizon_core::rfs::read(resources.join("assets").join(namespace).join(path)).ok()
                         };
                         for note in horizon_shaders::resolve_resources(&mut post.textures, &read) {
                             log::warn!("shader pack {name}: {note}");

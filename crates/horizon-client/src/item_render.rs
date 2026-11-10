@@ -34,10 +34,11 @@ use horizon_world::nbt::Tag;
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, HashMap},
-    fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
+#[cfg(test)]
+use std::fs;
 
 /// One quad as submitted for drawing: pose-space corners, atlas UVs, the
 /// transformed unit normal, ARGB colour (tint, `-1` white) and its glint.
@@ -700,7 +701,7 @@ pub struct ItemRenderer {
 /// `json_folder`: from the prepared data file when the root has one.
 fn load_definitions(root: &Path) -> BTreeMap<String, ClientItem> {
     let mut out = BTreeMap::new();
-    let Ok(namespaces) = fs::read_dir(root.join("assets")) else {
+    let Ok(namespaces) = horizon_core::rfs::read_dir(root.join("assets")) else {
         return out;
     };
     for ns in namespaces.flatten() {
@@ -799,7 +800,7 @@ impl ItemRenderer {
             (library?, None)
         };
         let permutations = PalettedPermutations::from_atlas(
-            &fs::read_to_string(root.join("assets/minecraft/atlases/items.json"))
+            &horizon_core::rfs::read_to_string(root.join("assets/minecraft/atlases/items.json"))
                 .unwrap_or_default(),
         );
         let parts = if drawn {

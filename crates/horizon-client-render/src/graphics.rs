@@ -888,10 +888,10 @@ fn bool_text(v: bool) -> &'static str {
 }
 impl Graphics {
     pub fn load(dir: &Path) -> Self {
-        let mut g: Self = fs::read_to_string(dir.join(FILE))
+        let mut g: Self = horizon_core::rfs::read_to_string(dir.join(FILE))
             .map(|t| Self::parse(&t))
             .unwrap_or_default();
-        g.blue_map.servers = match fs::read_to_string(dir.join(crate::bluemap::SERVERS_FILE)) {
+        g.blue_map.servers = match horizon_core::rfs::read_to_string(dir.join(crate::bluemap::SERVERS_FILE)) {
             Ok(text) => crate::bluemap::Settings::parse_servers(&text),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
             Err(e) => {

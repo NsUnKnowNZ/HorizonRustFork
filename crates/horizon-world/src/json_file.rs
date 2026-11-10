@@ -6,11 +6,13 @@
 //! of that message.
 
 use serde::de::{Deserialize, DeserializeOwned};
-use std::{fs, io, path::Path};
+use std::{io, path::Path};
+#[cfg(test)]
+use std::fs;
 
 /// `path`'s bytes; an I/O error names the file.
 pub fn read_bytes(path: &Path) -> io::Result<Vec<u8>> {
-    fs::read(path).map_err(|e| named(path, e))
+    horizon_core::rfs::read(path).map_err(|e| named(path, e))
 }
 
 /// `bytes` as JSON; a parse error names `path`.

@@ -92,11 +92,11 @@ static STATE: Mutex<State> = Mutex::new(State {
 
 fn read_dir(dir: &std::path::Path) -> Vec<Value> {
     let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(dir) else { return out };
+    let Ok(entries) = horizon_core::rfs::read_dir(dir) else { return out };
     let mut paths: Vec<_> = entries.flatten().map(|e| e.path()).collect();
     paths.sort();
     for p in paths {
-        if let Some(v) = std::fs::read(&p).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()) {
+        if let Some(v) = horizon_core::rfs::read(&p).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()) {
             out.push(v);
         }
     }
@@ -112,10 +112,10 @@ fn load(game: &Game<'_>) -> Option<Data> {
     }
     let named = |dir: &str| -> HashMap<String, Value> {
         let mut out = HashMap::new();
-        let Ok(entries) = std::fs::read_dir(basic.join(dir)) else { return out };
+        let Ok(entries) = horizon_core::rfs::read_dir(basic.join(dir)) else { return out };
         for e in entries.flatten() {
             let name = e.path().file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            if let Some(v) = std::fs::read(e.path()).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()) {
+            if let Some(v) = horizon_core::rfs::read(e.path()).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()) {
                 out.insert(name, v);
             }
         }
@@ -130,11 +130,11 @@ fn load(game: &Game<'_>) -> Option<Data> {
         })
         .collect();
     // Events to files (sounds.json), files to lengths (durations.json).
-    let files: HashMap<String, u32> = std::fs::read(root.join("durations.json"))
+    let files: HashMap<String, u32> = horizon_core::rfs::read(root.join("durations.json"))
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default();
-    let sounds: HashMap<String, Value> = std::fs::read(root.join("sounds.json"))
+    let sounds: HashMap<String, Value> = horizon_core::rfs::read(root.join("sounds.json"))
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default();

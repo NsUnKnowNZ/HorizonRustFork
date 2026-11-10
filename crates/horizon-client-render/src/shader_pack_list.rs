@@ -2,6 +2,7 @@
 //! Settings > Shader Packs lists them: Horizon's own (docs/shaders.md) and those in the
 //! `shaders/` format, side by side.
 
+use horizon_core::rfs::RPath as _;
 use std::path::{Path, PathBuf};
 
 use horizon_shader_api::{OptionKind, OptionPage, PackOption};
@@ -105,7 +106,7 @@ impl Entry {
 
 /// The packs in `dir`, Horizon's first, each kind by title. A missing folder has none.
 pub fn scan(dir: &Path) -> Vec<Entry> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok(entries) = horizon_core::rfs::read_dir(dir) else {
         return Vec::new();
     };
     let mut paths: Vec<_> = entries.flatten().map(|e| e.path()).collect();
@@ -154,11 +155,11 @@ fn entry(path: &Path) -> Option<Entry> {
             pages,
         });
     }
-    let zip = path.is_file()
+    let zip = path.r_is_file()
         && path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("zip"));
-    (zip || path.join("shaders").is_dir()).then(|| Entry {
+    (zip || path.join("shaders").r_is_dir()).then(|| Entry {
         title: file.clone(),
         key: file.clone(),
         file,
@@ -178,10 +179,10 @@ pub fn resolve(dir: &Path, picked: &str) -> (String, PathBuf) {
         return (String::new(), dir.join(picked));
     }
     let direct = dir.join(picked);
-    if direct.exists() && !horizon_shader_api::package::is_pack(&direct) {
+    if direct.r_exists() && !horizon_shader_api::package::is_pack(&direct) {
         return (picked.to_owned(), direct);
     }
-    let mut native: Vec<_> = std::fs::read_dir(dir)
+    let mut native: Vec<_> = horizon_core::rfs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
@@ -202,7 +203,7 @@ pub fn resolve(dir: &Path, picked: &str) -> (String, PathBuf) {
         .or_else(|| picked.strip_prefix("horizon:"))
         .or_else(|| {
             // Never reinterpret an installed classic pack as a native identity.
-            if dir.join(picked).exists() {
+            if dir.join(picked).r_exists() {
                 return None;
             }
             let stem = picked.strip_suffix(".hshader")?;
@@ -246,10 +247,10 @@ pub fn native_values_pack(pack: &Path, id: &str) -> PathBuf {
 
 fn migrate_values(pack: &Path, key: &str) {
     let target = values_path(&values_pack(pack, key));
-    if target.exists() {
+    if target.r_exists() {
         return;
     }
-    if let Ok(text) = std::fs::read(values_path(pack)) {
+    if let Ok(text) = horizon_core::rfs::read(values_path(pack)) {
         let result = std::fs::create_dir_all(target.parent().unwrap()).and_then(|()| {
             use std::io::Write;
             // Another reader may already have imported the values.
@@ -278,7 +279,7 @@ pub fn values_path(pack: &Path) -> PathBuf {
 /// The value of each of `options` saved for the pack at `pack`, else its default; a value
 /// out of the option's range is brought into it.
 pub fn load_values(pack: &Path, options: &[PackOption]) -> Vec<f64> {
-    let text = std::fs::read_to_string(values_path(pack)).unwrap_or_default();
+    let text = horizon_core::rfs::read_to_string(values_path(pack)).unwrap_or_default();
     let saved: std::collections::HashMap<&str, f64> = text
         .lines()
         .filter_map(|l| l.split_once('='))

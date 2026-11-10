@@ -11,7 +11,9 @@ use crate::{
 use horizon_core::random::{LegacyRandom, RandomSource};
 use horizon_world::loot::PackOverlay;
 use serde_json::Value;
-use std::{fs, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
+#[cfg(test)]
+use std::fs;
 
 /// Everything the workstation menus read, loaded once with the resources.
 pub struct StationData {
@@ -794,7 +796,7 @@ impl StationRecipes {
             }
         }
         let mut trim_materials = Vec::new();
-        let mut tm: Vec<_> = fs::read_dir(root.join("data/minecraft/trim_material"))
+        let mut tm: Vec<_> = horizon_core::rfs::read_dir(root.join("data/minecraft/trim_material"))
             .into_iter()
             .flatten()
             .flatten()
@@ -802,7 +804,7 @@ impl StationRecipes {
             .collect();
         tm.sort();
         for p in tm {
-            if let Ok(bytes) = fs::read(&p)
+            if let Ok(bytes) = horizon_core::rfs::read(&p)
                 && let Ok(v) = serde_json::from_slice::<Value>(&bytes)
             {
                 let id = format!(

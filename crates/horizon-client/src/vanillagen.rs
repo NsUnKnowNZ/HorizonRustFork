@@ -1,5 +1,6 @@
 //! Binds `horizon_world`'s vanilla overworld generator (noise terrain,
 //! aquifers, surface rules, carvers and placed features) to chunk streaming.
+use horizon_core::rfs::RPath as _;
 use crate::{
     biome::Biomes,
     chunk::{BIOME_STRATEGY, Chunk, ColumnLayout, Section},
@@ -292,7 +293,7 @@ impl VanillaTerrain {
             if unsupported.len() > NAMED {
                 log::warn!("Horizon:   and {} more", unsupported.len() - NAMED);
             }
-            if !dir.join("blocks/block-properties.nbt").exists() {
+            if !dir.join("blocks/block-properties.nbt").r_exists() {
                 log::warn!(
                     "Horizon: the worldgen bundle lacks the block behavior exports (worldgen/blocks/*.nbt); \
                      prepare again (the launcher, or horizon-prepare --prepare) to add them"
@@ -568,7 +569,7 @@ impl VanillaTerrain {
     /// start nobody visited has no file for.
     pub fn set_reference_file(&self, path: std::path::PathBuf) {
         let mut referenced = self.referenced.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(list) = std::fs::read(&path)
+        if let Some(list) = horizon_core::rfs::read(&path)
             .ok()
             .and_then(|b| serde_json::from_slice::<Vec<(String, i32, i32)>>(&b).ok())
         {

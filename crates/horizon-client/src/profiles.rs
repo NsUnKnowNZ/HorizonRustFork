@@ -38,7 +38,7 @@ fn model(slim: bool) -> &'static str {
 /// The profiles kept in `dir`, the one in use among them (added when the list lacks it).
 pub fn load(dir: &Path) -> Vec<Profile> {
     let mut list: Vec<Profile> = Vec::new();
-    for line in fs::read_to_string(dir.join(FILE)).unwrap_or_default().lines() {
+    for line in horizon_core::rfs::read_to_string(dir.join(FILE)).unwrap_or_default().lines() {
         let Some(rest) = line.trim().strip_prefix("profile:") else {
             continue;
         };

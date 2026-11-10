@@ -1045,7 +1045,7 @@ impl Game<'_> {
             "data/minecraft/tags/entity_type/{}.json",
             tag.trim_start_matches("minecraft:")
         ));
-        serde_json::from_slice::<serde_json::Value>(&std::fs::read(path).unwrap_or_default())
+        serde_json::from_slice::<serde_json::Value>(&horizon_core::rfs::read(path).unwrap_or_default())
             .ok()
             .is_some_and(|v| {
                 v["values"]
@@ -4104,7 +4104,7 @@ impl Game<'_> {
                 .into_iter()
                 .flatten()
                 .filter_map(|b| serde_json::from_slice::<serde_json::Value>(b).ok());
-            let parsed = std::fs::read(file)
+            let parsed = horizon_core::rfs::read(file)
                 .ok()
                 .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
                 .into_iter()

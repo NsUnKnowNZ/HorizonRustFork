@@ -6,6 +6,7 @@
 //! its simulation and the play-state hub that LAN hosting uses, configured
 //! from server.properties, with the operator, whitelist and ban lists and a
 //! console on standard input.
+use horizon_core::rfs::RPath as _;
 use super::{Game, Options, lan::LanSettings, world_loading::WorldRequest};
 use horizon_client::{
     Result,
@@ -181,7 +182,7 @@ pub(super) fn cached_user_by_id(id: u128) -> Option<NameAndId> {
 /// `server.toml`'s `[anticheat]`, beside server.properties when horizon-server runs the game; the
 /// default (on) without the file or the section, off (with an error logged) when the section is wrong.
 fn load_anticheat() -> horizon_anticheat::Config {
-    let Ok(text) = std::fs::read_to_string("server.toml") else {
+    let Ok(text) = horizon_core::rfs::read_to_string("server.toml") else {
         return Default::default();
     };
     match horizon_anticheat::Config::from_server_toml(&text) {
@@ -210,7 +211,7 @@ fn load_anticheat() -> horizon_anticheat::Config {
 /// `server.toml`'s `[chat_filter]` (docs/chat-filter.md), like `[anticheat]`: on by default, off (with an
 /// error logged) when the section is wrong. The mutes are kept beside server.properties.
 fn load_chat_filter() -> Option<horizon_chat_filter::Guard> {
-    let text = std::fs::read_to_string("server.toml").unwrap_or_default();
+    let text = horizon_core::rfs::read_to_string("server.toml").unwrap_or_default();
     let config = match horizon_chat_filter::Config::from_server_toml(&text) {
         Ok(config) => config,
         Err(e) => {
@@ -247,7 +248,7 @@ fn load_combat() -> bool {
         #[serde(default)]
         legacy: bool,
     }
-    let Ok(text) = std::fs::read_to_string("server.toml") else {
+    let Ok(text) = horizon_core::rfs::read_to_string("server.toml") else {
         return false;
     };
     let section = toml::from_str::<toml::Table>(&text)
@@ -284,7 +285,7 @@ fn load_combat() -> bool {
 /// would let anyone sign a login, and a typo must not leave a server open that was meant to be behind a proxy.
 fn forwarding_secret(online: bool) -> Result<Option<Vec<u8>>> {
     const FILE: &str = "forwarding.secret";
-    if !std::path::Path::new(FILE).exists() {
+    if !std::path::Path::new(FILE).r_exists() {
         return Ok(None);
     }
     if online {
@@ -294,7 +295,7 @@ fn forwarding_secret(online: bool) -> Result<Option<Vec<u8>>> {
         );
         return Ok(None);
     }
-    let text = std::fs::read(FILE).map_err(|e| format!("{FILE}: {e}"))?;
+    let text = horizon_core::rfs::read(FILE).map_err(|e| format!("{FILE}: {e}"))?;
     let secret = text.trim_ascii().to_vec();
     if secret.is_empty() {
         return Err(format!(
@@ -554,7 +555,7 @@ impl Lists {
             whitelist_bypass: Vec::new(),
         };
         // Horizon only: players from a proxy's Bedrock bridge (Floodgate) are never on whitelist.json.
-        if let Ok(text) = std::fs::read_to_string("whitelist-bypass.txt") {
+        if let Ok(text) = horizon_core::rfs::read_to_string("whitelist-bypass.txt") {
             match parse_whitelist_bypass(&text) {
                 Ok(prefixes) => {
                     log(
@@ -607,7 +608,7 @@ impl Lists {
         warn("load operators list", l.ops.load());
         warn("load white-list", l.white.load());
         warn("save operators list", saved(l.ops.save()));
-        if !l.white.file.exists() {
+        if !l.white.file.r_exists() {
             warn("save white-list", saved(l.white.save()));
         }
         l
@@ -917,7 +918,7 @@ impl Game<'_> {
         // Main's WorldLoader: a new world's dimensions come from
         // server.properties before the server starts.
         let world_dir = std::env::current_dir()?.join(&universe).join(&level_name);
-        let new_world = !world_dir.join("level.dat").exists();
+        let new_world = !world_dir.join("level.dat").r_exists();
         if new_world {
             self.write_world_gen(&world_dir, &props)?;
         }
@@ -1083,7 +1084,7 @@ impl Game<'_> {
         } else {
             Vec::new()
         };
-        let favicon = std::fs::read("server-icon.png")
+        let favicon = horizon_core::rfs::read("server-icon.png")
             .ok()
             .filter(|b| png_size(b) == Some((64, 64)));
         // Behind a Velocity proxy: `forwarding.secret` in the server folder, like the proxy's own file.

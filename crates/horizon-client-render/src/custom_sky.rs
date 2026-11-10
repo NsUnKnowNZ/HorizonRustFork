@@ -4,6 +4,7 @@
 //! vanilla sky. A pack without `optifine/sky` gives an empty [`CustomSky`] and the sky stays
 //! vanilla.
 
+use horizon_core::rfs::RPath as _;
 use std::path::Path;
 
 use glam::{Mat4, Vec3};
@@ -273,7 +274,7 @@ pub fn fabric_skies(root: &Path) -> Vec<(i32, SkyLayer)> {
     let mut found: Vec<(i64, String, i32, SkyLayer)> = Vec::new();
     for ns in ["fabricskyboxes", "nuit"] {
         let dir = root.join("assets").join(ns).join("sky");
-        let Ok(entries) = std::fs::read_dir(&dir) else {
+        let Ok(entries) = horizon_core::rfs::read_dir(&dir) else {
             continue;
         };
         for entry in entries.flatten() {
@@ -282,7 +283,7 @@ pub fn fabric_skies(root: &Path) -> Vec<(i32, SkyLayer)> {
                 continue;
             }
             let file = format!("assets/{ns}/sky/{name}");
-            let Some(v) = std::fs::read(entry.path())
+            let Some(v) = horizon_core::rfs::read(entry.path())
                 .ok()
                 .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
             else {
@@ -291,7 +292,8 @@ pub fn fabric_skies(root: &Path) -> Vec<(i32, SkyLayer)> {
             };
             let kind = v["type"].as_str().unwrap_or("");
             if kind != "single-sprite-square-textured" {
-                if kind != "monocolor" {
+                // `overworld` and `end` ask for the game's own sky, which is what is drawn.
+                if !matches!(kind, "monocolor" | "overworld" | "end") {
                     log::info!("{file}: sky type `{kind}` is not read yet; skipped");
                 }
                 continue;
@@ -303,7 +305,7 @@ pub fn fabric_skies(root: &Path) -> Vec<(i32, SkyLayer)> {
             };
             let (tns, tpath) = texture.split_once(':').unwrap_or(("minecraft", texture));
             let source = format!("assets/{tns}/{tpath}");
-            if !root.join(&source).is_file() {
+            if !root.join(&source).r_is_file() {
                 log::warn!("{file}: no texture {source}");
                 continue;
             }

@@ -59,7 +59,7 @@ impl Anticheat {
     fn strike(&mut self, uuid: u128, check: Check) -> (u32, bool) {
         let path = std::path::Path::new(&self.config.strikes);
         let strikes = self.strikes.get_or_insert_with(|| {
-            std::fs::read(path)
+            horizon_core::rfs::read(path)
                 .ok()
                 .and_then(|bytes| serde_json::from_slice(&bytes).ok())
                 .unwrap_or_default()

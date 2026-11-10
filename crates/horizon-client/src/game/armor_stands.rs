@@ -127,7 +127,7 @@ impl ArmorStandAssets {
         let namespaces = std::iter::once("minecraft".to_owned())
             .chain(horizon_client::mod_content::namespaces(root));
         for namespace in namespaces {
-            let Ok(entries) = std::fs::read_dir(root.join(format!("assets/{namespace}/equipment")))
+            let Ok(entries) = horizon_core::rfs::read_dir(root.join(format!("assets/{namespace}/equipment")))
             else {
                 continue;
             };
@@ -137,7 +137,7 @@ impl ArmorStandAssets {
                     continue;
                 };
                 let Ok(v) =
-                    std::fs::read(&path).map(|b| serde_json::from_slice::<serde_json::Value>(&b))
+                    horizon_core::rfs::read(&path).map(|b| serde_json::from_slice::<serde_json::Value>(&b))
                 else {
                     continue;
                 };

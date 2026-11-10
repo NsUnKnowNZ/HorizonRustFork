@@ -536,7 +536,7 @@ fn summary(r: &Value) -> String {
 /// a container puts on them and on memory. A server out of threads fails to
 /// start the ones it needs (EAGAIN). Read on Linux; null elsewhere.
 fn process_limits() -> Value {
-    let read = |path: &str| std::fs::read_to_string(path).ok();
+    let read = |path: &str| horizon_core::rfs::read_to_string(path).ok();
     let threads = read("/proc/self/status").and_then(|s| {
         s.lines()
             .find_map(|l| l.strip_prefix("Threads:"))

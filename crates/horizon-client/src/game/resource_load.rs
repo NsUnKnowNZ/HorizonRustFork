@@ -616,7 +616,11 @@ pub(super) fn load_resources(
 /// the next starts read them from one file (#1961).
 pub(super) fn write_prepared_files(root: PathBuf) {
     use horizon_core::prepared_files;
-    if prepared_files::open(&root).is_some() || !root.join("horizon-resources.json").is_file() {
+    // A packed root has only its data file: nothing in its folder to write one from.
+    if prepared_files::open(&root).is_some()
+        || root.join(crate::mod_content::PACKED).exists()
+        || !root.join("horizon-resources.json").r_is_file()
+    {
         return;
     }
     let spawned = std::thread::Builder::new()

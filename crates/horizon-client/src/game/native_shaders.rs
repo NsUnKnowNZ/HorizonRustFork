@@ -5,6 +5,7 @@
 //! pack that fails is refused with its problems in the chat while the last good one keeps
 //! drawing.
 
+use horizon_core::rfs::RPath as _;
 use std::{
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
@@ -207,10 +208,10 @@ pub(super) fn linear_frame_switch() -> bool {
 /// option values (`None` when the pack is unreadable).
 fn fingerprint(path: &Path) -> Option<u64> {
     fn walk(path: &Path, hasher: &mut std::hash::DefaultHasher) -> Option<()> {
-        let meta = std::fs::metadata(path).ok()?;
+        let meta = horizon_core::rfs::metadata(path).ok()?;
         path.hash(hasher);
-        if meta.is_dir() {
-            let mut entries: Vec<_> = std::fs::read_dir(path)
+        if meta.r_is_dir() {
+            let mut entries: Vec<_> = horizon_core::rfs::read_dir(path)
                 .ok()?
                 .flatten()
                 .map(|e| e.path())

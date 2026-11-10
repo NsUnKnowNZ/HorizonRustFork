@@ -1,6 +1,7 @@
 //! The playable game loop: streaming world, player simulation at 20 ticks/s,
 //! block interaction, inventory and HUD.
 
+use horizon_core::rfs::RPath as _;
 /// The content tables the world plays with, as field-level borrows: the
 /// world's data packs' over the game's own. The `Game::items`/`recipes`/
 /// `stations` methods read the same tables, but taking `&self` blocks a
@@ -756,7 +757,7 @@ impl Options {
                 .join("saves")
                 .join(&world)
                 .join("level.dat")
-                .is_file()
+                .r_is_file()
             {
                 o.world = Some(world);
             } else {
@@ -773,7 +774,7 @@ impl Options {
             .ok_or("missing executable directory")?
             .join("resources");
         let mut o = Self {
-            resources: if sibling.join("horizon-resources.json").exists() {
+            resources: if sibling.join("horizon-resources.json").r_exists() {
                 sibling
             } else {
                 std::path::Path::new(".local/horizon-client").join(horizon_core::VANILLA_VERSION)
@@ -13810,7 +13811,7 @@ impl Game<'_> {
         {
             return;
         }
-        if icon.path.is_file() {
+        if icon.path.r_is_file() {
             // tryTakeScreenshotIfNeeded's hasWorldScreenshot: it has one, stop asking.
             self.world_icon = None;
             return;

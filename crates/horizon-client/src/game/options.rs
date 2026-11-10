@@ -151,7 +151,7 @@ impl Game<'_> {
             return;
         }
         let signature: Vec<(String, u64, Option<std::time::SystemTime>)> =
-            std::fs::read_dir(super::packs::packs_dir())
+            horizon_core::rfs::read_dir(super::packs::packs_dir())
                 .into_iter()
                 .flatten()
                 .flatten()

@@ -393,7 +393,9 @@ impl Element {
         let obj = object(raw)?;
         let from = vector(required(&obj, "from")?)?;
         let to = vector(required(&obj, "to")?)?;
-        if from.iter().chain(&to).any(|v| !(-16.0..=32.0).contains(v)) {
+        // Older versions refused an element outside -16..=32. Mods' models go past it (a
+        // trophy's hat ends at 42) and are drawn as they are: only nonsense is refused.
+        if from.iter().chain(&to).any(|v| !(-128.0..=144.0).contains(v)) {
             return Err(error("element outside model bounds"));
         }
         let rotation = obj

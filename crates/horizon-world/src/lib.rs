@@ -135,6 +135,8 @@ pub mod world_movement;
 pub mod world_ray;
 pub mod worldgen;
 
+/// Read-only file access that sees a packed root's files, for the crates above this one.
+pub use horizon_core::rfs;
 pub const DATA_VERSION: i32 = horizon_core::version::DATA_VERSION;
 
 pub mod item_stack_refs;

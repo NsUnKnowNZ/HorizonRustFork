@@ -23,10 +23,11 @@ use horizon_mods::content::{
 use horizon_world::nbt::{self, Compound, JavaString, Limits, Tag};
 use serde::{Deserialize, Serialize, de};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt, fs,
     ops::Range,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 /// A content mod to put in the root: its id and content.
@@ -2127,7 +2128,8 @@ fn place_in_biomes(
         {
             entity_tags.insert(
                 format!("{ns}:{path}"),
-                fs::read_to_string(out_path(overlay, file))?,
+                String::from_utf8(overlay.bytes(file)?.ok_or_else(|| format!("{file}: not written"))?)
+                    .map_err(|e| format!("{file}: {e}"))?,
             );
         }
     }
@@ -2155,7 +2157,7 @@ fn place_in_biomes(
     for (id, text) in changed {
         if let Some((ns, path)) = id.split_once(':') {
             let file = format!("data/{ns}/worldgen/biome/{path}.json");
-            if out_path(overlay, &file).exists() {
+            if overlay.has(&file) {
                 overlay.write(&file, text.as_bytes())?;
             }
         }
@@ -2168,19 +2170,177 @@ mod biomes;
 
 /// The overlay being written: `out` mirrors `base` through links, and a
 /// directory becomes real only when something inside it is written.
+///
+/// A packed overlay (the default) keeps the files a root's data file holds
+/// (`horizon_core::prepared_files`: `data/` and `assets/`, sounds aside) out of the folder:
+/// what is written or shared is only noted, the base's are not mirrored, and `pack` writes
+/// them all into the root's one data file, which is what the game reads (`horizon_core::rfs`).
+/// A root is then a few thousand links (sounds, tables) and one file where it was a link per
+/// file, 110,000 of them. `HORIZON_LOOSE_ROOT` builds the mirror as before, to look at.
 struct Overlay<'a> {
     base: &'a Path,
     out: &'a Path,
+    packed: bool,
+    /// Packed: the bytes written here that the data file holds, by name.
+    held: Mutex<HashMap<String, Vec<u8>>>,
+    /// Packed: the mod files shared here that the data file holds, by name.
+    shared: Mutex<HashMap<String, PathBuf>>,
+    /// Packed: the base's files that the data file holds, when the base has no data file
+    /// of its own to name them.
+    base_names: Mutex<Vec<String>>,
+}
+
+/// A file at the root that says its `data/` and `assets/` are only in its data file.
+pub const PACKED: &str = "horizon-packed";
+
+/// Whether roots are built packed. The tests of the merge read the mirror, file by file.
+fn packed_roots() -> bool {
+    !cfg!(test)
+        && std::env::var_os("HORIZON_LOOSE_ROOT").is_none()
+        && std::env::var_os("HORIZON_NO_DATA_FILE").is_none()
+}
+
+/// Whether `dir` (from the root) is one of the folders a data file holds, under one, or
+/// above one: where a packed overlay has folders of its own.
+fn held_tree(dir: &str) -> bool {
+    horizon_core::prepared_files::folders().iter().any(|f| {
+        dir == *f
+            || dir.strip_prefix(f).is_some_and(|r| r.starts_with('/'))
+            || f.strip_prefix(dir).is_some_and(|r| r.starts_with('/'))
+    })
 }
 impl Overlay<'_> {
     fn new<'a>(base: &'a Path, out: &'a Path) -> Result<Overlay<'a>> {
+        Self::with(base, out, packed_roots())
+    }
+    fn with<'a>(base: &'a Path, out: &'a Path, packed: bool) -> Result<Overlay<'a>> {
         if fs::symlink_metadata(out).is_ok() {
             fs::remove_dir_all(out)?;
         }
         fs::create_dir_all(out)?;
-        let overlay = Overlay { base, out };
-        overlay.link_children(Path::new(""))?;
+        let overlay = Overlay {
+            base,
+            out,
+            packed,
+            held: Default::default(),
+            shared: Default::default(),
+            base_names: Default::default(),
+        };
+        if overlay.packed {
+            let listed = horizon_core::prepared_files::open(base).is_some();
+            let mut names = Vec::new();
+            overlay.mirror_unheld("", !listed, &mut names)?;
+            *lock(&overlay.base_names) = names;
+            fs::write(out.join(PACKED), b"1")?;
+        } else {
+            overlay.link_children(Path::new(""))?;
+        }
         Ok(overlay)
+    }
+    /// A packed overlay's start: the base's folder `rel` without the files a data file
+    /// holds, which are named in `names` when `list` asks.
+    fn mirror_unheld(&self, rel: &str, list: bool, names: &mut Vec<String>) -> Result<()> {
+        let Ok(read) = fs::read_dir(self.base.join(rel)) else {
+            return Ok(());
+        };
+        for entry in read.flatten() {
+            let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            let child = match rel {
+                "" => name,
+                _ => format!("{rel}/{name}"),
+            };
+            if child == horizon_core::prepared_files::FILE_NAME {
+                continue;
+            }
+            let is_dir = entry.file_type().is_ok_and(|t| t.is_dir())
+                || (entry.file_type().is_ok_and(|t| t.is_symlink()) && entry.path().is_dir());
+            if is_dir && held_tree(&child) {
+                fs::create_dir(self.out.join(&child))?;
+                self.mirror_unheld(&child, list, names)?;
+            } else if !is_dir && horizon_core::prepared_files::holds(&child) {
+                if list {
+                    names.push(child);
+                }
+            } else {
+                link(&entry.path(), &self.out.join(&child))?;
+            }
+        }
+        Ok(())
+    }
+    /// A file of the root as the merge left it so far: `None` when it has none.
+    fn bytes(&self, rel: &str) -> Result<Option<Vec<u8>>> {
+        if !self.packed || !horizon_core::prepared_files::holds(rel) {
+            return Ok(match fs::read(self.out.join(rel)) {
+                Ok(bytes) => Some(bytes),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+                Err(e) => return Err(e.into()),
+            });
+        }
+        if let Some(bytes) = lock(&self.held).get(rel) {
+            return Ok(Some(bytes.clone()));
+        }
+        if let Some(source) = lock(&self.shared).get(rel) {
+            return Ok(Some(fs::read(source)?));
+        }
+        Ok(
+            match horizon_core::prepared_files::read(&self.base.join(rel)) {
+                Ok(bytes) => Some(bytes),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+                Err(e) => return Err(e.into()),
+            },
+        )
+    }
+    /// Whether the root has the file `rel` so far.
+    fn has(&self, rel: &str) -> bool {
+        if !self.packed || !horizon_core::prepared_files::holds(rel) {
+            return self.out.join(rel).exists();
+        }
+        lock(&self.held).contains_key(rel)
+            || lock(&self.shared).contains_key(rel)
+            || horizon_core::rfs::is_file(self.base.join(rel))
+    }
+    /// A packed overlay's end: the root's data file, holding the base's files (from the
+    /// base's own data file when it has one), the mods' shared files (opened here, on
+    /// several threads) and what the merge wrote.
+    fn pack(&self) -> Result<()> {
+        use horizon_core::prepared_files;
+        if !self.packed {
+            return Ok(());
+        }
+        let started = std::time::Instant::now();
+        let held = std::mem::take(&mut *lock(&self.held));
+        let shared = std::mem::take(&mut *lock(&self.shared));
+        let base_files = prepared_files::open(self.base);
+        let mut names = std::mem::take(&mut *lock(&self.base_names));
+        if let Some(files) = &base_files {
+            names.extend(files.names().map(str::to_owned));
+        }
+        names.extend(held.keys().cloned());
+        names.extend(shared.keys().cloned());
+        let (written, opened) = (held.len(), shared.len());
+        // Each file's bytes are given once: taken out, not copied.
+        let held = Mutex::new(held);
+        let bytes_of = |name: &str| -> std::io::Result<Vec<u8>> {
+            if let Some(bytes) = lock(&held).remove(name) {
+                return Ok(bytes);
+            }
+            if let Some(source) = shared.get(name) {
+                return fs::read(source);
+            }
+            match base_files.as_ref().and_then(|f| f.read(name)) {
+                Some(bytes) => bytes,
+                None => fs::read(self.base.join(name)),
+            }
+        };
+        prepared_files::write_packed(self.out, names, 16, &bytes_of)
+            .map_err(|e| format!("{}: {e}", prepared_files::FILE_NAME))?;
+        log::info!(
+            "Horizon: packed the root's files in {} ms ({written} written by the merge, {opened} of the mods' opened)",
+            started.elapsed().as_millis(),
+        );
+        Ok(())
     }
     fn link_children(&self, rel: &Path) -> Result<()> {
         let Ok(read) = fs::read_dir(self.base.join(rel)) else {
@@ -2203,6 +2363,13 @@ impl Overlay<'_> {
         for part in rel.iter() {
             at.push(part);
             let path = self.out.join(&at);
+            // A packed overlay's folders there are its own from the start.
+            if self.packed && at.to_str().is_some_and(|a| held_tree(&a.replace('\\', "/"))) {
+                if !path.is_dir() {
+                    fs::create_dir(&path)?;
+                }
+                continue;
+            }
             let meta = fs::symlink_metadata(&path);
             if meta
                 .as_ref()
@@ -2219,6 +2386,11 @@ impl Overlay<'_> {
         Ok(())
     }
     fn write(&self, rel: &str, bytes: &[u8]) -> Result<()> {
+        if self.packed && horizon_core::prepared_files::holds(rel) {
+            lock(&self.shared).remove(rel);
+            lock(&self.held).insert(rel.to_owned(), bytes.to_vec());
+            return Ok(());
+        }
         let rel = Path::new(rel);
         if let Some(parent) = rel.parent() {
             self.dir(parent)?;
@@ -2237,6 +2409,12 @@ impl Overlay<'_> {
     /// nothing. The root is replaced name by name (`write`), so a shared file is never written
     /// through, and a mod file edited in place changes the stamp, which builds another root.
     fn link(&self, rel: &str, source: &Path) -> Result<()> {
+        if self.packed && horizon_core::prepared_files::holds(rel) {
+            lock(&self.held).remove(rel);
+            lock(&self.shared)
+                .insert(rel.to_owned(), std::path::absolute(source)?);
+            return Ok(());
+        }
         let rel = Path::new(rel);
         if let Some(parent) = rel.parent() {
             self.dir(parent)?;
@@ -2249,6 +2427,9 @@ impl Overlay<'_> {
         link(&std::path::absolute(source)?, &path)?;
         Ok(())
     }
+}
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 fn out_path(overlay: &Overlay<'_>, rel: &str) -> PathBuf {
     overlay.out.join(rel)
@@ -2826,7 +3007,25 @@ pub fn build(base: &Path, mods: &[ContentMod], out: &Path) -> Result<Vec<String>
         overlay.write(crate::content_identity::MARKER, b"1")?;
     }
     overlay.write(WARNINGS, warnings.join("\n").as_bytes())?;
+    overlay.pack()?;
+    write_base_data_file(base);
     Ok(warnings)
+}
+
+/// A base built in the game's cache (resource packs over the game's files) gets a data file
+/// of its own once a merge has read it: the next merge over it opens one file.
+fn write_base_data_file(base: &Path) {
+    use horizon_core::prepared_files;
+    if prepared_files::open(base).is_none()
+        && base.components().any(|c| c.as_os_str() == ".horizon-cache")
+        && base.join("horizon-resources.json").is_file()
+        && let Err(e) = prepared_files::write_with_readers(base, 16)
+    {
+        log::info!(
+            "Horizon: the base's {} not written: {e}",
+            prepared_files::FILE_NAME
+        );
+    }
 }
 
 /// The root to load: `base` itself with no content, else the mods' overlay
@@ -2853,7 +3052,11 @@ pub fn resource_root(base: &Path, mods: &[ContentMod], cache: &Path) -> Result<P
     );
     let roots = cache.join("mod-content");
     let out = roots.join(&stamp[..ROOT_NAME]);
-    if fs::read(out.join(STAMP)).is_ok_and(|s| s == stamp.as_bytes()) {
+    // A packed root is its data file: one that can't be read is built again.
+    let usable = |out: &Path| {
+        !out.join(PACKED).exists() || horizon_core::prepared_files::open(out).is_some()
+    };
+    if fs::read(out.join(STAMP)).is_ok_and(|s| s == stamp.as_bytes()) && usable(&out) {
         // A reused root warns as the build did.
         let warnings = fs::read_to_string(out.join(WARNINGS)).unwrap_or_default();
         warnings.lines().for_each(|w| log::warn!("Horizon: {w}"));
@@ -2980,7 +3183,7 @@ fn stamp(base: &Path, mods: &[ContentMod]) -> Result<String> {
             modified.as_nanos()
         ))
     };
-    let mut parts = vec!["horizon mod content 2".to_owned()];
+    let mut parts = vec![format!("horizon mod content 3 packed {}", packed_roots())];
     parts.push(format!(
         "{:x}",
         Sha256::digest(include_bytes!("mod_content.rs"))

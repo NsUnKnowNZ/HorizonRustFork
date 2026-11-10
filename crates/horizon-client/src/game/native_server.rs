@@ -90,7 +90,9 @@ fn usage_nodes(usage: &str) -> Result<Vec<(String, Value, bool)>, String> {
             let literal = !word.is_empty()
                 && word
                     .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "_-".contains(c));
+                    // A namespaced word too (`jade:max_position_deviation`, a mod's game
+                    // rule): Brigadier's literals are any word without a space.
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "_-.:".contains(c));
             if !literal {
                 return Err(format!("`{usage}`: `{word}` is not a command word"));
             }

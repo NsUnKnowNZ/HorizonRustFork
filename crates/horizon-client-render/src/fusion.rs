@@ -10,6 +10,7 @@
 //!
 //! The format is `horizon_optifine::fusion`'s.
 
+use horizon_core::rfs::RPath as _;
 use crate::connected::{Overlay, Pick, TileLayer};
 use crate::models::StateModels;
 use crate::sprites::Sprites;
@@ -25,10 +26,11 @@ use horizon_world::block_state_properties::BlockProperties;
 use horizon_world::registry::{BlockRegistry, BlockStateId};
 use std::{
     collections::HashMap,
-    fs,
     num::NonZeroU16,
     path::{Path, PathBuf},
 };
+#[cfg(test)]
+use std::fs;
 
 /// A connecting texture as drawn: its layout and its tiles, `None` for an empty one.
 struct Sheet {
@@ -171,7 +173,7 @@ fn turned(face: Face, [x, y, _]: [u8; 3]) -> Face {
 /// The connecting textures under `root`, by sprite name.
 fn connecting_textures(root: &Path) -> HashMap<String, Meta> {
     let mut out = HashMap::new();
-    let Ok(namespaces) = fs::read_dir(root.join("assets")) else {
+    let Ok(namespaces) = horizon_core::rfs::read_dir(root.join("assets")) else {
         return out;
     };
     for ns in namespaces.flatten() {
@@ -220,12 +222,12 @@ fn mcmeta_files(textures: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut dirs = vec![textures.to_owned()];
     while let Some(dir) = dirs.pop() {
-        for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
+        for entry in horizon_core::rfs::read_dir(&dir).into_iter().flatten().flatten() {
             let path = entry.path();
             let dir = match entry.file_type() {
-                Ok(t) if t.is_symlink() => path.is_dir(),
-                Ok(t) => t.is_dir(),
-                Err(_) => path.is_dir(),
+                Ok(t) if t.is_symlink() => path.r_is_dir(),
+                Ok(t) => t.r_is_dir(),
+                Err(_) => path.r_is_dir(),
             };
             if dir {
                 dirs.push(path);

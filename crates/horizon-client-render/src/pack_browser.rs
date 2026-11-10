@@ -6,6 +6,7 @@
 //! game, so this is the small client the screen needs. Search and download
 //! both run on a worker thread and report back over a channel; the screen
 //! only ever polls.
+use horizon_core::rfs::RPath as _;
 use std::{
     path::{Path, PathBuf},
     sync::mpsc::{Receiver, Sender, channel},
@@ -223,13 +224,13 @@ pub fn safe_file_name(name: &str) -> String {
 /// number up to 999 is taken.
 pub fn free_path(dir: &Path, name: &str) -> Option<PathBuf> {
     let path = dir.join(name);
-    if !path.exists() {
+    if !path.r_exists() {
         return Some(path);
     }
     let (stem, extension) = name.rsplit_once('.').unwrap_or((name, "zip"));
     (2..1000)
         .map(|n| dir.join(format!("{stem} ({n}).{extension}")))
-        .find(|candidate| !candidate.exists())
+        .find(|candidate| !candidate.r_exists())
 }
 
 /// The browser's state, owned by the pack screen.

@@ -8,6 +8,7 @@
 use horizon_assets::model::{CuboidModel, TextureSlot};
 use horizon_optifine::cit::{Kind, Rule};
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(test)]
 use std::fs;
 use std::path::Path;
 
@@ -154,7 +155,7 @@ fn load_model(
     if !ours || depth > MAX_PARENTS || !seen.insert(id.clone()) {
         return;
     }
-    let model = fs::read_to_string(root.join(resource))
+    let model = horizon_core::rfs::read_to_string(root.join(resource))
         .map_err(|e| e.to_string())
         .and_then(|text| CuboidModel::from_json(&text).map_err(|e| e.to_string()));
     let mut model = match model {

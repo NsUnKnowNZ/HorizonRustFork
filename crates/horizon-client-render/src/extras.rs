@@ -3,6 +3,7 @@
 //! stays exactly vanilla's, and the logic behind them. Every extra is off by
 //! default; see `docs/extras.md`. Horizon's own switches outside the Extras page
 //! (No AI, Agent Control, Discord Rich Presence) are kept here too.
+use horizon_core::rfs::RPath as _;
 use std::{collections::VecDeque, fs, path::Path};
 
 pub const FILE: &str = "horizon-extras.txt";
@@ -263,7 +264,7 @@ impl Extras {
         horizon_cosmetics::prefs::Others::effective(self.cosmetics_others, self.cosmetics_owner)
     }
     pub fn load(dir: &Path) -> Self {
-        fs::read_to_string(dir.join(FILE))
+        horizon_core::rfs::read_to_string(dir.join(FILE))
             .map(|t| Self::parse(&t))
             .unwrap_or_default()
     }
@@ -485,7 +486,7 @@ impl Extras {
     /// setup gains no file.
     pub fn save(&self, dir: &Path) {
         let path = dir.join(FILE);
-        if *self == Self::default() && !path.exists() {
+        if *self == Self::default() && !path.r_exists() {
             return;
         }
         let _ = fs::write(path, self.serialize());

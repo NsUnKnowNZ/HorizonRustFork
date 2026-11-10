@@ -1,5 +1,6 @@
 //! Guests' saved state: `players/data/<uuid>.dat` in the vanilla player
 //! compound, through the same code that saves the host.
+use horizon_core::rfs::RPath as _;
 use super::guest::{Guest, SavedBody};
 use crate::{
     items::ItemStack,
@@ -50,7 +51,7 @@ pub fn ints_uuid(ints: [i32; 4]) -> u128 {
 
 /// Whether a saved file exists for this player.
 pub fn exists(world: &Path, uuid: u128) -> bool {
-    path(world, uuid).is_file()
+    path(world, uuid).r_is_file()
 }
 
 /// `PlayerDataStorage.load`: a guest's saved state, if they have been here

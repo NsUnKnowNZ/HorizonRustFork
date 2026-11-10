@@ -18,8 +18,49 @@ Copy-Item -Force "$repo\.local\game-launcher\target\release\horizon-oneblock.exe
 Copy-Item -Force "$repo\.local\native\target\fast\horizon-client.exe" "$Game\bin\horizon-client.exe"
 & robocopy "$repo\.local\horizon-client\26.3" "$Game\bin\resources" /MIR /MT:16 /NFL /NDL /NJH /NJS /NP | Out-Null
 "resources: robocopy $LASTEXITCODE"
-& robocopy "$repo\horizon-mods" "$Game\horizon-mods" /MIR /MT:16 /XD .replaced .downloads .horizon-mod-data /NFL /NDL /NJH /NJS /NP | Out-Null
-"mods: robocopy $LASTEXITCODE"
+# Mods: one .hmod file each, packed by the game itself from the source's mod folders (it knows
+# what its native mods declare). A start then asks the disk about a file a mod, not about the
+# 80,000 files of the folders. A mod that can't be packed (one with code) stays a folder.
+New-Item -ItemType Directory -Force "$Game\horizon-mods" | Out-Null
+$ctl = "$repo\.local\native\target\fast\horizon-ctl.exe"
+$sock = "$env:TEMP\horizon-pack-mods.json"
+Remove-Item $sock -ErrorAction SilentlyContinue
+$env:HORIZON_PACK_MODS = "$Game\horizon-mods"
+$p = Start-Process "$repo\.local\native\target\fast\horizon-client.exe" -WorkingDirectory $repo -ArgumentList '--control','--control-socket',"`"$sock`"" -PassThru
+$env:HORIZON_PACK_MODS = $null
+$packed = ''
+for ($i = 0; $i -lt 120 -and -not $p.HasExited; $i++) {
+  Start-Sleep 5
+  $l = & $ctl --socket $sock --timeout 20 logs --lines 6000 2>&1 | Out-String
+  $m = [regex]::Match($l, 'mods packed into[^"\r\n]*|mods not packed[^"\r\n]*')
+  if ($m.Success) { $packed = $m.Value -replace '\\\\', '\'; break }
+}
+& $ctl --socket $sock --timeout 30 quit 2>&1 | Out-Null
+Start-Sleep 4
+if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+"mods: $packed"
+$ids = @()
+foreach ($d in Get-ChildItem -Directory "$repo\horizon-mods" | Where-Object { -not $_.Name.StartsWith('.') }) {
+  $id = $d.Name
+  $toml = Join-Path $d.FullName 'horizon-mod.toml'
+  if (Test-Path $toml) {
+    $m = [regex]::Match((Get-Content -Raw $toml), '(?m)^\s*id\s*=\s*"([^"]+)"')
+    if ($m.Success) { $id = $m.Groups[1].Value }
+  }
+  $ids += $id
+  if ($packed -like 'mods packed into*' -and (Test-Path "$Game\horizon-mods\$id.hmod")) {
+    if (Test-Path "$Game\horizon-mods\$($d.Name)") { Remove-Item -Recurse -Force "$Game\horizon-mods\$($d.Name)" }
+  } else {
+    & robocopy $d.FullName "$Game\horizon-mods\$($d.Name)" /MIR /MT:16 /NFL /NDL /NJH /NJS /NP | Out-Null
+    "mod $($d.Name): kept as a folder"
+  }
+}
+# A mod packed here earlier that the source no longer has.
+foreach ($s in Get-ChildItem "$Game\horizon-mods\.packed\*.txt" -ErrorAction SilentlyContinue) {
+  if ($ids -notcontains $s.BaseName) { Remove-Item -Force "$Game\horizon-mods\$($s.BaseName).hmod" -ErrorAction SilentlyContinue; Remove-Item -Force $s.FullName; "mod $($s.BaseName): removed" }
+}
+foreach ($f in Get-ChildItem -File "$repo\horizon-mods") { Copy-Item -Force $f.FullName "$Game\horizon-mods\$($f.Name)" }
+"mods: $((Get-ChildItem "$Game\horizon-mods\*.hmod").Count) packed files, $((Get-ChildItem -Directory "$Game\horizon-mods" | Where-Object { -not $_.Name.StartsWith('.') }).Count) folders"
 foreach ($f in 'horizon-mods.txt','options.txt','horizon-graphics.txt','horizon-extras.txt','horizon-player.txt','servers.dat','horizon.txt','horizon-java-folders.txt','horizon_official_server.txt','horizon_partner_servers.txt') {
   if ((Test-Path "$repo\$f") -and -not (Test-Path "$Game\$f")) { Copy-Item "$repo\$f" "$Game\$f"; "copied $f" }
 }

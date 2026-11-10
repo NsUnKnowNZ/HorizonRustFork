@@ -81,7 +81,7 @@ impl AuthSession {
     /// Read the session file the launcher wrote and delete it at once. It
     /// must be fresh and, on Unix, readable by its owner only.
     pub fn load(path: &Path) -> Result<Self, String> {
-        let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let meta = horizon_core::rfs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
         let refuse = |why: &str| {
             let _ = std::fs::remove_file(path);
             Err(format!("{}: {why}", path.display()))
@@ -101,7 +101,7 @@ impl AuthSession {
         if age > MAX_SESSION_FILE_AGE {
             return refuse("it is too old (start the game from the launcher)");
         }
-        let text = std::fs::read_to_string(path);
+        let text = horizon_core::rfs::read_to_string(path);
         let _ = std::fs::remove_file(path);
         Self::parse(&text.map_err(|e| format!("{}: {e}", path.display()))?)
     }

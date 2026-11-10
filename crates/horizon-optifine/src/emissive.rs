@@ -16,7 +16,9 @@
 //! Written from OptiFine's `emissive.properties` and ETF's `EMISSIVE_GUIDE.md` and
 //! `emissive.properties`; no mod's source was read.
 
+use horizon_core::rfs::RPath as _;
 use std::collections::HashMap;
+#[cfg(test)]
 use std::fs;
 use std::path::Path;
 
@@ -47,7 +49,7 @@ impl Emissive {
             suffix,
             ..Self::default()
         };
-        let Ok(namespaces) = fs::read_dir(root.join("assets")) else {
+        let Ok(namespaces) = horizon_core::rfs::read_dir(root.join("assets")) else {
             return out;
         };
         let png = format!("{}.png", out.suffix);
@@ -57,7 +59,7 @@ impl Emissive {
             for file in files_under(root, &format!("{prefix}textures/entity"), &[png.as_str()]) {
                 let overlay = &file[prefix.len()..file.len() - ".png".len()];
                 let base = &overlay[..overlay.len() - out.suffix.len()];
-                if root.join(format!("{prefix}{base}.png")).is_file() {
+                if root.join(format!("{prefix}{base}.png")).r_is_file() {
                     out.overlays
                         .insert(atlas_name(&ns, base), atlas_name(&ns, overlay));
                 }
@@ -80,7 +82,7 @@ impl Emissive {
                 continue;
             };
             let overlay = format!("{stem}{png}");
-            if root.join(&overlay).is_file() {
+            if root.join(&overlay).r_is_file() {
                 let overlay_name = format!("{name}{}", self.suffix);
                 self.overlays.insert(name.to_owned(), overlay_name.clone());
                 // Those under `textures/` are the atlas's already.
@@ -116,10 +118,10 @@ pub fn suffix(root: &Path) -> String {
         .iter()
         .find_map(|p| {
             let path = root.join(p);
-            if fs::metadata(&path).ok()?.len() > MAX_PROPERTIES {
+            if horizon_core::rfs::metadata(&path).ok()?.len() > MAX_PROPERTIES {
                 return None;
             }
-            let text = decode(fs::read(path).ok()?);
+            let text = decode(horizon_core::rfs::read(path).ok()?);
             Properties::parse(&text)
                 .get("suffix.emissive")
                 .map(str::to_owned)

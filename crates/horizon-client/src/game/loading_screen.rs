@@ -465,7 +465,7 @@ impl ApplicationHandler for App {
 /// looked for and how to get them, before a window or a loader starts.
 pub(super) fn missing_resources(root: &std::path::Path) -> Option<String> {
     let shown = std::path::absolute(root).unwrap_or_else(|_| root.to_path_buf());
-    if !root.join("horizon-resources.json").is_file() {
+    if !root.join("horizon-resources.json").r_is_file() {
         return Some(format!(
             "Horizon's prepared game files are missing: no horizon-resources.json in {}\n\
              Horizon is started from its launcher: download it at {} (Download). It needs your \
@@ -489,19 +489,19 @@ pub(super) fn missing_resources(root: &std::path::Path) -> Option<String> {
 /// beats serde's bare "expected value at line 1 column 1".
 pub(super) fn damaged_prepared(root: &std::path::Path) -> Option<String> {
     let manifest = root.join("horizon-resources.json");
-    let bytes = std::fs::read(&manifest).ok()?;
+    let bytes = horizon_core::rfs::read(&manifest).ok()?;
     if bytes.iter().all(u8::is_ascii_whitespace) {
         return Some("horizon-resources.json is empty".into());
     }
     if serde_json::from_slice::<serde_json::Value>(&bytes).is_err() {
         return Some("horizon-resources.json is not valid JSON".into());
     }
-    for entry in std::fs::read_dir(root).ok()?.flatten() {
+    for entry in horizon_core::rfs::read_dir(root).ok()?.flatten() {
         let path = entry.path();
         if path.extension() != Some(std::ffi::OsStr::new("json")) {
             continue;
         }
-        if std::fs::metadata(&path).is_ok_and(|meta| meta.len() == 0) {
+        if horizon_core::rfs::metadata(&path).is_ok_and(|meta| meta.len() == 0) {
             return Some(format!("{} is empty", entry.file_name().to_string_lossy()));
         }
     }

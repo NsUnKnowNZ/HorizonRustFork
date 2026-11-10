@@ -1,6 +1,7 @@
 //! Data packs (`<world>/datapacks`: folders and zips with `pack.mcmeta`) and
 //! the parts of them commands use: `.mcfunction` functions (with macros and
 //! line continuation), function tags and predicates.
+use horizon_core::rfs::RPath as _;
 use crate::zip::Zip;
 use horizon_world::{
     nbt::Tag,
@@ -45,7 +46,7 @@ impl DataPack {
         let Source::Dir(root) = &self.source else {
             return self.list("data/");
         };
-        let Ok(entries) = std::fs::read_dir(root.join("data")) else {
+        let Ok(entries) = horizon_core::rfs::read_dir(root.join("data")) else {
             return Vec::new();
         };
         let mut namespaces: Vec<_> = entries.flatten().map(|e| e.path()).collect();
@@ -79,7 +80,7 @@ impl DataPack {
     pub fn read(&self, path: &str) -> Option<Vec<u8>> {
         match &self.source {
             Source::Zip(z) => z.read(path).ok(),
-            Source::Dir(root) => std::fs::read(root.join(path)).ok(),
+            Source::Dir(root) => horizon_core::rfs::read(root.join(path)).ok(),
         }
     }
 
@@ -114,14 +115,14 @@ impl DataPack {
     }
 }
 fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok(entries) = horizon_core::rfs::read_dir(dir) else {
         return;
     };
     let mut entries: Vec<_> = entries.flatten().collect();
-    entries.sort_by_key(std::fs::DirEntry::file_name);
+    entries.sort_by_key(horizon_core::rfs::DirEntry::file_name);
     for e in entries {
         let p = e.path();
-        if p.is_dir() {
+        if p.r_is_dir() {
             walk(root, &p, out);
         } else if let Ok(rel) = p.strip_prefix(root) {
             out.push(rel.to_string_lossy().replace('\\', "/"));
@@ -144,14 +145,14 @@ pub fn discover(world: &Path) -> Vec<DataPack> {
 /// `FolderRepositorySource.loadPacks`: packs in Create World's temporary
 /// folder or a world's data-pack directory, with required folder metadata.
 pub fn discover_folder(dir: &Path) -> Vec<DataPack> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok(entries) = horizon_core::rfs::read_dir(dir) else {
         return Vec::new();
     };
     let mut packs = Vec::new();
     for e in entries.flatten() {
         let name = e.file_name().to_string_lossy().into_owned();
         let path = e.path();
-        if path.is_dir() && folder_metadata_present(&path) {
+        if path.r_is_dir() && folder_metadata_present(&path) {
             packs.push(DataPack {
                 id: format!("file/{name}"),
                 source: Source::Dir(path),
@@ -173,7 +174,7 @@ pub fn discover_folder(dir: &Path) -> Vec<DataPack> {
 /// and description. Keep this folder gate separate from format compatibility
 /// and the existing interpretation of the description component.
 fn folder_metadata_present(path: &Path) -> bool {
-    let Some(meta) = std::fs::read(path.join("pack.mcmeta"))
+    let Some(meta) = horizon_core::rfs::read(path.join("pack.mcmeta"))
         .ok()
         .and_then(|bytes| crate::packs::parse_meta(&bytes))
     else {
@@ -190,14 +191,14 @@ fn folder_metadata_present(path: &Path) -> bool {
 /// `pack.mcmeta`, a feature pack (`PackSource.FEATURE`). Off until a world
 /// selects them.
 pub fn feature_packs(resources: &Path) -> Vec<DataPack> {
-    let Ok(entries) = std::fs::read_dir(resources.join("data").join("minecraft").join("datapacks"))
+    let Ok(entries) = horizon_core::rfs::read_dir(resources.join("data").join("minecraft").join("datapacks"))
     else {
         return Vec::new();
     };
     let mut packs = Vec::new();
     for e in entries.flatten() {
         let path = e.path();
-        if path.join("pack.mcmeta").exists() {
+        if path.join("pack.mcmeta").r_exists() {
             packs.push(DataPack {
                 id: e.file_name().to_string_lossy().into_owned(),
                 source: Source::Dir(path),
@@ -251,7 +252,7 @@ pub fn screen_packs(dir: &Path, resources: &Path) -> Vec<crate::pack_screen::Pac
         description_style: Style::default(),
         source: Source::BuiltIn,
         compat: Compat::Compatible,
-        icon: std::fs::read(resources.join("pack.png"))
+        icon: horizon_core::rfs::read(resources.join("pack.png"))
             .ok()
             .as_deref()
             .and_then(load_icon),
@@ -308,8 +309,8 @@ pub fn seed_create_world(game_dir: &Path) -> Option<(PathBuf, Vec<String>)> {
 /// `game_dir`'s [`NEW_WORLD_PACKS`]. The game turns on every pack it finds in a world.
 pub fn install_new_world_packs(game_dir: &Path, world: &Path) -> Result<(), String> {
     let from = game_dir.join(NEW_WORLD_PACKS);
-    let exists = |name: &str| world.join(name).exists();
-    if !from.is_dir() || exists("level.dat") || exists("level.dat_old") {
+    let exists = |name: &str| world.join(name).r_exists();
+    if !from.r_is_dir() || exists("level.dat") || exists("level.dat_old") {
         return Ok(());
     }
     copy(&from, &world.join("datapacks"))
@@ -337,10 +338,10 @@ pub fn copy_pack(path: &Path, dir: &Path) -> bool {
             log::warn!("Horizon: {} is not made: {e}", at.display());
             whole = false;
         }
-        for entry in std::fs::read_dir(from).into_iter().flatten().flatten() {
+        for entry in horizon_core::rfs::read_dir(from).into_iter().flatten().flatten() {
             let path = entry.path();
             let to = at.join(entry.file_name());
-            let copied = if path.is_dir() {
+            let copied = if path.r_is_dir() {
                 copy_dir(&path, &to)
             } else {
                 match std::fs::copy(&path, &to) {
@@ -363,7 +364,7 @@ pub fn copy_pack(path: &Path, dir: &Path) -> bool {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default()
     };
-    if path.is_file() {
+    if path.r_is_file() {
         return path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
@@ -372,18 +373,18 @@ pub fn copy_pack(path: &Path, dir: &Path) -> bool {
                 std::fs::copy(path, dir.join(name())).is_ok()
             };
     }
-    if !path.is_dir() {
+    if !path.r_is_dir() {
         return false;
     }
-    if path.join("pack.mcmeta").is_file() {
+    if path.join("pack.mcmeta").r_is_file() {
         return copy_dir(path, &dir.join(name()));
     }
-    let own: Vec<PathBuf> = std::fs::read_dir(path)
+    let own: Vec<PathBuf> = horizon_core::rfs::read_dir(path)
         .into_iter()
         .flatten()
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.is_dir() && p.join("pack.mcmeta").is_file())
+        .filter(|p| p.r_is_dir() && p.join("pack.mcmeta").r_is_file())
         .collect();
     match own.as_slice() {
         [one] => copy_dir(one, &dir.join(one.file_name().unwrap_or_default())),
@@ -393,7 +394,7 @@ pub fn copy_pack(path: &Path, dir: &Path) -> bool {
 /// What's in a folder of packs, to notice packs added or removed while the
 /// screen shows it (`PackSelectionScreen.Watcher`).
 pub fn folder_stamp(dir: &Path) -> Vec<(String, Option<std::time::SystemTime>)> {
-    let mut stamp: Vec<_> = std::fs::read_dir(dir)
+    let mut stamp: Vec<_> = horizon_core::rfs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
@@ -440,7 +441,7 @@ pub fn for_recreate(world: &Path) -> (Option<PathBuf>, Vec<String>) {
     // it asks for (`for_recreate`'s selection only seeds the new world's
     // `datapacks.json`).
     let mut selected = enabled_ids(world, &packs, &[]);
-    let vanilla_off = std::fs::read(world.join("datapacks.json"))
+    let vanilla_off = horizon_core::rfs::read(world.join("datapacks.json"))
         .ok()
         .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
         .and_then(|v| v["disabled"].as_array().cloned())
@@ -464,11 +465,11 @@ pub fn for_recreate(world: &Path) -> (Option<PathBuf>, Vec<String>) {
 /// A file, or a folder and everything in it.
 fn copy(from: &Path, to: &Path) -> Result<(), String> {
     let err = |e: std::io::Error| format!("{} -> {}: {e}", from.display(), to.display());
-    if !from.is_dir() {
+    if !from.r_is_dir() {
         return std::fs::copy(from, to).map(drop).map_err(err);
     }
     std::fs::create_dir_all(to).map_err(err)?;
-    for e in std::fs::read_dir(from).map_err(err)?.flatten() {
+    for e in horizon_core::rfs::read_dir(from).map_err(err)?.flatten() {
         copy(&e.path(), &to.join(e.file_name()))?;
     }
     Ok(())
@@ -896,7 +897,7 @@ fn features_enabled(pack: &DataPack, enabled_features: &[String]) -> bool {
 /// features the world enables is forced on however the world's selection
 /// feels about it (`MinecraftServer.enableForcedFeaturePacks`).
 pub fn enabled_ids(world: &Path, packs: &[DataPack], enabled_features: &[String]) -> Vec<String> {
-    let saved: Option<serde_json::Value> = std::fs::read(world.join("datapacks.json"))
+    let saved: Option<serde_json::Value> = horizon_core::rfs::read(world.join("datapacks.json"))
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok());
     let list = |key: &str| -> Vec<String> {

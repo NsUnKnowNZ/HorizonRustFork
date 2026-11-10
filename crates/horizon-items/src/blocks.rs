@@ -336,14 +336,14 @@ impl BlockFacts {
     /// `break`, `step`, `place`, `hit` and `fall` a `sound_id`, with `volume` and `pitch`;
     /// `enabled`). Every state of those blocks takes them; a part a group leaves out stays.
     fn apply_block_sounds(&mut self, root: &Path) {
-        let Ok(dir) = std::fs::read_dir(root.join("assets/minecraft/sounds/blocks")) else {
+        let Ok(dir) = horizon_core::rfs::read_dir(root.join("assets/minecraft/sounds/blocks")) else {
             return;
         };
         let mut paths: Vec<_> = dir.flatten().map(|e| e.path()).collect();
         paths.sort();
         let mut by_block: HashMap<String, Value> = HashMap::new();
         for path in paths {
-            let Some(doc) = std::fs::read(&path)
+            let Some(doc) = horizon_core::rfs::read(&path)
                 .ok()
                 .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
             else {

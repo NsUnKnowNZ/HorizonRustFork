@@ -84,13 +84,13 @@ impl Game<'_> {
         };
         let path = picture_path(&folder);
         if self.seamless.shown.as_ref().is_none_or(|s| s.0 != path) {
-            if self.seamless.failed.as_ref() == Some(&path) || !path.is_file() {
+            if self.seamless.failed.as_ref() == Some(&path) || !path.r_is_file() {
                 return false;
             }
             let Some(rect) = self.gui.atlas.sprites.get(crate::hud::MOD_IMAGE_SPRITE).copied() else {
                 return false;
             };
-            let read = std::fs::read(&path)
+            let read = horizon_core::rfs::read(&path)
                 .map_err(|e| e.to_string())
                 .and_then(|bytes| horizon_client::hud::decode_bytes(&bytes).map_err(|e| e.to_string()));
             let (width, height, rgba) = match read {

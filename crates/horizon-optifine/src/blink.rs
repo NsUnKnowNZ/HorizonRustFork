@@ -9,7 +9,9 @@
 //!
 //! Written from ETF's README ("Blinking textures"); no mod's source was read.
 
+use horizon_core::rfs::RPath as _;
 use std::collections::HashMap;
+#[cfg(test)]
 use std::fs;
 use std::path::Path;
 
@@ -40,7 +42,7 @@ pub struct Blink {
 impl Blinks {
     pub fn scan(root: &Path, random: &RandomTextures) -> Self {
         let mut out = Self::default();
-        let Ok(namespaces) = fs::read_dir(root.join("assets")) else {
+        let Ok(namespaces) = horizon_core::rfs::read_dir(root.join("assets")) else {
             return out;
         };
         for ns in namespaces.flatten() {
@@ -48,7 +50,7 @@ impl Blinks {
             let prefix = format!("assets/{ns}/");
             for file in files_under(root, &format!("{prefix}textures/entity"), &["_blink.png"]) {
                 let stem = &file[..file.len() - "_blink.png".len()];
-                if root.join(format!("{stem}.png")).is_file() {
+                if root.join(format!("{stem}.png")).r_is_file() {
                     let blink =
                         Blink::read(root, stem, |path| atlas_name(&ns, &path[prefix.len()..]));
                     out.blinks
@@ -60,7 +62,7 @@ impl Blinks {
             let Some(stem) = file.strip_suffix(".png") else {
                 continue;
             };
-            if !root.join(format!("{stem}_blink.png")).is_file() {
+            if !root.join(format!("{stem}_blink.png")).r_is_file() {
                 continue;
             }
             let frame = |path: &str| format!("{name}{}", &path[stem.len()..]);
@@ -96,7 +98,7 @@ impl Blink {
     /// The blink of the texture at `stem` (its path from the root, no `.png`); `name` gives a
     /// frame's atlas name from its path.
     fn read(root: &Path, stem: &str, name: impl Fn(&str) -> String) -> Self {
-        let props = fs::read_to_string(root.join(format!("{stem}_blink.properties")))
+        let props = horizon_core::rfs::read_to_string(root.join(format!("{stem}_blink.properties")))
             .map(|text| Properties::parse(&text))
             .unwrap_or_default();
         let number = |key, default| {
@@ -112,7 +114,7 @@ impl Blink {
             shut: name(&format!("{stem}_blink")),
             half: root
                 .join(format!("{half}.png"))
-                .is_file()
+                .r_is_file()
                 .then(|| name(&half)),
             length,
             frequency: number("blinkFrequency", FREQUENCY).max(length + 1),

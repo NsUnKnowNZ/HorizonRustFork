@@ -1,10 +1,11 @@
 //! Instance-local picker entries. Hiding an entry never removes settings or world saves.
+use horizon_core::rfs::RPath as _;
 use std::{fs, io, path::Path};
 
 const HIDDEN: &str = ".hidden";
 
 pub fn names(root: &Path) -> io::Result<Vec<String>> {
-    let entries = match fs::read_dir(root) {
+    let entries = match horizon_core::rfs::read_dir(root) {
         Ok(entries) => entries,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(e),
@@ -15,9 +16,9 @@ pub fn names(root: &Path) -> io::Result<Vec<String>> {
         let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
         };
-        if entry.file_type()?.is_dir()
+        if entry.file_type()?.r_is_dir()
             && super::valid_name(&name)
-            && !entry.path().join(HIDDEN).exists()
+            && !entry.path().join(HIDDEN).r_exists()
         {
             names.push(name);
         }
@@ -46,11 +47,11 @@ pub fn hide(root: &Path, name: &str) -> io::Result<()> {
 pub fn restore(root: &Path, name: &str) -> io::Result<()> {
     valid(name)?;
     fs::create_dir_all(root)?;
-    for entry in fs::read_dir(root)? {
+    for entry in horizon_core::rfs::read_dir(root)? {
         let entry = entry?;
         let old = entry.file_name();
         let Some(old) = old.to_str() else { continue };
-        if entry.file_type()?.is_dir() && old != name && old.eq_ignore_ascii_case(name) {
+        if entry.file_type()?.r_is_dir() && old != name && old.eq_ignore_ascii_case(name) {
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,
                 format!("Use the existing spelling: {old}"),

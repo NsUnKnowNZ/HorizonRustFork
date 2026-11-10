@@ -1487,7 +1487,7 @@ impl BlockEntityRenderer {
         registry: &BlockRegistry,
         visibility: FaceVisibility,
     ) -> Result<Self> {
-        let all: Value = serde_json::from_slice(&std::fs::read(root.join("entity-models.json"))?)?;
+        let all: Value = serde_json::from_slice(&horizon_core::rfs::read(root.join("entity-models.json"))?)?;
         let models = MODELS
             .iter()
             .filter_map(|(key, layer)| all.get(*layer).map(|v| (*key, ModelPart::parse(v))))
@@ -1508,7 +1508,7 @@ impl BlockEntityRenderer {
             };
             let name = pattern.strip_prefix("minecraft:").unwrap_or(pattern);
             let file = root.join(format!("data/minecraft/decorated_pot_pattern/{name}.json"));
-            let Ok(def) = std::fs::read(file) else {
+            let Ok(def) = horizon_core::rfs::read(file) else {
                 continue;
             };
             let def: Value = serde_json::from_slice(&def)?;

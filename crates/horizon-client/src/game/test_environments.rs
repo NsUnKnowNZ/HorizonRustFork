@@ -144,7 +144,7 @@ impl Game<'_> {
             .join(ns)
             .join("test_environment")
             .join(format!("{path}.json"));
-        serde_json::from_slice(&std::fs::read(file).ok()?).ok()
+        serde_json::from_slice(&horizon_core::rfs::read(file).ok()?).ok()
     }
 
     /// The definition of a batch's environment (`batch()` of its tests).

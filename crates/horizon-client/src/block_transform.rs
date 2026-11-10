@@ -3,10 +3,11 @@
 //! provider is evaluated against the clicked block and the block above.
 //! `tools/test_block_transformer_parity.py` compares every block state with
 //! vanilla.
+use horizon_core::rfs::RPath as _;
 use crate::{Result, items::Items};
 use horizon_world::{chunk::BlockState, registry::BlockRegistry};
 use serde_json::Value;
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, path::Path};
 
 enum Predicate {
     Blocks(Vec<String>),
@@ -183,13 +184,13 @@ impl Transformers {
     pub fn load(root: &Path, registry: &BlockRegistry) -> Result<Self> {
         let mut transformers = HashMap::new();
         let dir = root.join("data/minecraft/block_transformer");
-        if dir.exists() {
-            for entry in fs::read_dir(&dir)?.flatten() {
+        if dir.r_exists() {
+            for entry in horizon_core::rfs::read_dir(&dir)?.flatten() {
                 let path = entry.path();
                 let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                     continue;
                 };
-                let list: Value = serde_json::from_slice(&fs::read(&path)?)?;
+                let list: Value = serde_json::from_slice(&horizon_core::rfs::read(&path)?)?;
                 let mut transforms = Vec::new();
                 for t in list.as_array().into_iter().flatten() {
                     let text = |k: &str, d: &str| t[k].as_str().unwrap_or(d).to_owned();

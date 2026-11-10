@@ -3,6 +3,7 @@
 //! `SkinManager` lookup (which texture a player shows, and when the default
 //! one) and `SkinTextureDownloader.processLegacySkin`.
 
+use horizon_core::rfs::RPath as _;
 /// `Property.hasSignature` and the services key check, as authlib's
 /// `SignatureState`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -714,7 +715,7 @@ pub fn offline_cape() -> Option<&'static [u8]> {
     static CAPE: std::sync::OnceLock<Option<Vec<u8>>> = std::sync::OnceLock::new();
     CAPE.get_or_init(|| {
         let path = std::env::var_os("HORIZON_OFFLINE_CAPE").filter(|p| !p.is_empty())?;
-        let image = std::fs::read(&path)
+        let image = horizon_core::rfs::read(&path)
             .map_err(|e| e.to_string())
             .and_then(|bytes| crate::hud::decode_bytes(&bytes).map_err(|e| e.to_string()))
             .and_then(|(w, h, rgba)| process_cape(w, h, &rgba).ok_or("not an image".into()));
@@ -750,7 +751,7 @@ pub fn offline_skin() -> Option<&'static (Vec<u8>, bool)> {
 /// `horizon-player.txt`, which names the profile (`name:`) and its arms (`model:`).
 fn profile_skin() -> Option<(std::path::PathBuf, String)> {
     let dir = crate::logging::player_dir();
-    let text = std::fs::read_to_string(dir.join("horizon-player.txt")).ok()?;
+    let text = horizon_core::rfs::read_to_string(dir.join("horizon-player.txt")).ok()?;
     let line = |key: &str| {
         text.lines()
             .find_map(|l| l.trim_end_matches('\r').strip_prefix(key))
@@ -762,11 +763,11 @@ fn profile_skin() -> Option<(std::path::PathBuf, String)> {
         return None;
     }
     let path = dir.join("profiles").join(format!("{name}.png"));
-    path.is_file()
+    path.r_is_file()
         .then(|| (path, line("model:").unwrap_or_default()))
 }
 fn read_offline_skin(path: &std::path::Path, model: &str) -> Result<(Vec<u8>, bool), String> {
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let bytes = horizon_core::rfs::read(path).map_err(|e| e.to_string())?;
     let (w, h, rgba) = crate::hud::decode_bytes(&bytes).map_err(|e| e.to_string())?;
     let skin = process_legacy_skin(w, h, &rgba).ok_or("not a 64x64 or 64x32 skin")?;
     Ok((skin, model == "slim"))
@@ -985,7 +986,7 @@ impl Downloader {
         let file = self
             .resource_root
             .join(format!("assets/{namespace}/textures/{path}.png"));
-        let image = std::fs::read(file)
+        let image = horizon_core::rfs::read(file)
             .ok()
             .and_then(|b| crate::hud::decode_bytes(&b).ok())
             .and_then(|(w, h, rgba)| resample_64(w, h, &rgba));
@@ -1065,7 +1066,7 @@ impl Downloader {
                 Kind::Elytra => Some(rgba),
             }
         };
-        if let Some(image) = std::fs::read(&file).ok().and_then(|b| decode(&b)) {
+        if let Some(image) = horizon_core::rfs::read(&file).ok().and_then(|b| decode(&b)) {
             return Some(image);
         }
         let body = fetch(url)?;
@@ -1121,7 +1122,7 @@ impl Downloader {
                 .root
                 .join(if digest.len() > 2 { &digest[..2] } else { "xx" })
                 .join(digest);
-            let (w, h, rgba) = crate::hud::decode_bytes(&std::fs::read(&file).ok()?).ok()?;
+            let (w, h, rgba) = crate::hud::decode_bytes(&horizon_core::rfs::read(&file).ok()?).ok()?;
             process(w, h, &rgba)
         });
         let Some(image) = image else {

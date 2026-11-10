@@ -3,6 +3,7 @@
 //! and High Contrast packs, `pack.mcmeta` metadata and format compatibility,
 //! and an overlay resource root that layers the enabled packs over the
 //! vanilla resources (later packs win), so every loader sees one tree.
+use horizon_core::rfs::RPath as _;
 mod cache;
 use crate::text::Style;
 use crate::{text::Text, zip::Zip};
@@ -447,14 +448,14 @@ impl Pack {
     /// The pack's `pack.png` (`PackResources.getRootResource`), for its icon.
     pub fn icon_png(&self) -> Option<Vec<u8>> {
         match &self.source {
-            Source::Dir(d) => fs::read(d.join("pack.png")).ok(),
+            Source::Dir(d) => horizon_core::rfs::read(d.join("pack.png")).ok(),
             Source::Zip(z) => Zip::open(z).ok()?.read("pack.png").ok(),
         }
     }
 }
 fn read_meta(source: &Source) -> Option<serde_json::Value> {
     let bytes = match source {
-        Source::Dir(d) => fs::read(d.join("pack.mcmeta")).ok()?,
+        Source::Dir(d) => horizon_core::rfs::read(d.join("pack.mcmeta")).ok()?,
         Source::Zip(z) => Zip::open(z).ok()?.read("pack.mcmeta").ok()?,
     };
     parse_meta(&bytes)
@@ -497,7 +498,7 @@ pub fn discover(resources: &Path, packs_dir: &Path) -> Vec<Pack> {
         ("high_contrast", "resourcePack.high_contrast.name"),
     ] {
         let z = resources.join(format!("assets/minecraft/resourcepacks/{id}.zip"));
-        if z.exists()
+        if z.r_exists()
             && let Some(p) = pack(id.into(), Text::translate(key, &[]), Source::Zip(z))
         {
             out.push(p);
@@ -509,14 +510,14 @@ pub fn discover(resources: &Path, packs_dir: &Path) -> Vec<Pack> {
 /// The packs (folders and zips) in `dir`, by name, as `FolderRepositorySource`
 /// finds them; their compatibility is against `format`.
 pub fn folder(dir: &Path, format: (i64, i64)) -> Vec<Pack> {
-    let mut user: Vec<Pack> = fs::read_dir(dir)
+    let mut user: Vec<Pack> = horizon_core::rfs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
         .filter_map(|e| {
             let path = e.path();
             let name = e.file_name().to_string_lossy().into_owned();
-            let source = if path.is_dir() {
+            let source = if path.r_is_dir() {
                 Source::Dir(path)
             } else if name.ends_with(".zip") {
                 Source::Zip(path)
@@ -544,12 +545,12 @@ fn pack_files(pack: &Pack) -> io::Result<BTreeMap<String, Provided>> {
                 let base = d.join(root.trim_end_matches('/'));
                 let mut stack = vec![base.join("assets")];
                 while let Some(dir) = stack.pop() {
-                    let Ok(entries) = fs::read_dir(&dir) else {
+                    let Ok(entries) = horizon_core::rfs::read_dir(&dir) else {
                         continue;
                     };
                     for e in entries.flatten() {
                         let p = e.path();
-                        if p.is_dir() {
+                        if p.r_is_dir() {
                             stack.push(p);
                         } else if let Ok(rel) = p.strip_prefix(&base) {
                             let rel = rel.to_string_lossy().replace('\\', "/");
@@ -589,7 +590,7 @@ fn link(target: &Path, at: &Path) -> io::Result<()> {
 }
 #[cfg(not(unix))]
 fn link(target: &Path, at: &Path) -> io::Result<()> {
-    if target.is_dir() {
+    if target.r_is_dir() {
         Ok(())
     } else {
         // The mirror only reads these files, and unix links them: a hardlink gives
@@ -621,7 +622,7 @@ fn build_overlay_uncached(
     out: &Path,
     dependencies: &mut cache::Dependencies,
 ) -> io::Result<()> {
-    if out.exists() {
+    if out.r_exists() {
         fs::remove_dir_all(out)?;
     }
     fs::create_dir_all(out)?;
@@ -703,13 +704,13 @@ fn build_overlay_uncached(
         let mut layers = Vec::new();
         dependencies.file(&vanilla.join(name));
         if !filters.iter().any(|f| f.blocks(name))
-            && let Ok(bytes) = fs::read(vanilla.join(name))
+            && let Ok(bytes) = horizon_core::rfs::read(vanilla.join(name))
         {
             layers.push(bytes);
         }
         for (owner, (path, inner)) in stack {
             let bytes = match path {
-                Some(p) => fs::read(p).ok(),
+                Some(p) => horizon_core::rfs::read(p).ok(),
                 None => zips
                     .get(*owner)
                     .and_then(Option::as_ref)
@@ -751,7 +752,7 @@ fn build_overlay_uncached(
         fs::create_dir_all(&dst)?;
         dependencies.directory(&src);
         let mut names: BTreeSet<String> = BTreeSet::new();
-        if let Ok(entries) = fs::read_dir(&src) {
+        if let Ok(entries) = horizon_core::rfs::read_dir(&src) {
             names.extend(
                 entries
                     .flatten()
@@ -789,7 +790,7 @@ fn build_overlay_uncached(
                 }
             } else if filters.is_empty()
                 && !touched.contains(&child)
-                && vanilla.join(&child).is_dir()
+                && vanilla.join(&child).r_is_dir()
                 && junction(&vanilla.join(&child), &out.join(&child)).is_ok()
             {
                 // Linked whole, like the unix symlink: no file in it is visited or copied.
@@ -798,7 +799,7 @@ fn build_overlay_uncached(
                 // above), so an untouched one has to be mirrored: skipping it hid textures/font
                 // and the title panorama from the overlay, and a font json that names those
                 // sheets then failed to load (#1688).
-                || (vanilla.join(&child).is_dir() && (cfg!(not(unix)) || !filters.is_empty()))
+                || (vanilla.join(&child).r_is_dir() && (cfg!(not(unix)) || !filters.is_empty()))
             {
                 mirror(
                     &child,
@@ -816,7 +817,7 @@ fn build_overlay_uncached(
                 // Hidden by a pack's filter.
             } else {
                 #[cfg(not(unix))]
-                if vanilla.join(&child).is_file() {
+                if vanilla.join(&child).r_is_file() {
                     dependencies.file(&vanilla.join(&child));
                 }
                 link(&vanilla.join(&child), &out.join(&child))?;
@@ -880,7 +881,7 @@ fn unpack_budget(packs: &[Pack]) -> u64 {
     packs
         .iter()
         .filter_map(|p| match &p.source {
-            Source::Zip(z) => fs::metadata(z).ok().map(|m| m.len()),
+            Source::Zip(z) => horizon_core::rfs::metadata(z).ok().map(|m| m.len()),
             Source::Dir(_) => None,
         })
         .sum::<u64>()

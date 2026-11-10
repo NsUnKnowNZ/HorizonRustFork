@@ -6,6 +6,7 @@
 //! plays: its first tick sends `/wire-mark`, which marks it in the capture, then each tick's lines act
 //! before the tick runs, as a player's input in the frame before it; when its ticks have run, the client
 //! writes the scenario's name to PATH with the extension `done`.
+use horizon_core::rfs::RPath as _;
 use super::Game;
 use super::event_loop::EventLoopCtl;
 use std::{collections::BTreeMap, path::PathBuf};
@@ -65,11 +66,11 @@ impl Game<'_> {
         };
         if self.tick_script.running.is_none() {
             let go = path.with_extension("go");
-            if self.remote.is_none() || !go.exists() {
+            if self.remote.is_none() || !go.r_exists() {
                 return;
             }
             let _ = std::fs::remove_file(&go);
-            let Some(script) = std::fs::read_to_string(&path).ok().and_then(|t| parse(&t)) else {
+            let Some(script) = horizon_core::rfs::read_to_string(&path).ok().and_then(|t| parse(&t)) else {
                 log::warn!("Horizon: tick script {} is not a scenario", path.display());
                 return;
             };

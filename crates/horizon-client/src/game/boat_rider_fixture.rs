@@ -20,7 +20,7 @@ struct Case {
 impl Game<'_> {
     pub(super) fn run_boat_rider_fixture(&mut self, directory: &Path) -> Result<()> {
         let cases: Vec<Case> =
-            serde_json::from_str(&std::fs::read_to_string(directory.join("inputs.json"))?)?;
+            serde_json::from_str(&horizon_core::rfs::read_to_string(directory.join("inputs.json"))?)?;
         let (client, peer) = Pipe::pair();
         self.connect_local(client, "BoatSeatFixture")?;
         self.remote.as_mut().unwrap().entity_id = 1;

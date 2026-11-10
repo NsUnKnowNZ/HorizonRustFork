@@ -1,6 +1,7 @@
 //! Shared GUI widgets drawn as HUD quads: nine-slice sprites (gui.scaling
 //! metadata), buttons, sliders, tiled menu backgrounds, separators and the
 //! EditBox text field with vanilla cursor, selection and scrolling.
+use horizon_core::rfs::RPath as _;
 use crate::{
     hud::{HudAtlas, HudBatch, Rect, rgba},
     text::Text,
@@ -81,12 +82,12 @@ pub fn read_metadata(root: &Path) -> UiMetadata {
             let mut files = Vec::new();
             let mut stack = vec![sprites];
             while let Some(dir) = stack.pop() {
-                let Ok(entries) = std::fs::read_dir(&dir) else {
+                let Ok(entries) = horizon_core::rfs::read_dir(&dir) else {
                     continue;
                 };
                 for e in entries.flatten() {
                     let p = e.path();
-                    if p.is_dir() {
+                    if p.r_is_dir() {
                         stack.push(p);
                     } else if p.to_string_lossy().ends_with(".png.mcmeta") {
                         files.push(p);

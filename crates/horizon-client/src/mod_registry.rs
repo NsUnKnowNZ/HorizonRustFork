@@ -10,6 +10,7 @@
 //! The launcher is a separate workspace, so this is the small part of it the
 //! game needs. Everything here blocks: the game runs it on a worker
 //! (`game/mod_browser.rs`).
+use horizon_core::rfs::RPath as _;
 use crate::mod_browser::Listing;
 use horizon_mods::index::{self, Index, Kind, Project, Trust, Version};
 use std::fs;
@@ -70,7 +71,7 @@ pub fn load_index(home: &Path, at: &str) -> Result<Index, String> {
             Ok(index)
         }
         Err(e) => {
-            let kept = fs::read_to_string(&cache).map_err(|_| e.clone())?;
+            let kept = horizon_core::rfs::read_to_string(&cache).map_err(|_| e.clone())?;
             parse(&kept).map_err(|_| e)
         }
     }
@@ -78,7 +79,7 @@ pub fn load_index(home: &Path, at: &str) -> Result<Index, String> {
 
 fn fetch_text(at: &str) -> Result<String, String> {
     if !at.starts_with("https://") {
-        return fs::read_to_string(at).map_err(|e| format!("{at}: {e}"));
+        return horizon_core::rfs::read_to_string(at).map_err(|e| format!("{at}: {e}"));
     }
     let response = ureq::get(at)
         .set("User-Agent", AGENT)
@@ -181,7 +182,7 @@ pub fn install(
     let old_file = ours.and_then(|i| list.entries[i]["file"].as_str().map(str::to_owned));
     if let Some(i) = ours
         && list.entries[i]["version"].as_str() == Some(v.version.as_str())
-        && target.exists()
+        && target.r_exists()
     {
         return Ok(Done {
             id: id.to_owned(),
@@ -190,8 +191,8 @@ pub fn install(
         });
     }
     // Never over a mod the player put there themselves.
-    let theirs = target.exists() && old_file.as_deref() != Some(relative.as_str());
-    if theirs || home.join(crate::mod_list::DIR).join(id).is_dir() {
+    let theirs = target.r_exists() && old_file.as_deref() != Some(relative.as_str());
+    if theirs || home.join(crate::mod_list::DIR).join(id).r_is_dir() {
         return Err(format!(
             "a mod with the id {id} is already in {}: move it away first",
             crate::mod_list::DIR
@@ -257,7 +258,7 @@ pub fn download(url: &str, max: u64) -> Result<Vec<u8>, String> {
         if !is_local(&location()) {
             return Err(format!("{url} is not an https address"));
         }
-        return fs::read(path).map_err(|e| format!("{path}: {e}"));
+        return horizon_core::rfs::read(path).map_err(|e| format!("{path}: {e}"));
     }
     if !url.starts_with("https://") {
         return Err(format!("{url} is not an https address"));
@@ -288,7 +289,7 @@ struct Installed {
 
 impl Installed {
     fn load(home: &Path) -> Self {
-        let entries = fs::read_to_string(home.join(MANIFEST))
+        let entries = horizon_core::rfs::read_to_string(home.join(MANIFEST))
             .ok()
             .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
             .and_then(|v| v.get("entries")?.as_array().cloned())
@@ -333,7 +334,7 @@ impl Installed {
     fn version_of(&self, home: &Path, id: &str) -> Option<String> {
         if let Some(e) = self.position(id).map(|i| &self.entries[i])
             && let (Some(version), Some(file)) = (e["version"].as_str(), e["file"].as_str())
-            && home.join(file).exists()
+            && home.join(file).r_exists()
         {
             return Some(version.to_owned());
         }

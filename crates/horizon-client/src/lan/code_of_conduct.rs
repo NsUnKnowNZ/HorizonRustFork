@@ -2,6 +2,7 @@
 //! reads `codeofconduct/<language>.txt`, and
 //! `ServerConfigurationPacketListenerImpl.addOptionalTasks` offers the one
 //! that fits the player's language.
+use horizon_core::rfs::RPath as _;
 use std::path::Path;
 
 /// `StringUtil.stripColor`: the pattern `(?i)§[0-9A-FK-OR]` removed.
@@ -51,13 +52,13 @@ fn join_lines(text: &str) -> String {
 /// its lowercased name, with the colour codes stripped. Files come in name
 /// order (vanilla's is the file system's).
 pub fn read(dir: &Path) -> Result<Vec<(String, String)>, String> {
-    if !std::fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir()) {
+    if !std::fs::symlink_metadata(dir).is_ok_and(|m| m.r_is_dir()) {
         return Err(format!(
             "Code of Conduct folder does not exist: {}",
             dir.display()
         ));
     }
-    let mut files: Vec<_> = std::fs::read_dir(dir)
+    let mut files: Vec<_> = horizon_core::rfs::read_dir(dir)
         .map_err(|e| format!("Failed to read Code of Conduct folder: {e}"))?
         .flatten()
         .map(|e| e.path())
@@ -78,7 +79,7 @@ pub fn read(dir: &Path) -> Result<Vec<(String, String)>, String> {
                 "Failed to read Code of Conduct file \"{name}\" because it links to a file outside the allowed directory"
             ));
         }
-        let bytes = std::fs::read(&file)
+        let bytes = horizon_core::rfs::read(&file)
             .map_err(|e| format!("Failed to read Code of Conduct file {name}: {e}"))?;
         let text = String::from_utf8(bytes)
             .map_err(|_| format!("Failed to read Code of Conduct file {name}"))?;

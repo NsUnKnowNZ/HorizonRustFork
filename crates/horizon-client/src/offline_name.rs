@@ -27,7 +27,7 @@ pub fn generate(seed: u64) -> String {
 /// still yields a name for this run.
 pub fn load_or_create(dir: &Path) -> String {
     let path = dir.join(FILE);
-    if let Some(name) = fs::read_to_string(&path).ok().and_then(|text| parse(&text)) {
+    if let Some(name) = horizon_core::rfs::read_to_string(&path).ok().and_then(|text| parse(&text)) {
         return name;
     }
     let name = generate(seed());

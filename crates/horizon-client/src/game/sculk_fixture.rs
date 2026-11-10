@@ -165,7 +165,7 @@ impl Game<'_> {
         let (input, output) = spec
             .split_once(',')
             .ok_or("HORIZON_SCULK_FIXTURE=SCENARIOS,OUTPUT")?;
-        let text = std::fs::read_to_string(input)?;
+        let text = horizon_core::rfs::read_to_string(input)?;
         let mut out = std::io::BufWriter::new(std::fs::File::create(output)?);
         for s in parse(&text) {
             writeln!(out, "== {}", s.name)?;

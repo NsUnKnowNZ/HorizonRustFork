@@ -336,6 +336,71 @@ fn packed(source: &Source, cache: &Path) -> Result<PathBuf, String> {
     Ok(target)
 }
 
+/// `HORIZON_PACK_MODS=<folder>`: once the game has loaded its mods, each one loaded from
+/// a folder is also written to `<folder>` as `<id>.hmod`, on a thread of its own. A game
+/// folder made for playing keeps its mods that way (`.local/setup/make-game-folder.ps1`):
+/// one file a mod where a folder is thousands, each of which a start asks the disk about.
+/// A mod whose folder did not change since it was packed there is left as it is, so its
+/// file keeps its time and the roots built from it stay good.
+pub fn pack_on_request() {
+    let Some(out) = std::env::var_os("HORIZON_PACK_MODS").map(PathBuf::from) else {
+        return;
+    };
+    let spawned = std::thread::Builder::new()
+        .name("Pack mods".into())
+        .spawn(move || match pack_all(&out) {
+            Ok((written, unchanged, left)) => log::info!(
+                "Horizon: mods packed into {}: {written} written, {unchanged} unchanged, {} left as folders{}",
+                out.display(),
+                left.len(),
+                left.iter().map(|l| format!("; {l}")).collect::<String>()
+            ),
+            Err(e) => log::warn!("Horizon: mods not packed: {e}"),
+        });
+    if let Err(e) = spawned {
+        log::warn!("Horizon: mods not packed: {e}");
+    }
+}
+
+/// [`pack_on_request`]'s work: how many mods were written, how many were unchanged, and
+/// the ones that can't be packed (a mod with code), each with why.
+fn pack_all(out: &Path) -> Result<(usize, usize, Vec<String>), String> {
+    let stamps = out.join(".packed");
+    fs::create_dir_all(&stamps).map_err(|e| format!("{}: {e}", stamps.display()))?;
+    let (mut written, mut unchanged, mut left) = (0, 0, Vec::new());
+    for source in SOURCES.get().map(Vec::as_slice).unwrap_or_default() {
+        if !source.path.is_dir() {
+            continue;
+        }
+        let id = file_safe(&source.entry.id);
+        let target = out.join(format!("{id}.hmod"));
+        let mark = stamps.join(format!("{id}.txt"));
+        let stamp = folder_stamp(&source.path)?;
+        if target.is_file() && fs::read_to_string(&mark).is_ok_and(|m| m == stamp) {
+            unchanged += 1;
+            continue;
+        }
+        let part = out.join(format!("{id}.hmod.part"));
+        let write = || -> Result<(), String> {
+            let file = fs::File::create(&part).map_err(|e| e.to_string())?;
+            let mut packed = std::io::BufWriter::new(file);
+            Package::pack_dir(&source.path, &source.declared, &mut packed)?;
+            packed.flush().map_err(|e| e.to_string())?;
+            drop(packed);
+            fs::rename(&part, &target).map_err(|e| e.to_string())?;
+            fs::write(&mark, &stamp).map_err(|e| e.to_string())
+        };
+        match write() {
+            Ok(()) => written += 1,
+            Err(e) => {
+                let _ = fs::remove_file(&part);
+                left.push(format!("{}: {e}", source.entry.id));
+            }
+        }
+    }
+    Ok((written, unchanged, left))
+}
+
 /// A mark of a mod folder's state: the manifest and every file under
 /// `assets/` and `data/` by name, size and time.
 fn folder_stamp(dir: &Path) -> Result<String, String> {

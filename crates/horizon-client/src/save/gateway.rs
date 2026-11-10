@@ -27,7 +27,7 @@ impl SaveDir {
     /// Retire the JSON only after the region writer confirms every update.
     pub fn migrate_end_gateway_exits(&self) -> Result<usize> {
         let path = self.root.join(LEGACY_FILE);
-        let bytes = match fs::read(&path) {
+        let bytes = match horizon_core::rfs::read(&path) {
             Ok(bytes) => bytes,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
             Err(e) => return Err(e.into()),

@@ -199,7 +199,7 @@ pub enum Remembered {
 }
 
 pub fn remembered(dir: &Path, now: SystemTime) -> Remembered {
-    let Ok(text) = std::fs::read_to_string(dir.join(FILE)) else {
+    let Ok(text) = horizon_core::rfs::read_to_string(dir.join(FILE)) else {
         return Remembered::Stale(None);
     };
     let mut words = text.split_whitespace();

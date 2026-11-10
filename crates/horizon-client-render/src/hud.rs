@@ -1,6 +1,7 @@
 //! 2D overlay: one atlas holding GUI sprites, the bitmap font, item and block
 //! textures, and a batch of textured quads in GUI pixels (vanilla's automatic
 //! GUI scale is applied when drawing).
+use horizon_core::rfs::RPath as _;
 use crate::Result;
 use horizon_assets::animation::AnimationMetadata;
 use std::{
@@ -395,12 +396,12 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         );
         return;
     }
-    let Ok(entries) = fs::read_dir(dir) else {
+    let Ok(entries) = horizon_core::rfs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir() {
+        if path.r_is_dir() {
             walk(&path, out);
         } else if path.extension().is_some_and(|e| e == "png") {
             out.push(path);
@@ -588,9 +589,9 @@ fn cit_sprite(root: &Path, id: &str) -> Option<(PackedImage, Option<TextureFlags
 /// any texture, so a pack's glyph sheet need not live under `textures/font`.
 fn bitmap_font_textures(root: &Path) -> Vec<PathBuf> {
     fn jsons(dir: &Path, out: &mut Vec<PathBuf>) {
-        for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        for entry in horizon_core::rfs::read_dir(dir).into_iter().flatten().flatten() {
             let path = entry.path();
-            if path.is_dir() {
+            if path.r_is_dir() {
                 jsons(&path, out);
             } else if path.extension().is_some_and(|e| e == "json") {
                 out.push(path);
@@ -599,13 +600,13 @@ fn bitmap_font_textures(root: &Path) -> Vec<PathBuf> {
     }
     let assets = root.join("assets");
     let mut defs = Vec::new();
-    for ns in fs::read_dir(&assets).into_iter().flatten().flatten() {
+    for ns in horizon_core::rfs::read_dir(&assets).into_iter().flatten().flatten() {
         jsons(&ns.path().join("font"), &mut defs);
     }
     let mut out = Vec::new();
     let mut seen = HashSet::new();
     for def in defs {
-        let Ok(bytes) = fs::read(&def) else { continue };
+        let Ok(bytes) = horizon_core::rfs::read(&def) else { continue };
         let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes);
         let Ok(json) = serde_json::from_slice::<serde_json::Value>(bytes) else {
             continue;
@@ -619,7 +620,7 @@ fn bitmap_font_textures(root: &Path) -> Vec<PathBuf> {
             };
             let (ns, path) = file.split_once(':').unwrap_or(("minecraft", file));
             let path = assets.join(ns).join("textures").join(path);
-            if path.is_file() && seen.insert(path.clone()) {
+            if path.r_is_file() && seen.insert(path.clone()) {
                 out.push(path);
             }
         }
@@ -1253,7 +1254,7 @@ impl HudAtlas {
         // A native mod's particle type names its textures `<ns>:particle/<path>`
         // and needn't ship content, so every namespace's folder is packed.
         if folders.contains(&"particle")
-            && let Ok(namespaces) = fs::read_dir(&assets)
+            && let Ok(namespaces) = horizon_core::rfs::read_dir(&assets)
         {
             for ns in namespaces.flatten() {
                 if ns.file_name() != "minecraft" {
@@ -1262,7 +1263,7 @@ impl HudAtlas {
             }
         }
         // Content mods' GUI textures, for their screens: `<namespace>:gui/...`.
-        if full && let Ok(namespaces) = fs::read_dir(&assets) {
+        if full && let Ok(namespaces) = horizon_core::rfs::read_dir(&assets) {
             for ns in namespaces.flatten() {
                 if ns.file_name() != "minecraft" {
                     walk(&ns.path().join("textures/gui"), &mut files);
@@ -1372,7 +1373,7 @@ impl HudAtlas {
             };
             // LabPBR's maps beside a texture are the world's (sprites.rs), not images to draw.
             if let Some(base) = name.strip_suffix("_n").or_else(|| name.strip_suffix("_s"))
-                && textures.join(format!("{base}.png")).is_file()
+                && textures.join(format!("{base}.png")).r_is_file()
             {
                 return None;
             }
@@ -1683,7 +1684,7 @@ impl HudAtlas {
     fn glint_texture(root: &Path, defaults: &Path, name: &str) -> (Vec<u8>, u32, u32) {
         let relative = format!("assets/minecraft/textures/misc/{name}.png");
         let mut path = root.join(&relative);
-        if !path.exists() && defaults != root {
+        if !path.r_exists() && defaults != root {
             path = defaults.join(&relative);
         }
         decode(&path).map_or((vec![0; 4], 1, 1), |(w, h, pixels)| (pixels, w, h))

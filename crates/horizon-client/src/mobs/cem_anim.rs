@@ -63,6 +63,7 @@ params! {
     "is_sneaking" => Sneaking, "is_sprinting" => Sprinting, "is_tamed" => Tamed,
     "is_wet" => Wet, "is_climbing" => Climbing, "is_blocking" => Blocking,
     "is_crawling" => Crawling, "is_jumping" => Jumping, "is_swimming" => Swimming,
+    "is_gliding" => Gliding,
     "is_right_handed" => RightHanded, "is_swinging_right_arm" => SwingingRight,
     "is_swinging_left_arm" => SwingingLeft, "is_first_person_hand" => FirstPersonHand,
     "is_using_item" => UsingItem, "is_holding_item_right" => HoldingRight,
@@ -351,7 +352,10 @@ pub(super) fn compile_animation(
     names: &Names,
     entries: &[(String, String, &[(String, String)])],
     rules: &[super::cem::Rule],
+    quiet: &dyn Fn(&str) -> bool,
 ) -> Option<Animation> {
+    // A baby on its adult's file, or a part this version moved: told at debug level.
+    let level = |name: &str| if quiet(name) { log::Level::Debug } else { log::Level::Warn };
     let mut layout = Layout {
         names,
         next: PARAMS.len() as u32,
@@ -375,7 +379,7 @@ pub(super) fn compile_animation(
                 break 'entries;
             }
             let Some(slot) = layout.slot(target, this, part) else {
-                log::warn!("Horizon: custom entity model {file}: unknown target {target}");
+                log::log!(level(target), "Horizon: custom entity model {file}: unknown target {target}");
                 continue;
             };
             // A name that is nothing reads 0, once named in a warning: the line keeps its
@@ -383,7 +387,8 @@ pub(super) fn compile_animation(
             let compiled = compile(src, &mut |name: &str| {
                 layout.slot(name, this, part).or_else(|| {
                     if unknown.insert(name.to_owned()) {
-                        log::warn!(
+                        log::log!(
+                            level(name),
                             "Horizon: custom entity model {file}: unknown name {name} reads 0"
                         );
                     }
@@ -687,6 +692,10 @@ fn params(m: &Mob, s: &State, frame: &Frame, rule_index: f32, slots: &mut [f32])
             // `isVisuallyCrawling`: the swimming pose out of water.
             Crawling => flag(swim_pose && !m.fluids.in_water),
             Swimming => flag(swim_pose),
+            // `isFallFlying`: elytra flight (the shared flag, or a player's pose).
+            Gliding => flag(
+                m.extra.fall_flying || m.extra.avatar_pose == crate::pose::Pose::FallFlying,
+            ),
             // DATA_LIVING_ENTITY_FLAGS' using bit (the client counts the ticks).
             UsingItem => flag(m.extra.using_item > 0),
             SwingingRight => flag(swinging && swing_right),
@@ -766,7 +775,7 @@ mod tests {
             ),
             ("cem#0".to_owned(), "real_head".to_owned(), hat.as_slice()),
         ];
-        let animation = compile_animation("test.jem", &names, &entries, &[]).unwrap();
+        let animation = compile_animation("test.jem", &names, &entries, &[], &|_| false).unwrap();
         let frame = |id: u32, counter: u32, poses: &mut Poses| {
             animation.run_with(
                 id,
@@ -805,7 +814,7 @@ mod tests {
         };
         let bad = pairs(&[("missing.rx", "1"), ("root.rx", "1 +")]);
         let entries = [("root".to_owned(), "root".to_owned(), bad.as_slice())];
-        assert!(compile_animation("test.jem", &names, &entries, &[]).is_none());
+        assert!(compile_animation("test.jem", &names, &entries, &[], &|_| false).is_none());
     }
 
     #[test]
@@ -822,7 +831,7 @@ mod tests {
         // Fresh Animations' cow: rule 2 grazes on grass, wheat or hay.
         let rules =
             super::super::cem::parse_rules("models.2=1\nblocks.2=grass_block wheat hay_block");
-        let animation = compile_animation("test.jem", &names, &entries, &rules).unwrap();
+        let animation = compile_animation("test.jem", &names, &entries, &rules, &|_| false).unwrap();
         let mut m = mob();
         m.standing_on = Some("minecraft:grass_block".into());
         let mut poses = Poses::new(&model);
@@ -845,7 +854,7 @@ mod tests {
         };
         let list = pairs(list);
         let entries = [("root".to_owned(), "root".to_owned(), list.as_slice())];
-        compile_animation("test.jem", &names, &entries, &[]).unwrap()
+        compile_animation("test.jem", &names, &entries, &[], &|_| false).unwrap()
     }
 
     #[test]

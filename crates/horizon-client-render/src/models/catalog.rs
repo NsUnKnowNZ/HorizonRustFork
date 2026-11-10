@@ -22,10 +22,11 @@ use horizon_world::{
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
     path::Path,
     sync::OnceLock,
 };
+#[cfg(test)]
+use std::fs;
 
 /// `prepareQuadShape`: the quad's bounds, whether it is partial (smaller than
 /// the block face) and whether it is cubic (flush with the block boundary, or
@@ -237,7 +238,7 @@ impl StateModels {
         sprites: &mut Sprites,
     ) -> Result<Self> {
         let facts: BTreeMap<String, Value> =
-            serde_json::from_slice(&fs::read(root.join("model-states.json"))?)?;
+            serde_json::from_slice(&horizon_core::rfs::read(root.join("model-states.json"))?)?;
         Self::from_facts(root, registry, blocks, sprites, &facts)
     }
     /// Bind and bake models using an already parsed model-state document.

@@ -9,6 +9,7 @@
 //! each file's modification time and hands changed text over again
 //! (`native_config_reloading`). A server's configs are dropped when it stops
 //! (`native_config_unloading`).
+use horizon_core::rfs::RPath as _;
 use super::Game;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -119,12 +120,12 @@ fn locate(
         && let Some(world) = world
     {
         let own = world.join("serverconfig").join(&config.file);
-        if own.is_file() {
+        if own.r_is_file() {
             return Ok(own);
         }
     }
     let path = config_dir.join(&config.file);
-    if !path.exists() {
+    if !path.r_exists() {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -134,7 +135,7 @@ fn locate(
 }
 
 fn modified(path: &Path) -> Option<SystemTime> {
-    fs::metadata(path).and_then(|m| m.modified()).ok()
+    horizon_core::rfs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
 impl NativeConfigs {
@@ -174,7 +175,7 @@ impl NativeConfigs {
                 continue;
             }
             let modified = modified(&path);
-            let text = match fs::read_to_string(&path) {
+            let text = match horizon_core::rfs::read_to_string(&path) {
                 Ok(text) => text,
                 Err(e) => {
                     log::warn!(
@@ -210,7 +211,7 @@ impl NativeConfigs {
             if now.is_none() || now == tracked.modified {
                 continue;
             }
-            let Ok(text) = fs::read_to_string(&tracked.config.path) else {
+            let Ok(text) = horizon_core::rfs::read_to_string(&tracked.config.path) else {
                 continue;
             };
             tracked.modified = now;

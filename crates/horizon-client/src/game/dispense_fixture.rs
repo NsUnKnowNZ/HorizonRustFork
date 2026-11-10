@@ -122,7 +122,7 @@ impl Game<'_> {
             .ok_or("HORIZON_DISPENSE_FIXTURE=CASES,OUTPUT")?;
         // Saplings and feature placers grow from the live feature registry.
         self.install_live_features();
-        let text = std::fs::read_to_string(input)?;
+        let text = horizon_core::rfs::read_to_string(input)?;
         let mut out = std::io::BufWriter::new(std::fs::File::create(output)?);
         for (index, line) in text.lines().enumerate() {
             let case: Value = serde_json::from_str(line)?;
