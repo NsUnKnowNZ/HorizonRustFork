@@ -20,8 +20,15 @@ Minecraft as upstream Horizon does.
 `.local/` is ignored by upstream's `.gitignore`; the files above are added on purpose.
 
 ## Playing from a fresh clone
-`cargo build -p horizon-client` builds plain Horizon. The `Play ... (modded).bat` shortcuts start the build
-with the native mods applied and open a Better OneBlock world; neither is in this repository. They need:
+`cargo build -p horizon-client` builds plain Horizon. The game played here is the build with the native
+mods applied, in a game folder of its own, apart from this source folder:
+
+    powershell -ExecutionPolicy Bypass -File .local\setup\make-game-folder.ps1 -Game D:\HorizonOneBlock
+
+makes (or refreshes after a build) that folder: `Horizon OneBlock.exe` starts the game with no console
+window (`.local/game-launcher`), `bin\` holds the game program and its prepared resources, and the mods,
+worlds, packs and settings sit beside them. Worlds and servers are picked in the game. Never share `bin\`:
+it holds Minecraft's files. The folder needs:
 
 1. **Minecraft's files**, prepared from your own Java Edition 26.3 as the README says (`horizon-prepare`).
    They land in `.local/horizon-client/26.3/`.
@@ -36,4 +43,6 @@ with the native mods applied and open a Better OneBlock world; neither is in thi
 4. **The world** (`saves/OneBlockFresh` or `saves/Better OneBlock`), converted from the pack's world by
    `.local/ports/better-oneblock/convert/convert_oneblock.py`.
 
-Steps 3 and 4 were done by hand over many sessions and have no one-command setup yet.
+Steps 3 and 4 were done by hand over many sessions and have no one-command setup yet. A friend who only
+wants to join needs steps 1 and 2 and the game folder: joining the host's game lists the missing mods and
+downloads them from the host.

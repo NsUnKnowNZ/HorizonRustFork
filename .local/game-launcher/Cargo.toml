@@ -1,0 +1,11 @@
+[package]
+name = "horizon-oneblock"
+version = "0.1.0"
+edition = "2021"
+description = "Starts the game in bin/ from its folder, without a console window."
+
+[workspace]
+
+[profile.release]
+opt-level = "s"
+strip = true

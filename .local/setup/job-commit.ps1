@@ -16,21 +16,21 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/setup/body-portal-plain.txt .local/patches/horizon-portals/horizon-portals.patch .local/patches/horizon-portals/README.md
+git add -f .local/setup/job-commit.ps1 .local/setup/make-game-folder.ps1 .local/game-launcher/Cargo.toml .local/game-launcher/src/main.rs .gitignore FORK.md
+git add -u -- "Play Better OneBlock (modded).bat" "Play Better OneBlock.bat" "Play OneBlock Fresh (modded).bat" 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-See-through portals taken out; a custom sky's pictures are counted once
+A clean game folder with one program to start it; the .bat shortcuts are gone
 
-Horizon Portals: looking through a portal into the other dimension and walking
-straight through were glitchy in play (a third-person camera through the plane,
-half-loaded other sides, exits boxed in by rock), so they are removed at the
-user's request. The patch keeps frames up to 64x64, horizontal portals and no
-loading screen, and a Horizon client's player now goes through at once on
-touch. The last see-through patch is in history (205989ab1b).
+.local/setup/make-game-folder.ps1 makes D:\HorizonOneBlock (or -Game <folder>):
+Horizon OneBlock.exe (.local/game-launcher, starts bin\horizon-client.exe with
+no console window), the prepared resources in bin\, the mods, and on its first
+run the player's worlds, packs and screenshots moved over from the source
+folder (NativeTest stays for tests; the packs keep a link here). Later runs
+refresh the program, the resources and the mods only.
 
-Custom sky: layers naming the same file share one texture. A FabricSkyboxes
-pack that draws seven 6-megapixel pictures in fifteen layers went past the
-texture budget and lost its sky.
+Supplementaries (local content): six blocks its jar has stale files for but the
+mod never registers are taken out; raked gravel has its model.
 
 Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
