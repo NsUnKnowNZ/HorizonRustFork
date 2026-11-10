@@ -1559,6 +1559,9 @@ pub struct Renderer {
     /// first gets the swapchain a fresh configuration; later ones reattach
     /// the window, as a lost surface does.
     acquire_validation_failures: u32,
+    /// The world's own pictures (the world icon, the loading screen's, a mod's) on their way
+    /// back from the GPU, written on a thread of their own once they are (`poll_readbacks`).
+    pending_readbacks: Vec<AsyncReadback>,
     /// A surface from `recreate_surface` whose configuration failed. wgpu
     /// panics when such a surface is acquired from (it never had one that
     /// worked), so frames configure it again first and skip until it takes.
@@ -5186,6 +5189,7 @@ impl Renderer {
             info,
             suspended: !drawable_size(size.width, size.height, max_side),
             acquire_validation_failures: 0,
+            pending_readbacks: Vec::new(),
             surface_unconfigured: false,
             drawn_sections: 0,
             section_draws: 0,
@@ -8090,6 +8094,7 @@ impl Renderer {
         self.land_frame();
         // Waiting for the previous frame (offscreen: at most two on the GPU), not work.
         let landed = landing.elapsed();
+        self.poll_readbacks();
         self.queue.take_waited();
         // World frames alone follow the shader pack: the game loads the picked one
         // before it draws one. Title frames draw no terrain and keep the layout
@@ -11807,6 +11812,28 @@ impl Renderer {
                 .take()
                 .and_then(|request| self.take_readback(request, &mut encoder, shown_texture))
         });
+        // The world's own pictures (the world icon, the loading screen's, a mod's camera: a size
+        // of their own, not the full frame F2, an agent or a sequence waits for) are read back
+        // over the next frames and written on a thread: this frame neither waits for the GPU
+        // nor writes the PNG, about 90 ms it took before.
+        let readback = match readback {
+            Some((request, buffer)) if request.size.is_some() && !request.scaled => {
+                let bgra = matches!(
+                    self.config.format.remove_srgb_suffix(),
+                    wgpu::TextureFormat::Bgra8Unorm
+                );
+                self.pending_readbacks.push(AsyncReadback {
+                    request,
+                    buffer,
+                    size: [self.config.width, self.config.height],
+                    bgra,
+                    mapped: Arc::new(std::sync::atomic::AtomicU8::new(0)),
+                    mapping: false,
+                });
+                None
+            }
+            other => other,
+        };
         self.uploads.finish(&encoder);
         if has_section_copies {
             self.section_copy_bytes = 0;
@@ -12427,6 +12454,55 @@ fn scaled_screenshot_factor(
     let buffer = ((b * b + 4.0 * a * max_buffer as f64).sqrt() - b) / (2.0 * a);
     wanted.min(side.min(buffer) as f32)
 }
+/// A picture of the world read back without stalling a frame: the frame copied itself into
+/// `buffer` and was submitted; the next frame asks for the buffer's mapping, and the first frame
+/// that finds it mapped hands the buffer to a thread that writes the PNG from it. Before, the
+/// frame that took the picture waited for the GPU and wrote the PNG itself, about 90 ms
+/// (Seamless Loading Screen takes one every ten seconds of play).
+struct AsyncReadback {
+    request: ScreenshotRequest,
+    buffer: wgpu::Buffer,
+    /// The frame's size, and whether its pixels are BGRA.
+    size: [u32; 2],
+    bgra: bool,
+    /// 0 while mapping, 1 mapped, 2 failed; `mapping` once asked.
+    mapped: Arc<std::sync::atomic::AtomicU8>,
+    mapping: bool,
+}
+
+/// The PNG at `path` of a frame read back into `data` (`row` bytes a row), cropped and averaged
+/// down to the request's size when it has one.
+fn encode_screenshot(
+    request: &ScreenshotRequest,
+    path: &std::path::Path,
+    data: &[u8],
+    [w, h]: [u32; 2],
+    row: usize,
+    bgra: bool,
+) -> Result<[u32; 2]> {
+    let (wu, hu) = (w as usize, h as usize);
+    let mut pixels = Vec::with_capacity(wu * hu * 4);
+    for y in 0..hu {
+        for px in data[y * row..y * row + wu * 4].chunks_exact(4) {
+            let (r, b) = if bgra { (px[2], px[0]) } else { (px[0], px[2]) };
+            pixels.extend_from_slice(&[r, px[1], b, 255]);
+        }
+    }
+    let (width, height, pixels) = match request.size {
+        Some(size) => (size[0], size[1], square_downscale(&pixels, w, h, size)),
+        None => (w, h, pixels),
+    };
+    let mut encoder = png::Encoder::new(
+        std::io::BufWriter::new(std::fs::File::create(path)?),
+        width,
+        height,
+    );
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder.write_header()?.write_image_data(&pixels)?;
+    Ok([width, height])
+}
+
 /// Bytes per row of a `width`-pixel frame read back at 4 bytes a pixel.
 fn padded_row(width: u32) -> u32 {
     (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
@@ -12568,6 +12644,72 @@ impl Renderer {
             None
         }
     }
+    /// Once a frame, before it draws (after the previous one landed, so its copies were
+    /// submitted): the pictures read back without a wait are mapped, and those mapped are
+    /// written on a thread.
+    fn poll_readbacks(&mut self) {
+        if self.pending_readbacks.is_empty() {
+            return;
+        }
+        for r in &mut self.pending_readbacks {
+            if !r.mapping {
+                let flag = Arc::clone(&r.mapped);
+                r.buffer.map_async(wgpu::MapMode::Read, .., move |result| {
+                    flag.store(
+                        if result.is_ok() { 1 } else { 2 },
+                        std::sync::atomic::Ordering::Release,
+                    );
+                });
+                r.mapping = true;
+            }
+        }
+        // Without waiting: the callbacks of the mappings that finished run here.
+        let _ = self.device.poll(wgpu::PollType::Poll);
+        let done: Vec<AsyncReadback> = self
+            .pending_readbacks
+            .extract_if(.., |r| {
+                r.mapped.load(std::sync::atomic::Ordering::Acquire) != 0
+            })
+            .collect();
+        for r in done {
+            if r.mapped.load(std::sync::atomic::Ordering::Acquire) != 1 {
+                log::warn!(
+                    "Horizon renderer: the picture {} could not be read back",
+                    r.request.path.display()
+                );
+                continue;
+            }
+            // The thread reads the mapped buffer itself and writes the PNG beside its place,
+            // then moves it there: whoever waits for the file finds it whole once it exists.
+            let spawned = std::thread::Builder::new()
+                .name("Horizon picture".into())
+                .spawn(move || {
+                    let mut part = r.request.path.clone().into_os_string();
+                    part.push(".part");
+                    let part = PathBuf::from(part);
+                    let row = padded_row(r.size[0]) as usize;
+                    let written = match r.buffer.get_mapped_range(..) {
+                        Ok(view) => {
+                            encode_screenshot(&r.request, &part, &view[..], r.size, row, r.bgra)
+                                .and_then(|_| {
+                                    std::fs::rename(&part, &r.request.path).map_err(Into::into)
+                                })
+                        }
+                        Err(e) => Err(e.to_string().into()),
+                    };
+                    if let Err(e) = written {
+                        let _ = std::fs::remove_file(&part);
+                        log::warn!(
+                            "Horizon renderer: the picture {} was not written ({e})",
+                            r.request.path.display()
+                        );
+                    }
+                });
+            if let Err(e) = spawned {
+                log::warn!("Horizon renderer: no thread to write a picture ({e})");
+            }
+        }
+    }
     /// The pixels `copy_frame` read back into `buffer`, 4 bytes each, row after row.
     fn read_frame(&self, buffer: &wgpu::Buffer) -> Result<Vec<[u8; 4]>> {
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -12605,30 +12747,18 @@ impl Renderer {
             self.config.format.remove_srgb_suffix(),
             wgpu::TextureFormat::Bgra8Unorm
         );
-        let mut pixels = Vec::with_capacity((self.config.width * self.config.height * 4) as usize);
-        for px in self.read_frame(buffer)? {
-            let (r, b) = if bgra { (px[2], px[0]) } else { (px[0], px[2]) };
-            pixels.extend_from_slice(&[r, px[1], b, 255]);
-        }
         // NativeImage.resizeSubRectTo on takeAutoScreenshot's grab: the icon
-        // is the frame's centre square averaged down to its size.
-        let (width, height, pixels) = match request.size {
-            Some(size) => (
-                size[0],
-                size[1],
-                square_downscale(&pixels, self.config.width, self.config.height, size),
-            ),
-            None => (self.config.width, self.config.height, pixels),
-        };
-        let mut encoder = png::Encoder::new(
-            std::io::BufWriter::new(std::fs::File::create(&request.path)?),
-            width,
-            height,
-        );
-        encoder.set_color(png::ColorType::Rgba);
-        encoder.set_depth(png::BitDepth::Eight);
-        encoder.write_header()?.write_image_data(&pixels)?;
-        Ok([width, height])
+        // is the frame's centre square averaged down to its size (`encode_screenshot`).
+        let pixels: Vec<u8> = self.read_frame(buffer)?.into_iter().flatten().collect();
+        let size = [self.config.width, self.config.height];
+        encode_screenshot(
+            request,
+            &request.path,
+            &pixels,
+            size,
+            size[0] as usize * 4,
+            bgra,
+        )
     }
     /// The HDR10 copy (`Hdr::capture`) as a 16-bit PNG tagged BT.2020 with PQ (cICP, PNG's
     /// third edition), with the peak and paper white as its content light levels (cLLI), and
