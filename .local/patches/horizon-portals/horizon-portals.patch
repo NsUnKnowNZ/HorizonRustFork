@@ -71,7 +71,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
      entity_pipeline: wgpu::RenderPipeline,
      static_entity_pipeline: wgpu::RenderPipeline,
      static_entity_group: wgpu::BindGroup,
-@@ -3119,10 +3168,168 @@
+@@ -3130,10 +3179,168 @@
              true,
              None,
          );
@@ -240,7 +240,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              &terrain_buffers,
              tri,
              Some(wgpu::Face::Back),
-@@ -3411,6 +3618,12 @@
+@@ -3422,6 +3629,12 @@
              usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
              mapped_at_creation: false,
          });
@@ -253,7 +253,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          let prepared = match prepared {
              Some(prepared) => prepared.resplit(layers, split),
              None => PreparedTextures::with_split(
-@@ -3618,6 +3831,17 @@
+@@ -3629,6 +3842,17 @@
              "Water mirror resources",
              &bindings,
              &mirror_globals,
@@ -271,7 +271,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              &sprite_views,
              &sprite_sampler,
              &lightmap_view,
-@@ -4771,7 +4995,7 @@
+@@ -4782,7 +5006,7 @@
          // With flat draws' page groups the per-section solid draws read their vertices from
          // the page too (`Flat::page_group`), in either layout of the solid quads
          // (`mesher::packed`): only the origins stay a vertex buffer, at slot 1.
@@ -280,7 +280,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              Some(f) => {
                  let pulled_layout = kept.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                      label: Some("Horizon terrain layout (pulled)"),
-@@ -4798,9 +5022,21 @@
+@@ -4809,9 +5033,21 @@
                          true,
                          None,
                      ),
@@ -303,7 +303,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          };
          // The solid quads in the compact layout, while no shader pack reads the arena
          // (`follow_packed_layout`).
-@@ -4993,6 +5229,19 @@
+@@ -5004,6 +5240,19 @@
              mirror_globals,
              mirror_group,
              mirror: None,
@@ -323,7 +323,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              entity_pipeline,
              static_entity_pipeline,
              hdr_mark_pipeline,
-@@ -5743,6 +5992,15 @@
+@@ -5758,6 +6007,15 @@
      ) -> Option<bool> {
          self.occlusion.visible_for_camera(key, camera_section)
      }
@@ -339,7 +339,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
      pub fn upload(&mut self, key: SectionKey, mesh: &SectionMesh) {
          if let Some(copies) = &mut self.capture_copies {
              copies.section(key, mesh);
-@@ -8328,6 +8586,7 @@
+@@ -8446,6 +8704,7 @@
                  if self.hdr.is_some() { 1.0 } else { 0.0 },
                  0.0,
              ],
@@ -347,7 +347,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          };
          self.uploads
              .buffer(&mut encoder, &self.globals, 0, bytemuck::bytes_of(&globals));
-@@ -8403,6 +8662,30 @@
+@@ -8521,6 +8780,30 @@
                  plane - frame.camera.y as f32,
              )),
          });
@@ -378,7 +378,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          // Solid quads facing away from the eye are left out: the bob moves
          // the eye off `camera`, so it is found from the projection. With the mirror, those
          // facing its eye are kept too: it sits straight below, at this camera-relative y.
-@@ -8466,6 +8749,7 @@
+@@ -8584,6 +8867,7 @@
              .as_ref()
              .is_some_and(|n| n.displacement.is_some());
          let mut gpu_frame = self.gpu_culling.is_some()
@@ -386,7 +386,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              && !frame.title
              && !pack_terrain
              && shadow_view.is_none()
-@@ -8611,6 +8895,22 @@
+@@ -8729,6 +9013,22 @@
                  height(b).total_cmp(&height(a))
              });
          }
@@ -409,7 +409,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          // A `shaders/` pack that draws the terrain, or its shadow, sees it as Iris does.
          let shaders_pack = !frame.title
              && self
-@@ -8665,7 +8965,7 @@
+@@ -8783,7 +9083,7 @@
              self.animate(&mut encoder, frame.ticks, !frame.title && !gpu_frame);
          }
          let listed = visible.len() + visible_lods.len();
@@ -418,7 +418,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          if instances as u64 > self.instance_capacity {
              self.instance_capacity = (instances as u64).next_power_of_two();
              self.instances = self.device.create_buffer(&wgpu::BufferDescriptor {
-@@ -8710,6 +9010,11 @@
+@@ -8828,6 +9128,11 @@
                      shadow_visible
                          .iter()
                          .map(|v| section_instance(v.origin, 0, visibility(v.key))),
@@ -430,7 +430,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
                  ),
          );
          if !self.origins.is_empty() {
-@@ -8764,6 +9069,7 @@
+@@ -8882,6 +9187,7 @@
                      && self.multi_draw
                      // Occlusion is found from the camera, not the mirror's eye.
                      && mirror.is_none()
@@ -438,7 +438,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
                      // It tests the CPU's lists, which leave out GPU culling's sections.
                      && !gpu_frame
                      && visible.len() >= c.min_sections
-@@ -9136,6 +9442,56 @@
+@@ -9254,6 +9560,56 @@
              (shadow_first + shadow_solid) as usize,
          );
          let shadow_translucent = self.draws.len() as u32 - shadow_first - shadow_solid;
@@ -495,7 +495,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          laps.lap("r_nearby");
          // Metal replays a multi-draw as one draw call per entry.
          let mut section_draw_calls = if self.multi_draw && self.info.backend != wgpu::Backend::Metal
-@@ -9734,6 +10090,7 @@
+@@ -9852,6 +10208,7 @@
          let flat_frame = match &mut self.flat {
              Some(flat)
                  if self.flat_on
@@ -503,7 +503,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
                      // They copy the CPU's lists alone (GPU culling is never offered
                      // where vanilla frames draw flat).
                      && !gpu_frame
-@@ -10243,6 +10600,196 @@
+@@ -10361,6 +10718,193 @@
                  }
                  drop(pass);
                  reflection = Some(mirror.color.clone());
@@ -595,13 +595,10 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
 +                    -1.0
 +                };
 +                let past = from * centre < 0.0;
-+                let mid = if past {
-+                    from * 0.06
-+                } else if centre.abs() < 0.5 {
-+                    centre + 0.499 * from
-+                } else {
-+                    centre - 0.499 * from
-+                };
++                // The surface stands in the middle of the portal's blocks, where the purple
++                // was: the frame's inner faces show before it on this side and after it on
++                // the other, as one doorway.
++                let mid = if past { from * 0.06 } else { centre };
 +                let (lo, hi) = if past {
 +                    (DVec3::splat(-128.0), DVec3::splat(128.0))
 +                } else {
@@ -635,7 +632,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
 +                let mut normal = Vec3::ZERO;
 +                normal[a] = sign as f32;
 +                let normal = Mat4::from_rotation_y(pv.yaw).transform_vector3(normal);
-+                let plane = [normal.x, normal.y, normal.z, -(sign * centre + 0.5) as f32];
++                let plane = [normal.x, normal.y, normal.z, -(sign * centre) as f32];
 +                let turn = portal_turn.unwrap_or(Mat4::IDENTITY);
 +                let portal_globals = Globals {
 +                    view_proj: (view_proj * turn).to_cols_array_2d(),
@@ -700,7 +697,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              }
          }
          if let Some(native) = &mut self.native {
-@@ -11338,6 +11885,18 @@
+@@ -11456,6 +12000,18 @@
                      0..1,
                  );
              }
@@ -719,7 +716,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              // Native mods' primitives: after the entities and the rest of the world, into its
              // targets (its resolution, reversed depth and TAA), before the hand.
              if world_primitives {
-@@ -11469,6 +12028,67 @@
+@@ -11587,6 +12143,67 @@
                  &pages,
                  &mut terrain,
              );
@@ -787,7 +784,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              // The debug lines (chunk borders, hitboxes, gizmos) over the pack's picture, those
              // drawn with depth where the pack's depth (else the world's) has nothing nearer.
              if debug_depth + debug_top > 0 {
-@@ -12821,6 +13441,43 @@
+@@ -12939,6 +13556,43 @@
      return in.color;
  }
  ";
@@ -986,7 +983,7 @@ diff --git a/crates/horizon-client/src/animate_tick.rs b/crates/horizon-client/s
 diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.rs
 --- a/crates/horizon-client/src/game.rs
 +++ b/crates/horizon-client/src/game.rs
-@@ -450,6 +450,7 @@
+@@ -451,6 +451,7 @@
  mod trident;
  mod tutorial;
  mod tweaks;
@@ -994,7 +991,7 @@ diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.
  mod armor_hider;
  mod crafting_tweaks;
  mod ui_control;
-@@ -14437,6 +14438,8 @@
+@@ -14440,6 +14441,8 @@
          let glowing = std::mem::take(self.glowing_vertices.get_mut());
          let shadow_only = std::mem::take(self.shadow_only_vertices.get_mut());
          let skin = std::mem::take(self.skin_frame.get_mut());
@@ -1003,7 +1000,7 @@ diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.
          let frame = Frame {
              weather: &weather,
              weather_time: horizon_client::weather::Time::new(self.world.game_time, alpha as f32),
-@@ -14603,13 +14606,20 @@
+@@ -14606,13 +14609,20 @@
          let result = match self.renderer.as_mut() {
              Some(renderer) => {
                  renderer.set_pass_timing(debug_passes || self.gpu_passes);
@@ -2135,7 +2132,7 @@ new file mode 100644
 diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/src/game/remote.rs
 --- a/crates/horizon-client/src/game/remote.rs
 +++ b/crates/horizon-client/src/game/remote.rs
-@@ -2543,6 +2543,7 @@
+@@ -2571,6 +2571,7 @@
          // handleRespawn keeps the ClientLevel only for the same level key:
          // two levels sharing a dimension type are still two levels.
          let same = keep_world && r.heard_level.as_deref() == Some(spawn.dimension.as_str());
@@ -2143,7 +2140,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
          r.chunk_format = Arc::new(
              r.chunk_format
                  .with_dimension(&dimension)
-@@ -2590,6 +2591,9 @@
+@@ -2618,6 +2619,9 @@
                  self.world.day_time,
                  self.world.weather,
              );
@@ -2153,7 +2150,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
              let old = std::mem::take(&mut self.world.chunks);
              let count = old.len();
              horizon_client::chunk::free_columns(old, count);
-@@ -2625,6 +2629,11 @@
+@@ -2653,6 +2657,11 @@
              if let Some(renderer) = self.renderer.as_mut() {
                  renderer.clear_sections(self.world.layout());
              }
@@ -2165,7 +2162,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
              // The new ClientLevel is told before setLevel drops the old one.
              let old = self.remote.as_mut().and_then(|r| {
                  r.native_epoch = Some(super::native_lifecycle::fresh_epoch());
-@@ -2644,7 +2653,10 @@
+@@ -2672,7 +2681,10 @@
          self.streaming.nether_shading = self.dim == Dim::Nether;
          // The seed in SpawnInfo is already the hashed one the client's BiomeManager holds.
          self.streaming.biome_zoom = horizon_core::biome::BiomeZoom::new(spawn.seed);
@@ -2177,7 +2174,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
          // handleLogin / handleRespawn: LocalPlayer.setPortalCooldown, so a
          // player who arrives standing in a portal gets no overlay from it.
          self.portals.player.cooldown = spawn.portal_cooldown;
-@@ -2661,6 +2673,8 @@
+@@ -2689,6 +2701,8 @@
          self.remote
              .as_ref()
              .is_none_or(|r| in_storage_range(r.view_distance, r.chunk_center, x, z))
@@ -2186,7 +2183,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
      }
      /// The columns a moved or resized storage no longer holds.
      fn drop_remote_chunks_out_of_range(&mut self) {
-@@ -2677,7 +2691,7 @@
+@@ -2705,7 +2719,7 @@
      /// of their own when there are many), their sections in the renderer and their block
      /// entities, each store once for all of them. Far terrain keeps them as they were last
      /// (`server_terrain`).
@@ -2195,7 +2192,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
          &mut self,
          gone: &mut horizon_client::fast_hash::FxHashSet<(i32, i32)>,
      ) {
-@@ -3592,6 +3606,9 @@
+@@ -3620,6 +3634,9 @@
                  self.remote_native_net(&p.data);
              }
              // The synced attachments of a holder the server shows the window.
@@ -2205,7 +2202,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
              C::CustomPayload(p) if p.channel == horizon_protocol::attachment_sync::CHANNEL => {
                  self.remote_attachment_sync(&p.data);
              }
-@@ -6339,6 +6356,15 @@
+@@ -6367,6 +6384,15 @@
      /// ClientPacketListener.handleMovePlayer.
      fn remote_teleport(&mut self, p: &play::PlayerPosition) -> Result<()> {
          use play::relative as rel;
@@ -2221,7 +2218,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
          let current = self
              .player
              .as_ref()
-@@ -6667,11 +6693,13 @@
+@@ -6695,11 +6721,13 @@
          if self.player.is_none() {
              return Ok(());
          }
@@ -2237,7 +2234,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
          let playing = self.screen == Screen::Playing && !loading && !self.dialog_open();
          let held = |action| playing && self.keys.held(action);
          let mut keys = Keys {
-@@ -10696,10 +10724,14 @@
+@@ -10724,10 +10752,14 @@
      /// the level loading screen, a portal's included (`remote_overlay`).
      pub(super) fn remote_screen_up(&self) -> bool {
          self.studio_replay.is_none()

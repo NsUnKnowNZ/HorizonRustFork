@@ -1,0 +1,30 @@
+Launch
+C command "gamemode creative"
+C command "execute in minecraft:overworld run tp @s 1000.5 152 996.5 0 10"
+C wait 80
+C command "fill 990 150 990 1010 158 1010 minecraft:air"
+C command "fill 990 149 990 1010 149 1010 minecraft:grass_block"
+C command "fill 999 149 1001 1002 153 1001 minecraft:obsidian"
+C command "fill 1000 150 1001 1001 152 1001 minecraft:air"
+C command "setblock 1000 150 1001 minecraft:fire"
+C command "time set 6000"
+C command "tp @s 1001.0 150 998.0 0 15"
+C wait 200
+C screenshot "$shots\door-front.png"
+C command "tp @s 1002.6 150.5 998.6 40 12"
+C wait 40
+C screenshot "$shots\door-angle.png"
+C command "tp @s 1000.9 150 1000.2 0 25"
+C wait 30
+C screenshot "$shots\door-close.png"
+C key w down
+C wait 30
+C key w up
+C state
+C wait 60
+C screenshot "$shots\door-nether.png"
+C command "tp @s ~ ~ ~3 180 15"
+C wait 120
+C screenshot "$shots\door-nether-back.png"
+C command "execute in minecraft:overworld run tp @s 203.5 152 195.5 0 25"
+C wait 40
