@@ -36,7 +36,7 @@ const HELP: &[&str] = &[
     "simulation                     authoritative projectiles in the owner's level",
     "server-hold on|off             hold simulation and player packets at a control-fixture barrier",
     "stall MILLISECONDS             stall the window thread (0..5000), leaving transport alive",
-    "key KEY down|up|tap|repeat     press, release or auto-repeat a key (w a s d space shift ctrl e q esc f3 1-9 arrows ...)",
+    "key KEY down|up|tap|repeat     press, release or auto-repeat a key (w a s d space shift ctrl alt e q esc f3 1-9 arrows ...)",
     "release                        release every key and mouse button",
     "mouse left|right|middle down|up|click",
     "look YAW PITCH                 set the view direction in degrees",
@@ -1681,6 +1681,7 @@ fn key_code(name: &str) -> Option<KeyCode> {
         "space" => KeyCode::Space,
         "shift" | "lshift" => KeyCode::ShiftLeft,
         "ctrl" | "control" | "lctrl" => KeyCode::ControlLeft,
+        "alt" | "lalt" => KeyCode::AltLeft,
         // The edit modifier on macOS (Cmd+A selects all there).
         "super" | "cmd" | "meta" => KeyCode::SuperLeft,
         "esc" | "escape" => KeyCode::Escape,
