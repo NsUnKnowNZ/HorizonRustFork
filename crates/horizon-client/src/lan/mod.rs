@@ -206,6 +206,13 @@ pub const HORIZON_CLIENTS_ONLY: &str = "horizon-clients-only";
 /// What another client is told.
 pub const HORIZON_CLIENTS_ONLY_REASON: &str =
     "This server is for the Horizon client: playhorizon.dev";
+/// The server.properties key that stops the server sending its content mods' files to Horizon
+/// clients that lack them (`mod_transfer`; on unless "false").
+pub const SERVE_MODS: &str = "horizon-serve-mods";
+/// What a client that asks for them anyway is told.
+pub const MODS_NOT_SERVED: &str = "this server does not share its mods' files";
+/// Why a connection that came for mods ends, in the server's log.
+pub const MODS_SENT: &str = "it came for the server's mods";
 /// The server.properties key (server.toml's `server.accept_older_clients`) that lets 26.2 clients join
 /// (off unless "true").
 pub const ACCEPT_OLDER_CLIENTS: &str = "horizon-accept-older-clients";
@@ -272,6 +279,10 @@ pub struct NetConfig {
     /// client whose `minecraft:brand` isn't Horizon's is turned away during
     /// configuration. A brand can be spoofed: a gate, not security.
     pub horizon_clients_only: bool,
+    /// `horizon-serve-mods` (on): a Horizon client whose content mods differ may download this
+    /// server's from it (`mod_transfer::serve`), only the mods the game loaded, over the
+    /// connection it joins on.
+    pub serve_mods: bool,
     /// `horizon-accept-older-clients` (off): a client of 26.2 joins too, its packets renumbered
     /// (horizon_protocol::adapter::ClientSession). Off, it is turned away as vanilla turns it away.
     pub accept_older_clients: bool,
@@ -329,6 +340,7 @@ impl NetConfig {
             code_of_conducts: Vec::new(),
             server_links: Vec::new(),
             horizon_clients_only: false,
+            serve_mods: true,
             accept_older_clients: false,
             older_clients_play: false,
             lod_distance: crate::lod_net::DEFAULT_DISTANCE,

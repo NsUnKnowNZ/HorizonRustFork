@@ -522,6 +522,9 @@ pub(super) struct Remote {
     pub quiet_commands: bool,
     /// The server announced it carries mod messages.
     pub mod_net: bool,
+    /// The server's build and mods as it told them, for the screen a refusal
+    /// over mods opens (`mod_sync`).
+    pub(super) server_mods: super::mod_sync::ServerMods,
     /// The synced attachments the server sent, by holder.
     pub attachments: HashMap<Holder, Attachments>,
     /// The server samples far terrain for us, this far at most (`lod_net`).
@@ -1116,6 +1119,7 @@ impl Game<'_> {
             features: vec!["minecraft:vanilla".into()],
             quiet_commands: false,
             mod_net: false,
+            server_mods: Default::default(),
             attachments: HashMap::new(),
             far_terrain: None,
             builtin,
@@ -1343,6 +1347,7 @@ impl Game<'_> {
             features: vec!["minecraft:vanilla".into()],
             quiet_commands: false,
             mod_net: false,
+            server_mods: Default::default(),
             attachments: HashMap::new(),
             far_terrain: None,
             builtin,
@@ -2271,6 +2276,22 @@ impl Game<'_> {
                         remote.mod_net = true;
                     }
                 }
+                Event::ServerBuild(build) => {
+                    if let Some(remote) = &mut self.remote {
+                        remote.server_mods.build = Some(build);
+                    }
+                }
+                // A reconfiguration names them again: the last list stands.
+                Event::ServerMods(mods) => {
+                    if let Some(remote) = &mut self.remote {
+                        remote.server_mods.mods = Some(mods);
+                    }
+                }
+                Event::ModFilesOffer(max_total) => {
+                    if let Some(remote) = &mut self.remote {
+                        remote.server_mods.offer = Some(max_total);
+                    }
+                }
                 Event::FarTerrain(offer) => {
                     if let Some(remote) = &mut self.remote {
                         remote.far_terrain = Some(offer);
@@ -2378,8 +2399,15 @@ impl Game<'_> {
                         self.connect_server_with_cookies(&address, &name, Some(cookies))?;
                         return Ok(());
                     }
+                    // Turned away over its mods: the screen that lists the
+                    // differences, built while the connection still holds
+                    // what the server said, takes the Disconnected one's place.
+                    let mismatch = self.mod_mismatch(&reason, key.as_deref());
                     let retry = self.reconnect_after(&reason, key.as_deref(), from_server);
                     self.leave_server(Some(reason))?;
+                    if let Some(mismatch) = mismatch {
+                        self.show_mod_mismatch(mismatch);
+                    }
                     self.offer_reconnect(retry);
                     return Ok(());
                 }
@@ -11437,7 +11465,7 @@ pub(super) fn item_has_use(info: &horizon_client::items::ItemInfo) -> bool {
 
 /// The view distance a client asks for: its render distance, which Horizon
 /// lets go past vanilla's 32 (a vanilla server still caps it at its own).
-fn client_view_distance(render_distance: i32) -> i8 {
+pub(super) fn client_view_distance(render_distance: i32) -> i8 {
     render_distance.clamp(2, i32::from(i8::MAX)) as i8
 }
 

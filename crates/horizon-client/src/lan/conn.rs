@@ -1079,7 +1079,7 @@ fn serve_login(
             );
         }
     };
-    let result = login_and_configure(&mut c, shared, uuid, &name, properties);
+    let result = login_and_configure(&mut c, shared, uuid, &name, properties, address);
     match result {
         Ok(Some(parts)) => {
             play(c, shared, parts, address, counted, expected.is_some());
@@ -1156,6 +1156,7 @@ fn login_and_configure(
     uuid: u128,
     name: &str,
     properties: Vec<login::Property>,
+    address: std::net::SocketAddr,
 ) -> Result<Option<Parts>, String> {
     let e = |e: horizon_protocol::Error| e.to_string();
     // ServerLoginPacketListenerImpl: memory connections are not compressed.
@@ -1306,6 +1307,35 @@ fn login_and_configure(
                 data: Vec::new(),
             }),
         )?;
+        // And which build it is (horizon_protocol::build_id): a client turned
+        // away over its mods shows it beside its own.
+        if let Some(build) = horizon_protocol::build_id::local() {
+            send(
+                c,
+                cfg::Clientbound::CustomPayload(cfg::CustomPayload {
+                    channel: horizon_protocol::build_id::CHANNEL.into(),
+                    data: build.encode(),
+                }),
+            )?;
+        }
+    }
+    // And that it sends its content mods' files to a client that lacks them
+    // (horizon_protocol::mod_files; `horizon-serve-mods`).
+    let serves_mods = brand == "horizon"
+        && shared.config.serve_mods
+        && !c.is_memory()
+        && crate::mod_transfer::serves_any();
+    if serves_mods {
+        send(
+            c,
+            cfg::Clientbound::CustomPayload(cfg::CustomPayload {
+                channel: horizon_protocol::mod_files::CHANNEL.into(),
+                data: horizon_protocol::mod_files::Clientbound::Offer {
+                    max_total: horizon_protocol::mod_files::MAX_REQUEST,
+                }
+                .encode(),
+            }),
+        )?;
     }
     // And how far it samples far terrain for it (crate::lod_net).
     if brand == "horizon" && shared.config.lod_distance > 0 {
@@ -1342,6 +1372,40 @@ fn login_and_configure(
                     if p.channel == horizon_protocol::mod_list::CHANNEL =>
                 {
                     client_mods = horizon_protocol::mod_list::decode(&p.data).unwrap_or_default();
+                }
+                // A client whose mods differ asks for this server's instead of
+                // naming its own: it is sent them and the connection ends
+                // here, never reaching play. The login's checks (the
+                // whitelist, bans, a full server) have all run by now.
+                cfg::Serverbound::CustomPayload(p)
+                    if p.channel == horizon_protocol::mod_files::CHANNEL =>
+                {
+                    use horizon_protocol::mod_files::Serverbound as Asked;
+                    let Ok(Asked::Request { ids }) = Asked::decode(&p.data) else {
+                        continue;
+                    };
+                    let served = if serves_mods {
+                        crate::mod_transfer::serve(c, Some(address.ip()), &ids)
+                    } else {
+                        crate::mod_transfer::refuse_all(c, &ids, super::MODS_NOT_SERVED)
+                    }?;
+                    let text = format!(
+                        "sent {} mod(s), {} bytes; refused {}{}",
+                        served.sent.len(),
+                        served.bytes,
+                        served.refused.len(),
+                        if served.cancelled { "; cancelled" } else { "" }
+                    );
+                    if let Some(log) = &shared.config.log {
+                        let line = format!("{name} asked for mods: {text}");
+                        (log.write)("Server thread", "INFO", &line);
+                    }
+                    lost(
+                        shared,
+                        &format!("{name} ({})", uuid_string(uuid)),
+                        super::MODS_SENT,
+                    );
+                    return Ok(None);
                 }
                 cfg::Serverbound::Pong(p) if p.id == 1 => break,
                 cfg::Serverbound::ClientInformation(i) => info = i,

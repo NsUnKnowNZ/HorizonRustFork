@@ -113,6 +113,37 @@ with no `side` line is `client`, so a content mod meant for both halves must say
 ignores it. A mod run from a folder (`--dev-mod`) has no file hash and matches by version. Native mods are not in the
 list yet: their manifest has no side.
 
+A Horizon client turned away this way opens a screen in *Connection Lost*'s place: **Your mods don't match this
+server's**. It lists the mods under *Missing*, *Different version or file* and *Not on this server*, and shows both
+builds, the server's and the player's own, in green when they are the same game:
+`0.1.0 (rev e42afee, 53 native mods, build 1a2b3c4d)` is the release, the source revision (a `+` after it marks
+changes the revision does not name), how many native mods are built in, and the start of a fingerprint of the source
+and the native mods' code as horizon-mixins applied them. Native mods are compiled into the game, so they cannot be
+downloaded: when the builds differ the screen says so and names the native mods that differ, and both players need
+the same build. The server tells its build on channel `horizon:build` (`horizon_protocol::build_id`). It is told,
+not proven: the content registry check is still what decides a join, and a join it refuses ("Content registry
+mismatch") opens the same screen.
+
+**Download and restart** gets the missing and differing content mods from the server being joined, over a second
+connection to it that logs in as the same player and never reaches the world (`horizon_protocol::mod_files`, channel
+`horizon:mod_files`; `mod_transfer.rs`). Each mod arrives as one `.hmod` in `horizon-mods/.downloads/` and is
+installed only if it passes what a mod on disk passes: the id and version the server named, `side = "both"`, content
+the game accepts, and no code. A copy of the mod the player already had, folder or file, is moved to
+`horizon-mods/.replaced/<id>-<version>-<time>/` and never deleted; a copy the running game holds open stays, and the
+download is installed when the game starts next. The game then turns the new mods on, turns the mods the server
+lacks off when *Turn off extra mods* is ON, and starts again with `--server ADDRESS`, as the same player name. A
+signed-in account does not survive that restart (the launcher's session file is read once): for an online-mode
+server, start the game from the launcher again and join. When the lists and the builds match but the server still
+refuses (a folder mod edited on one side keeps its version), the button downloads every shared mod again. A join
+through the friends relay is not offered the download: its files would all cross the relay.
+
+The server only ever sends the mods it loaded itself with `side = "both"`: a requested id is looked up in that list
+and nowhere else. A `.hmod` is sent as it is, a mod folder is packed once into `.horizon-cache/served-mods/` (its
+content files and top-level `LICENSE`, `NOTICE` and `COPYING` files), mods with code are refused, a mod is 512 MiB
+at most and a request 1 GiB, two transfers run at a time and an address may ask again after 5 seconds. A server's
+owner turns it off with `horizon-serve-mods = false` ([hosting](hosting.md)); the screen then only lists the
+differences.
+
 A block names its template and what differs from it:
 
 ```json

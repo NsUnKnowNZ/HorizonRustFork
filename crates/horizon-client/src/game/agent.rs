@@ -676,6 +676,9 @@ impl Game<'_> {
             }) => {
                 json!({ "mode": "multiplayer", "disconnected": reason })
             }
+            Mode::Multiplayer(horizon_client::multiplayer::Screen::ModMismatch(m)) => {
+                json!({ "mode": "multiplayer", "disconnected": m.reason, "mod_mismatch": m.report() })
+            }
             Mode::Multiplayer(_) => json!({ "mode": "multiplayer" }),
             Mode::Realms(_) => json!({ "mode": "realms" }),
             Mode::MultiplayerWarning { check } => {

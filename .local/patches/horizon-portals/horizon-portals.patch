@@ -11,7 +11,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
  }
  #[repr(C)]
  #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-@@ -496,6 +499,30 @@
+@@ -496,6 +499,36 @@
  }
  /// The water mirror's targets: the world as a camera mirrored about the water plane sees
  /// it, at half the world's resolution (the material stage's `reflection`).
@@ -32,6 +32,12 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
 +    /// drawn only when both levels have one.
 +    pub clear: Option<[f32; 3]>,
 +    pub sky: bool,
++    /// The side of the portal's plane the camera came into its blocks from: 1 from before
++    /// it along the axis, -1 from after it, 0 while outside them. Once through the plane the
++    /// whole view ahead is the other side, until the camera is taken there or walks out.
++    pub entered: f32,
++    /// Nothing of the other side is here to draw: the surface shows `clear` alone.
++    pub blank: bool,
 +}
 +struct PortalTarget {
 +    size: [u32; 2],
@@ -42,7 +48,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
  struct MirrorTarget {
      size: [u32; 2],
      color: wgpu::TextureView,
-@@ -1244,6 +1271,17 @@
+@@ -1249,6 +1282,22 @@
      mirror_globals: wgpu::Buffer,
      mirror_group: wgpu::BindGroup,
      mirror: Option<MirrorTarget>,
@@ -57,10 +63,15 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
 +    portal_sampler: wgpu::Sampler,
 +    portal_quad: wgpu::Buffer,
 +    portal_target: Option<PortalTarget>,
++    /// Horizon portals: the view drawn over a shader pack's finished picture, where the
++    /// pack's depth shows nothing nearer (`PORTAL_OVER`): its pipeline, bindings and uniforms.
++    portal_over: wgpu::RenderPipeline,
++    portal_over_layout: wgpu::BindGroupLayout,
++    portal_over_uniform: wgpu::Buffer,
      entity_pipeline: wgpu::RenderPipeline,
      static_entity_pipeline: wgpu::RenderPipeline,
      static_entity_group: wgpu::BindGroup,
-@@ -3114,10 +3152,91 @@
+@@ -3119,10 +3168,168 @@
              true,
              None,
          );
@@ -134,6 +145,83 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
 +            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
 +            mapped_at_creation: false,
 +        });
++        // Horizon portals: with a shader pack the view goes over the pack's picture.
++        let portal_over_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
++            label: Some("Portal view over a shader pack"),
++            source: wgpu::ShaderSource::Wgsl(PORTAL_OVER.into()),
++        });
++        let portal_over_texture = |binding, filterable| wgpu::BindGroupLayoutEntry {
++            binding,
++            visibility: wgpu::ShaderStages::FRAGMENT,
++            ty: wgpu::BindingType::Texture {
++                sample_type: wgpu::TextureSampleType::Float { filterable },
++                view_dimension: wgpu::TextureViewDimension::D2,
++                multisampled: false,
++            },
++            count: None,
++        };
++        let portal_over_layout =
++            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
++                label: Some("Portal view over a shader pack"),
++                entries: &[
++                    wgpu::BindGroupLayoutEntry {
++                        binding: 0,
++                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
++                        ty: wgpu::BindingType::Buffer {
++                            ty: wgpu::BufferBindingType::Uniform,
++                            has_dynamic_offset: false,
++                            min_binding_size: None,
++                        },
++                        count: None,
++                    },
++                    portal_over_texture(1, true),
++                    wgpu::BindGroupLayoutEntry {
++                        binding: 2,
++                        visibility: wgpu::ShaderStages::FRAGMENT,
++                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
++                        count: None,
++                    },
++                    // A depth view through an unfilterable float binding.
++                    portal_over_texture(3, false),
++                ],
++            });
++        let portal_over_pipeline_layout =
++            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
++                label: Some("Portal view over a shader pack"),
++                bind_group_layouts: &[Some(&portal_over_layout)],
++                ..Default::default()
++            });
++        let portal_over = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
++            label: Some("Portal view over a shader pack"),
++            layout: Some(&portal_over_pipeline_layout),
++            vertex: wgpu::VertexState {
++                module: &portal_over_shader,
++                entry_point: Some("vs_over"),
++                compilation_options: Default::default(),
++                buffers: &portal_quad_buffers,
++            },
++            primitive: Default::default(),
++            depth_stencil: None,
++            multisample: Default::default(),
++            fragment: Some(wgpu::FragmentState {
++                module: &portal_over_shader,
++                entry_point: Some("fs_over"),
++                compilation_options: Default::default(),
++                targets: &[Some(wgpu::ColorTargetState {
++                    format: frame_format,
++                    blend: None,
++                    write_mask: wgpu::ColorWrites::ALL,
++                })],
++            }),
++            multiview_mask: None,
++            cache: None,
++        });
++        let portal_over_uniform = device.create_buffer(&wgpu::BufferDescriptor {
++            label: Some("Portal view over a shader pack"),
++            size: 80,
++            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
++            mapped_at_creation: false,
++        });
          let translucent = pipeline(
              "Terrain translucent",
              "vs_terrain",
@@ -152,7 +240,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              &terrain_buffers,
              tri,
              Some(wgpu::Face::Back),
-@@ -3332,6 +3451,12 @@
+@@ -3411,6 +3618,12 @@
              usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
              mapped_at_creation: false,
          });
@@ -165,7 +253,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          let prepared = match prepared {
              Some(prepared) => prepared.resplit(layers, split),
              None => PreparedTextures::with_split(
-@@ -3539,6 +3664,17 @@
+@@ -3618,6 +3831,17 @@
              "Water mirror resources",
              &bindings,
              &mirror_globals,
@@ -183,7 +271,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              &sprite_views,
              &sprite_sampler,
              &lightmap_view,
-@@ -4692,7 +4828,7 @@
+@@ -4771,7 +4995,7 @@
          // With flat draws' page groups the per-section solid draws read their vertices from
          // the page too (`Flat::page_group`), in either layout of the solid quads
          // (`mesher::packed`): only the origins stay a vertex buffer, at slot 1.
@@ -192,7 +280,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              Some(f) => {
                  let pulled_layout = kept.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                      label: Some("Horizon terrain layout (pulled)"),
-@@ -4719,9 +4855,21 @@
+@@ -4798,9 +5022,21 @@
                          true,
                          None,
                      ),
@@ -215,7 +303,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          };
          // The solid quads in the compact layout, while no shader pack reads the arena
          // (`follow_packed_layout`).
-@@ -4911,6 +5059,16 @@
+@@ -4993,6 +5229,19 @@
              mirror_globals,
              mirror_group,
              mirror: None,
@@ -229,10 +317,13 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
 +            portal_sampler,
 +            portal_quad,
 +            portal_target: None,
++            portal_over,
++            portal_over_layout,
++            portal_over_uniform,
              entity_pipeline,
              static_entity_pipeline,
              hdr_mark_pipeline,
-@@ -5661,6 +5819,15 @@
+@@ -5743,6 +5992,15 @@
      ) -> Option<bool> {
          self.occlusion.visible_for_camera(key, camera_section)
      }
@@ -248,7 +339,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
      pub fn upload(&mut self, key: SectionKey, mesh: &SectionMesh) {
          if let Some(copies) = &mut self.capture_copies {
              copies.section(key, mesh);
-@@ -8246,6 +8413,7 @@
+@@ -8328,6 +8586,7 @@
                  if self.hdr.is_some() { 1.0 } else { 0.0 },
                  0.0,
              ],
@@ -256,26 +347,24 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          };
          self.uploads
              .buffer(&mut encoder, &self.globals, 0, bytemuck::bytes_of(&globals));
-@@ -8321,6 +8489,32 @@
+@@ -8403,6 +8662,30 @@
                  plane - frame.camera.y as f32,
              )),
          });
 +        // Horizon portals: the portal view draws the same lists, taking in what its camera
-+        // (moved through the portal) sees. Not with the mirror, a shader pack or the title.
-+        let portal = self.portal_view.filter(|_| {
-+            !frame.title
-+                && mirror_plane.is_none()
-+                && self.pack_post.is_none()
-+                && self.native.is_none()
-+        });
++        // (moved through the portal) sees. Not with the mirror, one of Horizon's own packs or
++        // the title. With a `shaders/` pack it is drawn as without one, and goes over the
++        // pack's picture (`portal_over`).
++        let portal = self
++            .portal_view
++            .filter(|_| !frame.title && mirror_plane.is_none() && self.native.is_none());
 +        if self.portal_view.is_some() && portal.is_none() {
 +            static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 +            if !SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
 +                log::info!(
-+                    "Horizon portals: no portal view this frame (title {}, mirror {}, shader pack {}, native pack {})",
++                    "Horizon portals: no portal view this frame (title {}, mirror {}, native pack {})",
 +                    frame.title,
 +                    mirror_plane.is_some(),
-+                    self.pack_post.is_some(),
 +                    self.native.is_some()
 +                );
 +            }
@@ -289,7 +378,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          // Solid quads facing away from the eye are left out: the bob moves
          // the eye off `camera`, so it is found from the projection. With the mirror, those
          // facing its eye are kept too: it sits straight below, at this camera-relative y.
-@@ -8384,6 +8578,7 @@
+@@ -8466,6 +8749,7 @@
              .as_ref()
              .is_some_and(|n| n.displacement.is_some());
          let mut gpu_frame = self.gpu_culling.is_some()
@@ -297,13 +386,15 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              && !frame.title
              && !pack_terrain
              && shadow_view.is_none()
-@@ -8529,6 +8724,20 @@
+@@ -8611,6 +8895,22 @@
                  height(b).total_cmp(&height(a))
              });
          }
 +        // Horizon portals: what the camera through the portal sees, its origins from there.
 +        let mut portal_visible = Vec::new();
-+        if let (Some(pv), Some(pf)) = (portal, &portal_frustum) {
++        if let (Some(pv), Some(pf)) = (portal, &portal_frustum)
++            && !pv.blank
++        {
 +            crate::spans::time("portal visibility", || {
 +                self.sections.visible(
 +                    camera + pv.offset,
@@ -318,7 +409,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          // A `shaders/` pack that draws the terrain, or its shadow, sees it as Iris does.
          let shaders_pack = !frame.title
              && self
-@@ -8583,7 +8792,7 @@
+@@ -8665,7 +8965,7 @@
              self.animate(&mut encoder, frame.ticks, !frame.title && !gpu_frame);
          }
          let listed = visible.len() + visible_lods.len();
@@ -327,7 +418,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          if instances as u64 > self.instance_capacity {
              self.instance_capacity = (instances as u64).next_power_of_two();
              self.instances = self.device.create_buffer(&wgpu::BufferDescriptor {
-@@ -8628,6 +8837,11 @@
+@@ -8710,6 +9010,11 @@
                      shadow_visible
                          .iter()
                          .map(|v| section_instance(v.origin, 0, visibility(v.key))),
@@ -339,7 +430,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
                  ),
          );
          if !self.origins.is_empty() {
-@@ -8682,6 +8896,7 @@
+@@ -8764,6 +9069,7 @@
                      && self.multi_draw
                      // Occlusion is found from the camera, not the mirror's eye.
                      && mirror.is_none()
@@ -347,7 +438,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
                      // It tests the CPU's lists, which leave out GPU culling's sections.
                      && !gpu_frame
                      && visible.len() >= c.min_sections
-@@ -9054,6 +9269,56 @@
+@@ -9136,6 +9442,56 @@
              (shadow_first + shadow_solid) as usize,
          );
          let shadow_translucent = self.draws.len() as u32 - shadow_first - shadow_solid;
@@ -404,7 +495,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
          laps.lap("r_nearby");
          // Metal replays a multi-draw as one draw call per entry.
          let mut section_draw_calls = if self.multi_draw && self.info.backend != wgpu::Backend::Metal
-@@ -9652,6 +9917,7 @@
+@@ -9734,6 +10090,7 @@
          let flat_frame = match &mut self.flat {
              Some(flat)
                  if self.flat_on
@@ -412,7 +503,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
                      // They copy the CPU's lists alone (GPU culling is never offered
                      // where vanilla frames draw flat).
                      && !gpu_frame
-@@ -10161,6 +10427,179 @@
+@@ -10243,6 +10600,196 @@
                  }
                  drop(pass);
                  reflection = Some(mirror.color.clone());
@@ -494,10 +585,27 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
 +                // At the face of the portal's blocks toward the camera: the frame's depth
 +                // before it, the other side (cut past its own portal's blocks) after it.
 +                // From inside the portal's own blocks, at their far face.
-+                let mid = if centre.abs() < 0.5 {
-+                    centre + 0.499 * centre.signum()
++                // Through the plane on the way out of the blocks (`PortalView::entered`):
++                // right before the camera, across everything ahead.
++                let from: f64 = if pv.entered != 0.0 {
++                    f64::from(pv.entered)
++                } else if centre >= 0.0 {
++                    1.0
 +                } else {
-+                    centre - 0.499 * centre.signum()
++                    -1.0
++                };
++                let past = from * centre < 0.0;
++                let mid = if past {
++                    from * 0.06
++                } else if centre.abs() < 0.5 {
++                    centre + 0.499 * from
++                } else {
++                    centre - 0.499 * from
++                };
++                let (lo, hi) = if past {
++                    (DVec3::splat(-128.0), DVec3::splat(128.0))
++                } else {
++                    (lo, hi)
 +                };
 +                let (u, v) = match a {
 +                    0 => (1, 2),
@@ -523,7 +631,7 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
 +                    .buffer(&mut encoder, &self.portal_quad, 0, bytemuck::cast_slice(&quad));
 +                // The far portal's plane, facing away from the camera through it, in that
 +                // camera's coordinates: this side's plane turned with the view.
-+                let sign: f64 = if centre >= 0.0 { 1.0 } else { -1.0 };
++                let sign: f64 = from;
 +                let mut normal = Vec3::ZERO;
 +                normal[a] = sign as f32;
 +                let normal = Mat4::from_rotation_y(pv.yaw).transform_vector3(normal);
@@ -592,12 +700,14 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              }
          }
          if let Some(native) = &mut self.native {
-@@ -11254,6 +11693,16 @@
+@@ -11338,6 +11885,18 @@
                      0..1,
                  );
              }
-+            // Horizon portals: the portal's surface shows its view, in front of the purple.
++            // Horizon portals: the portal's surface shows its view, in front of the purple
++            // (a shader pack's picture takes it afterwards, `portal_over`).
 +            if portal_drawn.is_some()
++                && !pack_post
 +                && let Some(target) = &self.portal_target
 +            {
 +                pass.set_pipeline(&self.portal_composite);
@@ -609,6 +719,133 @@ diff --git a/crates/horizon-client-render/src/gfx.rs b/crates/horizon-client-ren
              // Native mods' primitives: after the entities and the rest of the world, into its
              // targets (its resolution, reversed depth and TAA), before the hand.
              if world_primitives {
+@@ -11469,6 +12028,67 @@
+                 &pages,
+                 &mut terrain,
+             );
++            // Horizon portals: the portal's view over the pack's picture, where the pack's
++            // depth (else the world's) has nothing nearer than the portal's surface. The
++            // depth from before translucent terrain where the pack keeps it: the portal's
++            // own purple is not in it, the hand and whatever stands in front are.
++            if portal_drawn.is_some()
++                && let Some(target) = &self.portal_target
++            {
++                let (nearest, gl) = match post.opaque_depth().or(post.depth()) {
++                    Some(d) => (d.clone(), 1.0f32),
++                    None => (depth.clone(), 0.0),
++                };
++                let mut uniform = [0.0f32; 20];
++                uniform[..16].copy_from_slice(&view_proj.to_cols_array());
++                uniform[16] = gl;
++                self.uploads.buffer(
++                    &mut encoder,
++                    &self.portal_over_uniform,
++                    0,
++                    bytemuck::cast_slice(&uniform),
++                );
++                let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
++                    label: Some("Portal view over a shader pack"),
++                    layout: &self.portal_over_layout,
++                    entries: &[
++                        wgpu::BindGroupEntry {
++                            binding: 0,
++                            resource: self.portal_over_uniform.as_entire_binding(),
++                        },
++                        wgpu::BindGroupEntry {
++                            binding: 1,
++                            resource: wgpu::BindingResource::TextureView(&target.color),
++                        },
++                        wgpu::BindGroupEntry {
++                            binding: 2,
++                            resource: wgpu::BindingResource::Sampler(&self.portal_sampler),
++                        },
++                        wgpu::BindGroupEntry {
++                            binding: 3,
++                            resource: wgpu::BindingResource::TextureView(&nearest),
++                        },
++                    ],
++                });
++                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
++                    label: Some("Portal view over a shader pack"),
++                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
++                        view: &view_target,
++                        resolve_target: None,
++                        depth_slice: None,
++                        ops: wgpu::Operations {
++                            load: wgpu::LoadOp::Load,
++                            store: wgpu::StoreOp::Store,
++                        },
++                    })],
++                    depth_stencil_attachment: None,
++                    ..Default::default()
++                });
++                pass.set_pipeline(&self.portal_over);
++                pass.set_bind_group(0, &group, &[]);
++                pass.set_vertex_buffer(0, self.portal_quad.slice(..));
++                pass.draw(0..6, 0..1);
++            }
+             // The debug lines (chunk borders, hitboxes, gizmos) over the pack's picture, those
+             // drawn with depth where the pack's depth (else the world's) has nothing nearer.
+             if debug_depth + debug_top > 0 {
+@@ -12821,6 +13441,43 @@
+     return in.color;
+ }
+ ";
++/// Horizon portals: the portal's surface over a shader pack's finished picture. The view
++/// (`PortalTarget`) is read at the same place on the screen, and the surface is left out where
++/// the depth has something nearer: a pack's `depthtex0` (GL's window depth, rows upside
++/// down; `params.x` 1), else the world's reverse-Z depth.
++const PORTAL_OVER: &str = r"
++struct Over {
++    view_proj: mat4x4<f32>,
++    params: vec4<f32>,
++}
++@group(0) @binding(0) var<uniform> over: Over;
++@group(0) @binding(1) var view_texture: texture_2d<f32>;
++@group(0) @binding(2) var view_sampler: sampler;
++@group(0) @binding(3) var nearest_depth: texture_2d<f32>;
++struct OverOut {
++    @builtin(position) clip: vec4<f32>,
++    @location(0) at: vec4<f32>,
++}
++@vertex fn vs_over(@location(0) pos: vec3<f32>) -> OverOut {
++    var o: OverOut;
++    o.clip = over.view_proj * vec4(pos, 1.0);
++    o.at = o.clip;
++    return o;
++}
++@fragment fn fs_over(in: OverOut) -> @location(0) vec4<f32> {
++    let ndc = in.at.xyz / in.at.w;
++    let uv = ndc.xy * vec2(0.5, -0.5) + vec2(0.5, 0.5);
++    let size = vec2<f32>(textureDimensions(nearest_depth));
++    var place = uv;
++    if over.params.x > 0.5 { place.y = 1.0 - place.y; }
++    let texel = vec2<i32>(clamp(place * size, vec2(0.0), size - vec2(1.0)));
++    var nearest = textureLoad(nearest_depth, texel, 0).r;
++    if over.params.x > 0.5 { nearest = 1.0 - nearest; }
++    // Reverse-Z: larger is nearer.
++    if nearest > ndc.z * 1.0005 + 1.0e-7 { discard; }
++    return vec4(textureSampleLevel(view_texture, view_sampler, uv, 0.0).rgb, 1.0);
++}
++";
+ 
+ /// Counts and offsets `Renderer::draw_overlay` draws from this frame's buffers.
+ struct Overlay {
+diff --git a/crates/horizon-client-render/src/mesher.rs b/crates/horizon-client-render/src/mesher.rs
+--- a/crates/horizon-client-render/src/mesher.rs
++++ b/crates/horizon-client-render/src/mesher.rs
+@@ -834,7 +834,10 @@
+                 tier: hdr_tier(name, s.emission),
+                 emissive,
+                 fluid: FluidState::from_block(state)?,
+-                model: s.render_shape == RenderShape::Model,
++                // Horizon portals: a portal's blocks draw nothing of their own; their surface
++                // shows the other side (`Renderer::set_portal_view`).
++                model: s.render_shape == RenderShape::Model
++                    && !matches!(name, "nether_portal" | "horizonportals:horizontal_portal"),
+                 block_entity: s.block_entity,
+                 tints,
+                 tint_count,
 diff --git a/crates/horizon-client-render/src/streaming.rs b/crates/horizon-client-render/src/streaming.rs
 --- a/crates/horizon-client-render/src/streaming.rs
 +++ b/crates/horizon-client-render/src/streaming.rs
@@ -749,7 +986,7 @@ diff --git a/crates/horizon-client/src/animate_tick.rs b/crates/horizon-client/s
 diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.rs
 --- a/crates/horizon-client/src/game.rs
 +++ b/crates/horizon-client/src/game.rs
-@@ -447,6 +447,7 @@
+@@ -450,6 +450,7 @@
  mod trident;
  mod tutorial;
  mod tweaks;
@@ -757,15 +994,16 @@ diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.
  mod armor_hider;
  mod crafting_tweaks;
  mod ui_control;
-@@ -14405,6 +14406,7 @@
+@@ -14437,6 +14438,8 @@
          let glowing = std::mem::take(self.glowing_vertices.get_mut());
          let shadow_only = std::mem::take(self.shadow_only_vertices.get_mut());
          let skin = std::mem::take(self.skin_frame.get_mut());
 +        let portal_view = self.portal_view_for_frame(camera);
++        let portal_hold = self.portal_arrival_hold();
          let frame = Frame {
              weather: &weather,
              weather_time: horizon_client::weather::Time::new(self.world.game_time, alpha as f32),
-@@ -14571,6 +14573,7 @@
+@@ -14603,13 +14606,20 @@
          let result = match self.renderer.as_mut() {
              Some(renderer) => {
                  renderer.set_pass_timing(debug_passes || self.gpu_passes);
@@ -773,10 +1011,24 @@ diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.
                  // `gpu_passes` is a measurement: it takes every sample it can.
                  renderer.set_pass_timing_gap(if self.gpu_passes {
                      Duration::ZERO
+                 } else {
+                     horizon_client::debug_overlay::GPU_TIMING_GAP
+                 });
+-                horizon_client::spans::time("renderer", || renderer.render(&frame))
++                // Horizon portals: the last frame stays up for the moment the level behind
++                // a portal takes to draw around the player who walked into it.
++                if portal_hold {
++                    Ok(false)
++                } else {
++                    horizon_client::spans::time("renderer", || renderer.render(&frame))
++                }
+             }
+             None => Err("renderer".into()),
+         };
 diff --git a/crates/horizon-client/src/game/lan.rs b/crates/horizon-client/src/game/lan.rs
 --- a/crates/horizon-client/src/game/lan.rs
 +++ b/crates/horizon-client/src/game/lan.rs
-@@ -2857,6 +2857,7 @@
+@@ -2858,6 +2858,7 @@
          self.flush_native_net(&mut host);
          self.flush_native_player_fx(&mut host);
          self.flush_far_terrain(&mut host);
@@ -819,10 +1071,24 @@ diff --git a/crates/horizon-client/src/game/nether_portal.rs b/crates/horizon-cl
          let border = if dim == self.dim {
              &self.border
          } else {
-@@ -289,6 +289,10 @@
+@@ -289,6 +289,24 @@
              max_x,
              max_z,
          }
++    }
++    /// Horizon portals: how wide and how tall the portal of the block at `entry` is.
++    pub(super) fn portal_size(&self, entry: BlockPos) -> [i32; 2] {
++        let state = self.world.block(entry.x, entry.y, entry.z);
++        let x_axis = self.res.behaviours().portal_axis(state).unwrap_or(true);
++        let area = largest_rectangle_around(
++            entry,
++            if x_axis { Axis::X } else { Axis::Z },
++            64,
++            Axis::Y,
++            64,
++            |p| self.world.block(p.x, p.y, p.z) == state,
++        );
++        [area.axis1_size, area.axis2_size]
 +    }
 +    /// NetherPortalFix: the corner of the portal the one at `corner` is linked to.
 +    pub(super) fn portal_link(&self, nether: bool, corner: BlockPos) -> Option<BlockPos> {
@@ -830,7 +1096,7 @@ diff --git a/crates/horizon-client/src/game/nether_portal.rs b/crates/horizon-cl
      }
      /// `ServerLevel.isAllowedToEnterPortal`.
      pub(super) fn may_enter(&self, target: Dim) -> bool {
-@@ -318,9 +322,9 @@
+@@ -318,9 +336,9 @@
                  let area = largest_rectangle_around(
                      entry,
                      if x_axis { Axis::X } else { Axis::Z },
@@ -842,7 +1108,7 @@ diff --git a/crates/horizon-client/src/game/nether_portal.rs b/crates/horizon-cl
                      |p| self.world.block(p.x, p.y, p.z) == state,
                  );
                  entry_corner = Some(area.min_corner);
-@@ -483,9 +487,9 @@
+@@ -483,9 +501,9 @@
          let rectangle = largest_rectangle_around(
              found,
              if x_axis { Axis::X } else { Axis::Z },
@@ -854,11 +1120,59 @@ diff --git a/crates/horizon-client/src/game/nether_portal.rs b/crates/horizon-cl
              |p| self.world.block(p.x, p.y, p.z) == state,
          );
          Some((found, rectangle))
+@@ -559,6 +577,47 @@
+             b.collision_shape(self.world.block(p.x, p.y, p.z))
+                 .map(|s| s.moved(Vec3::new(f64::from(p.x), f64::from(p.y), f64::from(p.z))))
+         });
++        (at, rotation)
++    }
++    /// Horizon portals: [`Self::arrival`] for a player who saw the exit through its portal,
++    /// laid out as that view is (`portal_view`): between portals facing different ways the
++    /// view is a quarter turn, so what was ahead of the plane stays ahead of it, and out
++    /// of a portal along z into one along x the turn is to the left.
++    /// The view keeps the two portals' bottom middles together, so the player comes out as
++    /// far from the exit's middle and bottom as it was from those of the entry (a portal of
++    /// `entry_size`), where vanilla keeps its share of the way across and up.
++    pub(super) fn arrival_through(
++        &self,
++        plan: &Plan,
++        exit: FoundRectangle,
++        entry_size: [i32; 2],
++    ) -> (Vec3, f32) {
++        let b = self.res.behaviours();
++        let corner = exit.min_corner;
++        let exit_x_axis = b
++            .portal_axis(self.world.block(corner.x, corner.y, corner.z))
++            .unwrap_or(true);
++        let mut plan = *plan;
++        if plan.entry_x_axis != exit_x_axis {
++            plan.offset.z = -plan.offset.z;
++        }
++        let (width, height) = (f64::from(plan.width), f64::from(plan.height));
++        let across = (f64::from(entry_size[0]) - width).max(0.0);
++        let up = (f64::from(entry_size[1]) - height).max(0.0);
++        let exit_across = f64::from(exit.axis1_size) - width;
++        let exit_up = f64::from(exit.axis2_size) - height;
++        if exit_across > 0.0 {
++            plan.offset.x = (0.5 + (plan.offset.x - 0.5) * across / exit_across).clamp(0.0, 1.0);
++        }
++        if exit_up > 0.0 {
++            plan.offset.y = (plan.offset.y * up / exit_up).clamp(0.0, 1.0);
++        }
++        let (at, rotation) = self.arrival(&plan, exit);
++        let rotation = if !plan.entry_x_axis && exit_x_axis {
++            -rotation
++        } else {
++            rotation
++        };
+         (at, rotation)
+     }
+ 
 diff --git a/crates/horizon-client/src/game/portal_view.rs b/crates/horizon-client/src/game/portal_view.rs
 new file mode 100644
 --- /dev/null
 +++ b/crates/horizon-client/src/game/portal_view.rs
-@@ -0,0 +1,782 @@
+@@ -0,0 +1,959 @@
 +//! Horizon portals, stage 3: looking into a lit Nether portal shows the linked dimension, live.
 +//!
 +//! - The client asks (`horizon:portal_view`, Horizon servers only) for the other side of the
@@ -912,6 +1226,8 @@ new file mode 100644
 +const PER_TICK: usize = 49;
 +const OWNER: &str = "horizon:portal_view";
 +
++/// How long the last frame before a portal may stay up while the level behind it draws.
++const HOLD_FOR: Duration = Duration::from_millis(200);
 +const HEADER: u8 = 0;
 +const CHUNK: u8 = 1;
 +const CLEAR: u8 = 2;
@@ -931,6 +1247,64 @@ new file mode 100644
 +        }
 +        s.light = Light::packed(data);
 +    }
++}
++
++/// A level without a sky takes back the sky light `brighten` lent its columns.
++fn darken(chunk: &mut horizon_client::chunk::Chunk) {
++    use horizon_client::chunk::Light;
++    for section in &mut chunk.sections {
++        let s = std::sync::Arc::make_mut(section);
++        let mut data = Box::new([0u8; 4096]);
++        for (i, v) in data.iter_mut().enumerate() {
++            *v = s.light.get(i) & 15;
++        }
++        s.light = Light::packed(data);
++    }
++}
++
++/// Entering `level`: the view is forgotten, and when `level` is the level it showed, its
++/// columns are handed over, at their own places there (none of the level's if it was another).
++pub(super) fn take_other_side(
++    world: &mut World,
++    level: &str,
++) -> Option<Vec<horizon_client::chunk::Chunk>> {
++    LAST.set(None);
++    ASKED.set(None);
++    ENTERED.set(None);
++    let o = OTHER.take().filter(|o| o.dim == level)?;
++    let dark = !DimensionType::vanilla(level).has_skylight;
++    Some(
++        o.chunks
++            .iter()
++            .filter_map(|key| {
++                let chunk = world.chunks.remove(key)?;
++                let mut chunk = std::sync::Arc::try_unwrap(chunk).unwrap_or_else(|c| (*c).clone());
++                chunk.x -= VIRTUAL_X;
++                if dark {
++                    darken(&mut chunk);
++                }
++                Some(chunk)
++            })
++            .collect(),
++    )
++}
++
++/// Sets aside the player a portal's Respawn replaces, for a landing that keeps it.
++pub(super) fn carry(player: Option<horizon_client::motion::PlayerMotion>) {
++    CARRIED.set(player);
++}
++pub(super) fn take_carried() -> Option<horizon_client::motion::PlayerMotion> {
++    CARRIED.take()
++}
++/// The player has just walked through a portal into the level it showed.
++pub(super) fn went_through() {
++    let now = Instant::now();
++    WENT.set(Some(now));
++    HELD.set(Some(now));
++}
++/// Whether it did within the last moments: it walks on while the level's loading ends.
++pub(super) fn walking_through() -> bool {
++    WENT.get().is_some_and(|t| t.elapsed() < Duration::from_secs(2))
 +}
 +
 +/// Whether the chunk column `x` is one of the other side's.
@@ -972,9 +1346,99 @@ new file mode 100644
 +    static LAST: Cell<Option<([i32; 3], Instant, Option<Near>)>> = const { Cell::new(None) };
 +    static ASKED: Cell<Option<([i32; 3], Instant)>> = const { Cell::new(None) };
 +    static OTHER: RefCell<Option<Other>> = const { RefCell::new(None) };
++    /// The player a portal's Respawn set aside (`carry`).
++    static CARRIED: RefCell<Option<horizon_client::motion::PlayerMotion>> =
++        const { RefCell::new(None) };
++    /// When the player last walked through a portal into the level it showed.
++    static WENT: Cell<Option<Instant>> = const { Cell::new(None) };
++    /// The walk through (`WENT`) whose last frame is still held up.
++    static HELD: Cell<Option<Instant>> = const { Cell::new(None) };
++    /// The portal whose blocks the camera is in: its corner, the side of its plane the
++    /// camera came in from, and when the camera went through the plane.
++    static ENTERED: Cell<Option<([i32; 3], f32, Option<Instant>)>> = const { Cell::new(None) };
++}
++
++/// `PortalView::entered` for the camera at `camera` near the portal `near`: the side it came
++/// into the portal's blocks from, kept while it is in them and, once through the plane, for
++/// the moment the server takes to move the player (a player the server leaves where it is
++/// sees its own side again).
++fn entered_side(near: &Near, camera: glam::DVec3) -> f32 {
++    let a = near.normal_axis.min(2);
++    let centre = f64::from(near.min[a] + near.max[a] + 1) / 2.0 - camera[a];
++    let inside = centre.abs() < 0.5;
++    match ENTERED.get().filter(|(corner, ..)| *corner == near.min) {
++        Some((corner, side, crossed)) => {
++            let past = f64::from(side) * centre < 0.0;
++            let crossed = match (past, crossed) {
++                (false, _) => None,
++                (true, None) => Some(Instant::now()),
++                (true, at) => at,
++            };
++            let keep = match crossed {
++                Some(at) => centre.abs() < 2.0 && at.elapsed() < Duration::from_millis(600),
++                None => inside,
++            };
++            if keep {
++                ENTERED.set(Some((corner, side, crossed)));
++                side
++            } else {
++                ENTERED.set(None);
++                0.0
++            }
++        }
++        None if inside => {
++            let side = if centre >= 0.0 { 1.0 } else { -1.0 };
++            ENTERED.set(Some((near.min, side, None)));
++            side
++        }
++        None => {
++            ENTERED.set(None);
++            0.0
++        }
++    }
 +}
 +
 +impl Game<'_> {
++    /// Whether this frame is left undrawn: for a moment after the player walked through a
++    /// portal, until the section it came out in is drawn and those around it are done
++    /// meshing, the last frame (the same place, seen through the portal) stays up.
++    pub(super) fn portal_arrival_hold(&self) -> bool {
++        let Some(went) = WENT.get() else {
++            return false;
++        };
++        if HELD.get() != Some(went) {
++            return false;
++        }
++        let hold = went.elapsed() < HOLD_FOR
++            && self.player.as_ref().is_some_and(|player| {
++                let p = player.position;
++                let (cx, cz) = ((p.x.floor() as i32) >> 4, (p.z.floor() as i32) >> 4);
++                let sy = (p.y.floor() as i32 - self.world.shape.min_y) >> 4;
++                let drawn = self
++                    .renderer
++                    .as_ref()
++                    .is_none_or(|r| r.has_section((cx, sy, cz)));
++                !drawn
++                    || (-1..=1).any(|dy| {
++                        (-1..=1).any(|dz| {
++                            (-1..=1).any(|dx| {
++                                let key = (cx + dx, sy + dy, cz + dz);
++                                self.streaming.is_meshing(key)
++                                    || self.pending_uploads.iter().any(|(s, _)| *s == key)
++                            })
++                        })
++                    })
++            });
++        if !hold {
++            HELD.set(None);
++            log::info!(
++                "Horizon portals: through the portal, drawing again after {} ms",
++                went.elapsed().as_millis()
++            );
++        }
++        hold
++    }
++
 +    /// The nearest portal within reach of `camera` and where it shows, asking the server for
 +    /// its other side while near it.
 +    pub(super) fn portal_view_for_frame(&mut self, camera: glam::DVec3) -> Option<PortalView> {
@@ -1015,9 +1479,32 @@ new file mode 100644
 +                yaw: 0.0,
 +                clear: None,
 +                sky: true,
++                entered: 0.0,
++                blank: false,
 +            });
 +        }
-+        let level = self.remote.as_ref()?.level.clone();
++        let entered = entered_side(&near, camera);
++        let time = self.view_day_time();
++        // A portal's blocks draw nothing of their own (`Mesher`): with nothing of the other
++        // side here (not heard of yet, or a server that shows none), the colour of where a
++        // portal from this level leads.
++        let blank = PortalView {
++            min: near.min,
++            max: near.max,
++            normal_axis: near.normal_axis,
++            offset: glam::DVec3::ZERO,
++            yaw: 0.0,
++            clear: Some(match self.dim {
++                Dim::Nether => self.res.environment().sample(time, None, None).fog_color,
++                _ => [0.2, 0.03, 0.03],
++            }),
++            sky: false,
++            entered,
++            blank: true,
++        };
++        let Some(level) = self.remote.as_ref().map(|r| r.level.clone()) else {
++            return Some(blank);
++        };
 +        self.forget_stale_other(&level);
 +        // At once for a portal not asked about yet, then once a second.
 +        if ASKED
@@ -1035,9 +1522,10 @@ new file mode 100644
 +            }));
 +        }
 +        let here_sky = self.remote.as_ref().is_some_and(|r| r.dimension.has_skylight);
-+        let time = self.view_day_time();
-+        OTHER.with_borrow(|other| {
++        let view = OTHER.with_borrow(|other| {
 +            let o = other.as_ref()?;
++            // Walking through draws on with the shader pack: it is built for there now.
++            super::shader_packs::build_ahead_for(Dim::from_id(&o.dim));
 +            let env = match o.dim.as_str() {
 +                "minecraft:the_nether" => self.res.nether_environment(),
 +                "minecraft:the_end" => self.res.end_environment(),
@@ -1088,8 +1576,11 @@ new file mode 100644
 +                yaw,
 +                clear,
 +                sky: here_sky && other_sky,
++                entered,
++                blank: false,
 +            })
-+        })
++        });
++        Some(view.unwrap_or(blank))
 +    }
 +
 +    /// The other side heard in another level is gone with that level's chunks.
@@ -1644,7 +2135,49 @@ new file mode 100644
 diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/src/game/remote.rs
 --- a/crates/horizon-client/src/game/remote.rs
 +++ b/crates/horizon-client/src/game/remote.rs
-@@ -2661,6 +2661,8 @@
+@@ -2543,6 +2543,7 @@
+         // handleRespawn keeps the ClientLevel only for the same level key:
+         // two levels sharing a dimension type are still two levels.
+         let same = keep_world && r.heard_level.as_deref() == Some(spawn.dimension.as_str());
++        let mut through = None;
+         r.chunk_format = Arc::new(
+             r.chunk_format
+                 .with_dimension(&dimension)
+@@ -2590,6 +2591,9 @@
+                 self.world.day_time,
+                 self.world.weather,
+             );
++            // Horizon portals: the level seen through a portal is the one entered: its
++            // columns come along.
++            through = super::portal_view::take_other_side(&mut self.world, &spawn.dimension);
+             let old = std::mem::take(&mut self.world.chunks);
+             let count = old.len();
+             horizon_client::chunk::free_columns(old, count);
+@@ -2625,6 +2629,11 @@
+             if let Some(renderer) = self.renderer.as_mut() {
+                 renderer.clear_sections(self.world.layout());
+             }
++            // Horizon portals: the columns seen through the portal, here until the server
++            // sends them again.
++            for chunk in through.iter_mut().flat_map(std::mem::take) {
++                self.streaming.insert_remote(&mut self.world, chunk);
++            }
+             // The new ClientLevel is told before setLevel drops the old one.
+             let old = self.remote.as_mut().and_then(|r| {
+                 r.native_epoch = Some(super::native_lifecycle::fresh_epoch());
+@@ -2644,7 +2653,10 @@
+         self.streaming.nether_shading = self.dim == Dim::Nether;
+         // The seed in SpawnInfo is already the hashed one the client's BiomeManager holds.
+         self.streaming.biome_zoom = horizon_core::biome::BiomeZoom::new(spawn.seed);
+-        self.player = None;
++        // Horizon portals: into the level a portal showed, the player is set aside for a
++        // landing that keeps it as it was (`remote_teleport`).
++        let player = self.player.take();
++        super::portal_view::carry(player.filter(|_| through.is_some()));
+         // handleLogin / handleRespawn: LocalPlayer.setPortalCooldown, so a
+         // player who arrives standing in a portal gets no overlay from it.
+         self.portals.player.cooldown = spawn.portal_cooldown;
+@@ -2661,6 +2673,8 @@
          self.remote
              .as_ref()
              .is_none_or(|r| in_storage_range(r.view_distance, r.chunk_center, x, z))
@@ -1653,7 +2186,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
      }
      /// The columns a moved or resized storage no longer holds.
      fn drop_remote_chunks_out_of_range(&mut self) {
-@@ -2677,7 +2679,7 @@
+@@ -2677,7 +2691,7 @@
      /// of their own when there are many), their sections in the renderer and their block
      /// entities, each store once for all of them. Far terrain keeps them as they were last
      /// (`server_terrain`).
@@ -1662,7 +2195,7 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
          &mut self,
          gone: &mut horizon_client::fast_hash::FxHashSet<(i32, i32)>,
      ) {
-@@ -3592,6 +3594,9 @@
+@@ -3592,6 +3606,9 @@
                  self.remote_native_net(&p.data);
              }
              // The synced attachments of a holder the server shows the window.
@@ -1672,7 +2205,39 @@ diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/sr
              C::CustomPayload(p) if p.channel == horizon_protocol::attachment_sync::CHANNEL => {
                  self.remote_attachment_sync(&p.data);
              }
-@@ -10695,10 +10700,14 @@
+@@ -6339,6 +6356,15 @@
+     /// ClientPacketListener.handleMovePlayer.
+     fn remote_teleport(&mut self, p: &play::PlayerPosition) -> Result<()> {
+         use play::relative as rel;
++        // Horizon portals: a landing that keeps the motion (`Hub::land_through`) puts back
++        // the player the portal's Respawn set aside, where it stood and moving as it was.
++        if self.player.is_none()
++            && let Some(player) = super::portal_view::take_carried()
++            && p.relatives & rel::DELTA_X != 0
++        {
++            self.player = Some(player);
++            super::portal_view::went_through();
++        }
+         let current = self
+             .player
+             .as_ref()
+@@ -6667,11 +6693,13 @@
+         if self.player.is_none() {
+             return Ok(());
+         }
+-        // The LevelLoadingScreen takes the input until the level is ready.
++        // The LevelLoadingScreen takes the input until the level is ready (Horizon portals:
++        // not from a player who walked through a portal into the level it showed).
+         let loading = self
+             .remote
+             .as_ref()
+-            .is_some_and(|r| r.level_load.is_active());
++            .is_some_and(|r| r.level_load.is_active())
++            && !super::portal_view::walking_through();
+         let playing = self.screen == Screen::Playing && !loading && !self.dialog_open();
+         let held = |action| playing && self.keys.held(action);
+         let mut keys = Keys {
+@@ -10696,10 +10724,14 @@
      /// the level loading screen, a portal's included (`remote_overlay`).
      pub(super) fn remote_screen_up(&self) -> bool {
          self.studio_replay.is_none()
@@ -1721,7 +2286,139 @@ diff --git a/crates/horizon-client/src/game/render_tick.rs b/crates/horizon-clie
 diff --git a/crates/horizon-client/src/game/server_travel.rs b/crates/horizon-client/src/game/server_travel.rs
 --- a/crates/horizon-client/src/game/server_travel.rs
 +++ b/crates/horizon-client/src/game/server_travel.rs
-@@ -515,7 +515,13 @@
+@@ -14,6 +14,22 @@
+ use horizon_client::{lan::hub::TickCtx, world_spawn::PlayerSpawnFinder};
+ use horizon_core::{geometry::Vec3, position::BlockPos};
+ use horizon_protocol::packets::play::{self, Clientbound as C};
++
++/// Horizon portals: the side of the portal's plane each Horizon client's player was last on
++/// while in its blocks (whether the portal runs along x, its plane's block coordinate, the
++/// side, the portal block it was in), by connection.
++static SIDES: std::sync::Mutex<
++    Option<std::collections::HashMap<u32, (bool, i32, bool, BlockPos)>>,
++> = std::sync::Mutex::new(None);
++/// Horizon portals: where the players on a trip through a portal they saw through stood when
++/// they went (`Hub::land_through`) and the size of that portal, by connection.
++static THROUGH: std::sync::Mutex<Option<std::collections::HashMap<u32, ([f64; 3], [i32; 2])>>> =
++    std::sync::Mutex::new(None);
++thread_local! {
++    /// Horizon portals: the trip about to start is one through a portal seen through, of
++    /// this size.
++    static NEXT_THROUGH: std::cell::Cell<Option<[i32; 2]>> = const { std::cell::Cell::new(None) };
++}
+ 
+ /// A trip under way: the player is in the destination's level, whose
+ /// chunks are loading around `target`.
+@@ -348,11 +364,43 @@
+             g.sleeping,
+             g.vehicle.is_some(),
+         );
++        // Horizon portals: a Horizon client shows the other side through the portal, and
++        // its player goes through as its middle crosses the portal's plane, with no wait.
++        let seamless = g.brand == "horizon";
+         // Entity.checkInsideBlocks: the Nether portal blocks the box is in.
+         // `canUsePortal(false)` is false for a passenger: its vehicle goes
+         // through and carries it (`carry_riders_through_portals`).
+-        if !riding && let Some(pos) = self.nether_portal_inside(at) {
+-            self.portals.player.set_inside(pos, PLAYER_DELAY);
++        match self.nether_portal_inside(at).filter(|_| !riding) {
++            Some(pos) if !seamless => self.portals.player.set_inside(pos, PLAYER_DELAY),
++            Some(pos) => {
++                if self.crossed_portal_plane(conn, pos, at) {
++                    // Crossing the plane is what takes it through, so there is nothing to
++                    // cool down from: it may walk straight back.
++                    self.portals.player.cooldown = 0;
++                    self.portals.player.set_inside(pos, PLAYER_DELAY);
++                }
++            }
++            None => {
++                // Out of the portal's blocks; one moving fast enough to have left them on
++                // the other side of the plane within the tick went through it.
++                let was = SIDES
++                    .lock()
++                    .ok()
++                    .and_then(|mut sides| sides.as_mut().and_then(|s| s.remove(&conn)));
++                if let Some((x_axis, plane, side, pos)) = was.filter(|_| seamless && !riding) {
++                    let along = if x_axis { at.z } else { at.x };
++                    let forward = along - (f64::from(plane) + 0.5);
++                    let still = self
++                        .res
++                        .behaviours()
++                        .portal_axis(self.world.block(pos.x, pos.y, pos.z))
++                        .is_some();
++                    if still && (forward >= 0.0) != side && forward.abs() < 3.0 {
++                        self.portals.player.cooldown = 0;
++                        self.portals.player.set_inside(pos, PLAYER_DELAY);
++                    }
++                }
++            }
+         }
+         // `ServerPlayer.showEndCredits`: the player stays out of the world while the
+         // poem rolls, then PERFORM_RESPAWN takes it to its respawn point.
+@@ -448,7 +496,11 @@
+         } else {
+             "players_nether_portal_default_delay"
+         };
+-        let transition = self.ui.rules.int(rule).max(0);
++        let transition = if seamless {
++            0
++        } else {
++            self.ui.rules.int(rule).max(0)
++        };
+         let Some(entry) = self
+             .portals
+             .player
+@@ -456,7 +508,8 @@
+         else {
+             return;
+         };
+-        let plan = self.portal_plan(entry, at, WIDTH as f32, HEIGHT as f32, true);
++        // Horizon portals: a player who crossed the plane comes out as far past the exit's.
++        let plan = self.portal_plan(entry, at, WIDTH as f32, HEIGHT as f32, !seamless);
+         if !self.may_enter(plan.dim) {
+             return;
+         }
+@@ -466,7 +519,39 @@
+             self.portals.player.process = None;
+             return;
+         }
++        NEXT_THROUGH.set(seamless.then(|| self.portal_size(entry)));
++        // The side it was on is the old level's.
++        if let Ok(mut sides) = SIDES.lock()
++            && let Some(sides) = sides.as_mut()
++        {
++            sides.remove(&conn);
++        }
+         self.start_server_trip(host, conn, plan.dim, Some(plan), false);
++    }
++
++    /// Horizon portals: whether the player at `at`, in the portal block `pos`, has just
++    /// crossed the portal's plane (the middle of its blocks): it was on the other side of
++    /// it the tick before. A horizontal portal is crossed at once.
++    fn crossed_portal_plane(&self, conn: u32, pos: BlockPos, at: Vec3) -> bool {
++        let b = self.res.behaviours();
++        let state = self.world.block(pos.x, pos.y, pos.z);
++        if b.is_flat_portal(state) {
++            return true;
++        }
++        let x_axis = b.portal_axis(state).unwrap_or(true);
++        let (plane, forward) = if x_axis {
++            (pos.z, at.z - (f64::from(pos.z) + 0.5))
++        } else {
++            (pos.x, at.x - (f64::from(pos.x) + 0.5))
++        };
++        let side = forward >= 0.0;
++        let Ok(mut sides) = SIDES.lock() else {
++            return false;
++        };
++        let before = sides
++            .get_or_insert_with(Default::default)
++            .insert(conn, (x_axis, plane, side, pos));
++        matches!(before, Some((a, p, s, _)) if a == x_axis && p == plane && s != side)
+     }
+ 
+     /// `Entity.handlePortal` of a vehicle server players ride, once through
+@@ -515,7 +600,13 @@
          for x in lo[0].floor() as i32..=hi[0].floor() as i32 {
              for y in lo[1].floor() as i32..=hi[1].floor() as i32 {
                  for z in lo[2].floor() as i32..=hi[2].floor() as i32 {
@@ -1736,6 +2433,72 @@ diff --git a/crates/horizon-client/src/game/server_travel.rs b/crates/horizon-cl
                          return Some(BlockPos::new(x, y, z));
                      }
                  }
+@@ -544,6 +635,15 @@
+         let g = &host.hub.guests[i];
+         let from = Vec3::new(g.position[0], g.position[1], g.position[2]);
+         let yaw = g.yaw;
++        // Horizon portals: where a player who saw through its portal went in, for its landing.
++        let through = NEXT_THROUGH.take().filter(|_| plan.is_some());
++        if let Ok(mut t) = THROUGH.lock() {
++            let t = t.get_or_insert_with(Default::default);
++            match through {
++                Some(size) => t.insert(conn, ([from.x, from.y, from.z], size)),
++                None => t.remove(&conn),
++            };
++        }
+         // The vehicle the player rides travels with it: the player is its
+         // passenger, and the vehicle is recreated in the other dimension,
+         // where they ride it again (`Entity.teleportCrossDimension`). It
+@@ -614,6 +714,11 @@
+             placed: false,
+             left: Some(source),
+         });
++        // Horizon portals: the other side the player saw through the portal is loaded
++        // already, so it lands now, in the tick it went through.
++        if through.is_some() {
++            self.arrive_server_trips(host);
++        }
+         if let Err(e) = self.enter_level(Some(host), source) {
+             log::error!("could not reopen {}: {e}", source.id());
+         }
+@@ -792,6 +897,13 @@
+             }
+             // A portal's trip (`start_server_trip`): its client waits to land.
+             let portal = trip.end || trip.plan.is_some();
++            // Horizon portals: where the player went into a portal it saw through.
++            let through = THROUGH
++                .lock()
++                .ok()
++                .and_then(|mut t| t.as_mut().and_then(|t| t.remove(&trip.conn)))
++                .filter(|_| trip.plan.is_some() && !trip.end);
++            let mut turned = 0.0f32;
+             self.resolve_arrivals();
+             let yaw = host.hub.guests[i].yaw;
+             let (position, yaw) = if let Some(config) = trip.respawn {
+@@ -867,7 +979,11 @@
+                     .and_then(|plan| self.nether_exit_portal(plan));
+                 match (trip.plan, exit) {
+                     (Some(plan), Some(exit)) => {
+-                        let (at, rotation) = self.arrival(&plan, exit);
++                        let (at, rotation) = match through {
++                            Some((_, size)) => self.arrival_through(&plan, exit, size),
++                            None => self.arrival(&plan, exit),
++                        };
++                        turned = rotation;
+                         (at, yaw + rotation)
+                     }
+                     _ => (trip.target, yaw),
+@@ -887,7 +1003,9 @@
+             // but the player's attributes (ServerPlayer.teleport keeps the entity).
+             g.new_body(true);
+             let at = [position.x, position.y, position.z];
+-            if portal {
++            if let Some((from, _)) = through.filter(|_| portal) {
++                host.hub.land_through(i, from, at, turned);
++            } else if portal {
+                 host.hub.land(i, at);
+             } else {
+                 host.hub.teleport(i, Some(at));
 diff --git a/crates/horizon-client/src/lan/hub.rs b/crates/horizon-client/src/lan/hub.rs
 --- a/crates/horizon-client/src/lan/hub.rs
 +++ b/crates/horizon-client/src/lan/hub.rs
@@ -1773,7 +2536,55 @@ diff --git a/crates/horizon-client/src/lan/hub.rs b/crates/horizon-client/src/la
          // Chunks changed in bulk (`World::edit_runs`) go whole to those who see them: one packet each, where a
          // change of each block would be thousands (the client lights and meshes them once, on its workers).
          let bulk: Vec<(i32, i32)> = if world.bulk_log.is_empty() {
-@@ -6494,3 +6514,44 @@
+@@ -5165,6 +5185,47 @@
+             pos: [0, 0, 0],
+             data: 0,
+             global: false,
++        }));
++    }
++
++    /// Horizon portals: [`Self::land`] for a player who walked through a portal that showed
++    /// its other side: it comes out as it went in, its look and its motion kept (turned by
++    /// `turn` degrees where the two portals face different ways), with no portal sound.
++    /// Between portals facing the same way it is moved by `at - from`, wherever its client
++    /// has walked to since the server heard it at `from`.
++    pub fn land_through(&mut self, i: usize, from: [f64; 3], at: [f64; 3], turn: f32) {
++        use play::relative::{DELTA_X, DELTA_Y, DELTA_Z, ROTATE_DELTA, X, X_ROT, Y, Y_ROT, Z};
++        let ticks = self.ticks;
++        let g = &mut self.guests[i];
++        g.landing = false;
++        g.above_ground_ticks = 0;
++        g.teleport_tick = ticks;
++        g.position = at;
++        g.previous_position = at;
++        g.teleport_counter = (g.teleport_counter + 1) & 0x7FFF_FFFF;
++        let id = g.teleport_counter;
++        g.awaiting_teleport = Some((id, at));
++        g.awaiting_keeps_motion = true;
++        let kept = Y_ROT | X_ROT | DELTA_X | DELTA_Y | DELTA_Z | ROTATE_DELTA;
++        let (position, relatives) = if turn == 0.0 {
++            (
++                [at[0] - from[0], at[1] - from[1], at[2] - from[2]],
++                kept | X | Y | Z,
++            )
++        } else {
++            (at, kept)
++        };
++        g.send(&C::PlayerPosition(play::PlayerPosition {
++            teleport: id,
++            position,
++            delta: [0.0; 3],
++            yaw: turn,
++            pitch: 0.0,
++            relatives,
++        }));
++        g.send(&C::GameEvent(play::GameEvent {
++            event: game_event::LEVEL_CHUNKS_LOAD_START,
++            param: 0.0,
+         }));
+     }
+ }
+@@ -6494,3 +6555,44 @@
          );
      }
  }

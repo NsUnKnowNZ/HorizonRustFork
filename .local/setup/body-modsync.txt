@@ -1,0 +1,63 @@
+# Two games: A (the test game, every content mod on) hosts on LAN; B has its own game folder
+# with an older biome_paint, a mod A lacks and nothing else, and joins.
+$b = "$repo\.local\tmp\modsync-b"
+$sockB = "$env:TEMP\horizon-modsync-b.json"
+function B { "`n>>> [B] $args"; & $ctl --socket $sockB --timeout 180 @args 2>&1 | ForEach-Object { "$_" } }
+function KillB { Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*modsync-b*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; "closed game B" } }
+KillB
+if (Test-Path $b) { cmd /c rmdir /s /q "$b" }
+New-Item -ItemType Directory -Force "$b\horizon-mods\modsync_extra\assets\modsync_extra\lang" | Out-Null
+$utf8 = New-Object Text.UTF8Encoding $false
+[IO.File]::WriteAllText("$b\horizon-mods\modsync_extra\horizon-mod.toml", "id = `"modsync_extra`"`nname = `"Modsync Extra`"`nversion = `"1.0.0`"`napi = `"0.2`"`nside = `"both`"`ncapabilities = [`"registries`"]`n", $utf8)
+[IO.File]::WriteAllText("$b\horizon-mods\modsync_extra\assets\modsync_extra\lang\en_us.json", "{}", $utf8)
+& robocopy "$repo\horizon-mods\biome_paint" "$b\horizon-mods\biome_paint" /E /NFL /NDL /NJH /NJS /NP | Out-Null
+$toml = [IO.File]::ReadAllText("$b\horizon-mods\biome_paint\horizon-mod.toml")
+[IO.File]::WriteAllText("$b\horizon-mods\biome_paint\horizon-mod.toml", ($toml -replace '(?m)^version = .*$', 'version = "0.9.0"'), $utf8)
+[IO.File]::WriteAllText("$b\horizon-mods.txt", "mod.biome_paint:true`nmod.modsync_extra:true`n", $utf8)
+if (Test-Path "$repo\options.txt") { Copy-Item "$repo\options.txt" "$b\options.txt" }
+"--- B's folder before"; Get-ChildItem "$b\horizon-mods" -Force | ForEach-Object { $_.Name }
+Launch
+C lan open 25570
+C wait 20
+C lan status
+B launch --game-dir "$b" --home "$b\home" --name ModsyncB
+for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket $sockB --timeout 10 status 2>&1 | Out-String; if ($r -match '"ok"|"screen"|"title"|"joined"') { break }; Start-Sleep 5 }
+"B answers after $($i*5)s more"
+B connect 127.0.0.1:25570 ModsyncB
+for ($i = 0; $i -lt 150; $i++) { $r = & $ctl --socket $sockB --timeout 10 screen 2>&1 | Out-String; if ($r -match 'mod_mismatch') { break }; Start-Sleep 2 }
+"mismatch screen after $($i*2)s: $($r -match 'mod_mismatch')"
+B screen
+B ui
+B screenshot "$shots\modsync-1-mismatch.png"
+B wait 10
+B click-button "Download and restart"
+$shot = $false
+for ($i = 0; $i -lt 300; $i++) {
+  $r = & $ctl --socket $sockB --timeout 5 screen 2>&1 | Out-String
+  $m = [regex]::Match($r, '"status":"[^"]*"')
+  if ($i % 4 -eq 0) { "t+$($i)s $($m.Value)" }
+  if (-not $shot -and $m.Value -match 'Downloading') { B screenshot "$shots\modsync-2-progress.png"; $shot = $true }
+  if ($r -notmatch 'mod_mismatch') { "left the mismatch screen at t+$($i)s"; break }
+  Start-Sleep 1
+}
+"--- B's log so far"; Get-Content "$env:TEMP\horizon-modsync-b.log" -ErrorAction SilentlyContinue | Select-String -Pattern "Horizon: (build|download|mods|install|mod |could not)|restart" | Select-Object -Last 30 | ForEach-Object { "$_" }
+for ($i = 0; $i -lt 200; $i++) { $r = & $ctl --socket $sockB --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true') { break }; Start-Sleep 5 }
+"B joined after the restart: $($r -match '"joined":true') ($($i*5)s)"
+B wait 100
+B screen
+B screenshot "$shots\modsync-3-joined.png"
+C command "list"
+C wait 20
+C messages 5
+C lan status
+"--- B's folder after"; Get-ChildItem "$b\horizon-mods" -Force | ForEach-Object { "{0}  {1}" -f $_.Name, $(if ($_.PSIsContainer) { "<dir>" } else { $_.Length }) }
+"--- .replaced"; Get-ChildItem "$b\horizon-mods\.replaced" -Force -Recurse -Depth 1 -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName.Substring($b.Length) }
+"--- .downloads"; Get-ChildItem "$b\horizon-mods\.downloads" -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }
+"--- horizon-mods.txt"; Get-Content "$b\horizon-mods.txt"
+"--- served cache"; Get-ChildItem "$repo\.horizon-cache\served-mods" -ErrorAction SilentlyContinue | ForEach-Object { "{0}  {1}" -f $_.Name, $_.Length }
+"--- B's log"; Get-Content "$env:TEMP\horizon-modsync-b.log" -ErrorAction SilentlyContinue | Select-String -Pattern "Horizon: (build|download|mods|install|mod |could not|content from|disconnected)|restart|panic|error" | Select-Object -Last 40 | ForEach-Object { "$_" }
+"--- B's game log"; Get-ChildItem "$b\home" -Recurse -Filter latest.log -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_.FullName | Select-String -Pattern "Horizon: (build|download|mods|install|mod |could not|content from|disconnected)|restart" | Select-Object -Last 40 | ForEach-Object { "$_" } }
+"--- test leftovers"; Get-ChildItem $env:TEMP -Filter "horizon-mod-*" -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }
+B quit
+Start-Sleep 5
+KillB

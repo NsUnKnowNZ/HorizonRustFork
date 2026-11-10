@@ -231,6 +231,10 @@ name = "lan_bot"
 path = "../horizon-client/tests/lan_bot.rs"
 
 [[test]]
+name = "mod_download"
+path = "../horizon-client/tests/mod_download.rs"
+
+[[test]]
 name = "streaming_meshes"
 path = "../horizon-client/tests/streaming_meshes.rs"
 

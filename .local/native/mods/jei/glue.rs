@@ -3,8 +3,8 @@
 // (tooltips, the bookmark bar and its clicks) wired to the viewer.
 use crate::game::Game;
 use crate::game::jei::{
-    self, Bookmarks, Config, Context, Counts, Event, Ingredient, Item, Kind, Layout, Out, Recipe,
-    Session, Sort, Stack, Toggle, View, Viewer,
+    self, Bookmarks, Config, Context, Counts, Custom, Event, Ingredient, Item, Kind, Layout,
+    Lookup, Out, Recipe, Session, Sort, Source, Stack, Toggle, View, Viewer,
 };
 use crate::game::native_hooks::{
     NativePanelEvent, NativeRecipeKind, NativeRecipeLayout, NativeRecipeStack, NativeRecipeView,
@@ -167,9 +167,19 @@ pub(super) fn sync(game: &mut Game<'_>) {
     };
     load();
     let sort = STATE.with(|s| s.borrow().config.sort);
-    let recipes = recipes(&catalog);
+    let items = items(&catalog);
+    let mut recipes = recipes(&catalog);
+    let custom = custom(game, &items);
+    recipes.extend(custom.recipes);
     let found = jei::harvest_variants(&recipes, VARIANTS_PER_ITEM, jei::ITEMS_MAX);
-    let (mut viewer, mut out) = Viewer::with_variants(items(&catalog), recipes, found, lang(game));
+    let (mut viewer, mut out) = Viewer::with_groups(
+        items,
+        recipes,
+        found,
+        custom.benches,
+        custom.groups,
+        lang(game),
+    );
     if sort != viewer.sort() {
         out = viewer.set_sort(sort);
     }
@@ -582,6 +592,11 @@ fn handle(event: &Event, ctx: &Context<'_>, lang: jei::Lang) -> Vec<Out> {
     })
 }
 
+/// What `/jei` adds about the recipe types of mods; none without them.
+pub(super) fn custom_line() -> Option<String> {
+    STATE.with(|s| s.borrow().viewer().and_then(Viewer::about_custom))
+}
+
 /// The viewer's size, for `/jei`; none outside a world.
 pub(super) fn counts() -> Option<(usize, usize)> {
     STATE.with(|s| {
@@ -738,6 +753,89 @@ fn recipes(catalog: &NativeRecipes) -> Vec<Recipe> {
             book_id: recipe.book_id,
         })
         .collect()
+}
+
+/// The recipe types of mods the viewer shows beside the game's own, read from
+/// their files (`native_recipes_of_type`): Charm's woodcutter and kiln, one
+/// input and one result each, and Chipped's workbenches, whose file lists
+/// tags, each a group of blocks the bench turns into one another.
+fn custom(game: &Game<'_>, items: &[Item]) -> Custom {
+    let lookup = Lookup::new(items);
+    let mut custom = Custom::default();
+    let single = [
+        ("charm:woodcutting", Kind::Woodcutting),
+        ("charm:firing", Kind::Firing),
+    ];
+    for (name, kind) in single {
+        for recipe in game.native_recipes_of_type(name) {
+            let json: &serde_json::Value = &recipe.json;
+            let Some((result, count)) = result_of(&json["result"]) else {
+                continue;
+            };
+            let time = json["cookingtime"].as_u64().unwrap_or(0) as u32;
+            let experience = json["experience"].as_f64().unwrap_or(0.0) as f32;
+            let slots = [sources(&json["ingredient"])];
+            custom.recipe(&lookup, kind, &slots, &result, count, time, experience);
+        }
+    }
+    for recipe in game.native_recipes_of_type("chipped:workbench") {
+        let json: &serde_json::Value = &recipe.json;
+        let groups: Vec<Vec<Source>> = (json["ingredients"].as_array())
+            .map(|list| list.iter().map(group_sources).collect())
+            .unwrap_or_default();
+        // The file is named after its bench: `chipped:mason_table`.
+        custom.bench(&lookup, &recipe.id, &groups);
+    }
+    custom
+}
+
+/// A group's sources: its tag, and the vanilla block the tag is named after
+/// (`minecraft:amethyst_block` for `chipped:amethyst_block`), the one a
+/// player starts from. Chipped's tag files name that block bare
+/// (`amethyst_block`), and the game's tag loader keeps a bare id as it is
+/// written instead of reading it as `minecraft:`'s, so the tag alone leaves
+/// it out. A name that is no item adds nothing.
+fn group_sources(json: &serde_json::Value) -> Vec<Source> {
+    let mut found = sources(json);
+    let named: Vec<Source> = (found.iter())
+        .filter_map(|source| match source {
+            Source::Tag(tag) => tag.rsplit(':').next(),
+            Source::Item(_) => None,
+        })
+        .map(|path| Source::Item(path.to_owned()))
+        .collect();
+    found.extend(named);
+    found
+}
+
+/// What an ingredient's JSON names: an id or a `#tag`, an `{"item": ..}` or
+/// a `{"tag": ..}`, or a list of them.
+fn sources(json: &serde_json::Value) -> Vec<Source> {
+    use serde_json::Value;
+    let text = |value: &Value| value.as_str().map(str::to_owned);
+    match json {
+        Value::String(name) => match name.strip_prefix('#') {
+            Some(tag) => vec![Source::Tag(tag.to_owned())],
+            None => vec![Source::Item(name.clone())],
+        },
+        Value::Object(fields) => {
+            let item = fields.get("item").and_then(text).map(Source::Item);
+            let tag = fields.get("tag").and_then(text).map(Source::Tag);
+            item.or(tag).into_iter().collect()
+        }
+        Value::Array(list) => list.iter().flat_map(sources).collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// A result's id and count: `{"id": .., "count": ..}` or a bare id.
+fn result_of(json: &serde_json::Value) -> Option<(String, u32)> {
+    if let Some(id) = json.as_str() {
+        return Some((id.to_owned(), 1));
+    }
+    let id = json["id"].as_str()?;
+    let count = json["count"].as_u64().unwrap_or(1).clamp(1, 99) as u32;
+    Some((id.to_owned(), count))
 }
 
 fn ingredient_slots(slots: &[Vec<NativeRecipeStack>]) -> Vec<Vec<Ingredient>> {

@@ -403,6 +403,90 @@ impl Package {
         }
         Ok(zip.finish().map_err(err)?.into_inner())
     }
+    /// Packs the content mod in the folder `dir` into `out` as a `.hmod`, one file at a time, so
+    /// a big mod is never held in memory: its manifest, the content files [`Content::read`]
+    /// lists (plain `assets/` and `data/` paths; symbolic links are not followed) and the
+    /// licence files at its top ([`notices`]), which readers of a `.hmod` pass over. A mod with
+    /// code is refused: only content travels this way. `declared` is as in
+    /// [`Content::read_declaring`].
+    ///
+    /// [`Content::read`]: crate::content::Content::read
+    /// [`Content::read_declaring`]: crate::content::Content::read_declaring
+    pub fn pack_dir<W: std::io::Write + std::io::Seek>(
+        dir: &Path,
+        declared: &[String],
+        out: W,
+    ) -> Result<(), String> {
+        use std::io::Write;
+        let text = std::fs::read_to_string(dir.join(MANIFEST))
+            .map_err(|e| format!("{MANIFEST}: {e}"))?;
+        let manifest = Manifest::parse(&text)?;
+        if dir.join(WASM).exists() {
+            return Err(format!("{WASM}: a mod with code is not packed"));
+        }
+        let content = crate::content::Content::read_declaring(dir, &manifest, declared)?;
+        let mut zip = zip::ZipWriter::new(out);
+        let options = zip::write::SimpleFileOptions::default();
+        let err = |e: zip::result::ZipError| e.to_string();
+        zip.start_file(MANIFEST, options).map_err(err)?;
+        zip.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+        let files = content
+            .files
+            .iter()
+            .map(|name| (name.as_str(), crate::content::MAX_FILE));
+        let notices = notices(dir);
+        let notices = notices.iter().map(|name| (name.as_str(), MAX_NOTICE));
+        for (name, max) in files.chain(notices) {
+            let path = dir.join(name);
+            // Not through a link, whatever changed since the folder was listed.
+            let meta = std::fs::symlink_metadata(&path).map_err(|e| format!("{name}: {e}"))?;
+            if !meta.is_file() {
+                return Err(format!("{name} is not a file"));
+            }
+            let file = std::fs::File::open(&path).map_err(|e| format!("{name}: {e}"))?;
+            zip.start_file(name, options).map_err(err)?;
+            let copied = std::io::copy(&mut file.take(max + 1), &mut zip)
+                .map_err(|e| format!("{name}: {e}"))?;
+            if copied > max {
+                return Err(format!("{name} is over {} MiB", max >> 20));
+            }
+        }
+        zip.finish().map_err(err)?;
+        Ok(())
+    }
+}
+
+/// The biggest licence file [`Package::pack_dir`] carries, and how many.
+const MAX_NOTICE: u64 = 1 << 20;
+const MAX_NOTICES: usize = 16;
+
+/// The licence files at the top of the mod folder `dir`, by name: plain files named `LICENSE`,
+/// `LICENCE`, `NOTICE` or `COPYING`, with or without more after it (`LICENSE-MIT`,
+/// `NOTICE.txt`), whose names are plain ASCII. A mod's licence goes where the mod goes.
+pub fn notices(dir: &Path) -> Vec<String> {
+    let Ok(read) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = read
+        .flatten()
+        .filter(|entry| {
+            std::fs::symlink_metadata(entry.path()).is_ok_and(|meta| meta.is_file())
+        })
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| {
+            let upper = name.to_ascii_uppercase();
+            name.len() <= 64
+                && name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+                && ["LICENSE", "LICENCE", "NOTICE", "COPYING"]
+                    .iter()
+                    .any(|start| upper.starts_with(start))
+        })
+        .collect();
+    names.sort();
+    names.truncate(MAX_NOTICES);
+    names
 }
 
 /// The `.hmod` files and mod folders in `dir`, by name.
@@ -522,6 +606,116 @@ capabilities = ["game-read", "hud"]
         assert_eq!(p.manifest.id, "coords_hud");
         assert_eq!(p.wasm.as_deref(), Some(&b"\0asm"[..]));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    const CONTENT: &str = "id = \"ruby\"\nname = \"Ruby\"\nversion = \"1.2.0\"\napi = \"0.2\"\nside = \"both\"\ncapabilities = [\"registries\"]\n";
+
+    fn mod_folder(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("horizon-pack-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let write = |path: &str, bytes: &[u8]| {
+            let path = dir.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        };
+        write(MANIFEST, CONTENT.as_bytes());
+        write(
+            "data/ruby/horizon/item/ruby.json",
+            br#"{"template": "minecraft:diamond"}"#,
+        );
+        write("assets/ruby/textures/item/ruby.png", &[7u8; 3000]);
+        write("assets/ruby/lang/en_us.json", b"{}");
+        write("LICENSE", b"MIT");
+        write("NOTICE.txt", b"thanks");
+        write("notes.txt", b"not content");
+        write("src/secret.rs", b"not content either");
+        dir
+    }
+
+    #[test]
+    fn a_folder_packs_into_a_hmod_the_readers_take() {
+        use crate::content::Content;
+        let dir = mod_folder("ok");
+        let mut packed = std::io::Cursor::new(Vec::new());
+        Package::pack_dir(&dir, &[], &mut packed).unwrap();
+        let path = dir.with_extension("hmod");
+        std::fs::write(&path, packed.get_ref()).unwrap();
+        let package = Package::read(&path).unwrap();
+        assert_eq!(package.manifest.id, "ruby");
+        assert_eq!(package.manifest.version, "1.2.0");
+        assert!(package.wasm.is_none());
+        // The same content as the folder's, file for file and byte for byte.
+        let from_folder = Content::read(&dir, &package.manifest).unwrap();
+        let from_file = Content::read(&path, &package.manifest).unwrap();
+        assert_eq!(from_file.files, from_folder.files);
+        assert_eq!(from_file.items, from_folder.items);
+        assert_eq!(from_file.files.len(), 3);
+        let mut reader = from_file.reader().unwrap();
+        assert_eq!(
+            reader.read("assets/ruby/textures/item/ruby.png").unwrap(),
+            vec![7u8; 3000]
+        );
+        // The licence goes along; what is neither content nor licence stays.
+        let file = std::fs::File::open(&path).unwrap();
+        let mut zip = zip::ZipArchive::new(file).unwrap();
+        let mut names: Vec<String> = (0..zip.len())
+            .map(|i| zip.by_index_raw(i).unwrap().name().unwrap().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                "LICENSE",
+                "NOTICE.txt",
+                "assets/ruby/lang/en_us.json",
+                "assets/ruby/textures/item/ruby.png",
+                "data/ruby/horizon/item/ruby.json",
+                MANIFEST,
+            ]
+        );
+        // Packing the same folder again gives the same bytes.
+        let mut again = std::io::Cursor::new(Vec::new());
+        Package::pack_dir(&dir, &[], &mut again).unwrap();
+        assert_eq!(again.get_ref(), packed.get_ref());
+        std::fs::remove_dir_all(&dir).unwrap();
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn a_folder_with_code_or_bad_content_is_not_packed() {
+        let pack = |dir: &Path| Package::pack_dir(dir, &[], std::io::Cursor::new(Vec::new()));
+        let dir = mod_folder("code");
+        std::fs::write(dir.join(WASM), b"\0asm").unwrap();
+        assert!(pack(&dir).unwrap_err().contains("code"));
+        std::fs::remove_dir_all(&dir).unwrap();
+        // A declaration the game refuses: nothing is packed.
+        let dir = mod_folder("bad");
+        std::fs::write(dir.join("data/ruby/horizon/item/ruby.json"), b"{").unwrap();
+        assert!(pack(&dir).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+        // No manifest, no mod.
+        let dir = mod_folder("bare");
+        std::fs::remove_file(dir.join(MANIFEST)).unwrap();
+        assert!(pack(&dir).unwrap_err().contains(MANIFEST));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_out_of_the_folder_is_not_packed() {
+        let dir = mod_folder("link");
+        let outside = dir.with_extension("outside");
+        std::fs::write(&outside, b"private").unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("assets/ruby/lang/leak.json")).unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("LICENSE-EXTRA")).unwrap();
+        let mut packed = std::io::Cursor::new(Vec::new());
+        Package::pack_dir(&dir, &[], &mut packed).unwrap();
+        let mut zip = zip::ZipArchive::new(packed).unwrap();
+        assert!(zip.by_name("assets/ruby/lang/leak.json").is_err());
+        assert!(zip.by_name("LICENSE-EXTRA").is_err());
+        assert!(zip.by_name("LICENSE").is_ok());
+        std::fs::remove_dir_all(&dir).unwrap();
+        std::fs::remove_file(&outside).unwrap();
     }
 
     #[test]

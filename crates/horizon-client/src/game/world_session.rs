@@ -59,6 +59,9 @@ impl Game<'_> {
                 let resources = self.vanilla_root();
                 self.ui.options.open_data_packs(dir, selected, resources);
             }
+            Action::FetchMods => self.fetch_mods(),
+            // Nothing to download: only the extra mods go, then the restart.
+            Action::ApplyMods => self.apply_mods(event_loop, Vec::new()),
             Action::None => {}
         }
         Ok(())

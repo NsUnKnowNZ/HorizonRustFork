@@ -225,6 +225,19 @@ pub(super) struct PackIds {
     pub(super) separate_ao: bool,
 }
 
+thread_local! {
+    /// The dimension a `shaders/` pack is to be built ahead for (`build_ahead_for`).
+    static AHEAD: std::cell::Cell<Option<Dim>> = const { std::cell::Cell::new(None) };
+}
+
+/// Asks for the picked `shaders/` pack to be built for `dim` too while the player is still
+/// elsewhere (somewhere it can be taken to at once, as through a portal that shows it): there,
+/// the pack then runs from the first frame. Asked each frame it holds; it is built once.
+#[allow(dead_code)]
+pub(super) fn build_ahead_for(dim: Dim) {
+    AHEAD.set(Some(dim));
+}
+
 impl Game<'_> {
     /// Loads the pack for the current dimension when it changed, and returns this frame's
     /// inputs to the pack's uniforms.
@@ -308,18 +321,38 @@ impl Game<'_> {
             return PackInputs::default();
         }
         let name = selected.clone();
-        let dimension = match self.dim {
+        let number = |dim: Dim| match dim {
             Dim::Overworld => 0,
             Dim::Nether => -1,
             Dim::End => 1,
         };
+        let dimension = number(self.dim);
+        let ahead_level = AHEAD
+            .take()
+            .filter(|dim| *dim != self.dim)
+            .map(|dim| (number(dim), dim.id()));
         if (dev_pack().is_none() && selected.starts_with("horizon:"))
             || horizon_shader_api::package::is_pack(&path)
         {
             // One of Horizon's own packs (game/native_shaders.rs).
             self.tick_native_shader_pack(&path);
         } else if let Some(renderer) = &mut self.renderer
-            && renderer.shader_pack_dimension() != Some(dimension)
+            // The pack for this dimension when it changed: the one kept from the last time
+            // here runs again at once, else it is built. With that one running, the pack for
+            // the dimension a portal in view leads to is built ahead (`build_ahead_for`).
+            && let Some((dimension, level, ahead)) = {
+                if renderer.shader_pack_dimension() != Some(dimension) {
+                    (!renderer.resume_shader_pack(dimension, &name)).then_some((
+                        dimension,
+                        self.dim.id(),
+                        false,
+                    ))
+                } else {
+                    ahead_level
+                        .filter(|a| renderer.wants_shader_pack_ahead(a.0, &name))
+                        .map(|(dimension, level)| (dimension, level, true))
+                }
+            }
         {
             let name = name.as_str();
             let started = std::time::Instant::now();
@@ -357,7 +390,7 @@ impl Game<'_> {
                                 })
                                 .collect(),
                         );
-                        let folder = dimension_folder_named(&pack, self.dim.id(), dimension);
+                        let folder = dimension_folder_named(&pack, level, dimension);
                         let inputs = renderer.pack_inputs();
                         let mut post = load_post(&pack, &folder, &properties, &macros, &inputs);
                         // Textures that name one of the game's: from the resource packs over
@@ -428,7 +461,18 @@ impl Game<'_> {
                         log::info!("shader pack {name}: folder `{folder}`, building its pipelines");
                         // The driver compiles the programs on a thread of their own; the game
                         // draws without a pack meanwhile, and the next frames pick it up.
-                        renderer.load_shader_pack(dimension, post, table, name.to_owned(), started);
+                        renderer.load_shader_pack(
+                            dimension,
+                            post,
+                            table,
+                            name.to_owned(),
+                            started,
+                            ahead,
+                        );
+                    }
+                    Err(e) if ahead => {
+                        log::warn!("shader pack {name}: {e}");
+                        renderer.shader_pack_ahead_failed(dimension);
                     }
                     Err(e) => {
                         self.pack_ids = None;
@@ -439,9 +483,17 @@ impl Game<'_> {
                 }
                 Ok(())
             });
-            // A pack that can't run is turned off like one that panics.
-            if let Err(error) = loaded.flatten() {
-                self.shader_pack_failed(name, dimension, &error);
+            // A pack that can't run is turned off like one that panics; one that can't be
+            // built ahead is left for when the player is there.
+            match loaded.flatten() {
+                Err(error) if ahead => {
+                    log::warn!("shader pack {name}: not built ahead: {error}");
+                    if let Some(renderer) = &mut self.renderer {
+                        renderer.shader_pack_ahead_failed(dimension);
+                    }
+                }
+                Err(error) => self.shader_pack_failed(name, dimension, &error),
+                Ok(_) => {}
             }
         }
         let lerp = |(old, new): (f32, f32)| old + (new - old) * partial;

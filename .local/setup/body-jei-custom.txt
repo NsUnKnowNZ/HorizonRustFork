@@ -1,0 +1,68 @@
+Launch
+C command "gamemode survival"
+C command "clear @s"
+C command "jei"
+C wait 10
+C messages 4
+C open-inventory
+C wait 10
+function Find($q) { C click-at 1147 704; 1..40 | ForEach-Object { C type '\b' } | Out-Null; C type $q; C wait 8 }
+function Shot($n) { C wait 8; C ui; C screenshot "$shots\$n.png" }
+Find "chipped:amethyst_block_pillar"
+C ui
+C click-at 943 38
+Shot "jei-chipped-r"
+C click-button Back
+Find "minecraft:amethyst_block"
+C click-at 943 38 right
+Shot "jei-chipped-u"
+C click-at 943 59
+Shot "jei-chipped-u-tabhover"
+C click-button Back
+Find "minecraft:bricks"
+C click-at 943 38 right
+Shot "jei-bricks-u"
+C click-button Back
+Find "minecraft:oak_stairs"
+C click-at 943 38
+Shot "jei-woodcut-r-tab0"
+C click woodcutter-tab
+Shot "jei-woodcut-r"
+C click-button Back
+Find "minecraft:oak_planks"
+C click-at 943 38
+Shot "jei-planks-r"
+C click woodcutter-tab
+Shot "jei-planks-r-woodcutter"
+C click-button Back
+C click-at 943 38 right
+Shot "jei-planks-u"
+C click woodcutter-tab
+Shot "jei-planks-u-woodcutter"
+C click-at 983 59
+Shot "jei-planks-u-carpenter"
+C click-button Back
+Find "minecraft:black_glazed_terracotta"
+C click-at 943 38
+Shot "jei-kiln-r-tab0"
+C click kiln-tab
+Shot "jei-kiln-r"
+C click-button Back
+Find "minecraft:glass"
+C click-at 943 38
+Shot "jei-glass-r"
+C click kiln-tab
+Shot "jei-glass-r-kiln"
+C click-button Back
+C click-at 943 38 right
+Shot "jei-glass-u"
+C click-button Back
+Find "minecraft:iron_ingot"
+C click-at 943 38
+Shot "jei-iron-r"
+C click-button Back
+C click-at 943 38 right
+Shot "jei-iron-u"
+C bench 2
+C click-button Back
+C logs --lines 12

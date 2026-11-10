@@ -6,6 +6,7 @@
 pub mod adapter;
 pub mod attachment_sync;
 pub mod buf;
+pub mod build_id;
 pub mod chunk;
 pub mod connection;
 pub mod crypto;
@@ -15,6 +16,7 @@ pub mod hash_ops;
 pub mod ids;
 pub mod item;
 pub mod menu_extra;
+pub mod mod_files;
 pub mod mod_list;
 pub mod mod_net;
 pub mod packets;

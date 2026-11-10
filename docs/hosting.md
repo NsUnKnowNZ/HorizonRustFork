@@ -346,6 +346,15 @@ playhorizon.dev", and the console says which client it was. The check reads the 
 by (`minecraft:brand`), which any client can fake: it keeps out players who didn't install Horizon, not
 cheaters. The server's own checks (reach, movement) are what protect it.
 
+A server with content mods on sends them to Horizon clients that lack them or have another version: the client's
+*Your mods don't match this server's* screen has a **Download and restart** button
+([mods](mods.md#content-mods-api-02)). Only the mods the server loaded with `side = "both"` are sent, never anything
+else on its disk, over the connection the player joins on and after the login's checks (the whitelist, bans, a
+full server); a mod folder is packed once into `.horizon-cache/served-mods/`. The console logs each request
+(`<player> asked for mods: sent 2 mod(s), ...`). Set `horizon-serve-mods = false` under `[properties]` to keep
+the files to yourself (on by default): players then still see which mods differ, and get them from you another
+way. A world opened to LAN shares its mods the same way.
+
 Horizon clients can get their far terrain (Video Settings → LOD Distance) from the server: set
 `horizon-lod-distance` under `[properties]` to how far, in chunks (1024 at most), and the server samples the
 tiles each player's client asks for out to there. It is off (0) by default: far tiles show the world's terrain

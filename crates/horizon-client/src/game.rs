@@ -242,6 +242,7 @@ mod mob_looting;
 mod mob_sounds;
 mod mod_api_host;
 mod mod_browser;
+mod mod_sync;
 mod mods;
 mod mount_menu;
 mod mounts;
@@ -738,6 +739,8 @@ impl Options {
             Err(e) => eprintln!("Horizon: not signed in: {e}"),
         }
         split::launcher::read_now();
+        // A restart into a server starts where this run did (`mod_sync`).
+        mod_sync::note_start_dir();
         if let Some(dir) = o.game_dir.take() {
             // These too stay relative to where the game was started.
             o.resources = std::path::absolute(&o.resources)?;
@@ -16390,6 +16393,7 @@ impl Game<'_> {
                     }
                     self.extras_frame(elapsed);
                     self.extras_retry()?;
+                    self.mods_fetch_poll(event_loop);
                     self.apply_mouse_look();
                     self.pad_look(elapsed.as_secs_f32());
                     self.advance_flight();
@@ -17772,6 +17776,14 @@ pub fn run_with() -> Result<()> {
     mods::register_components(&vanilla_root)?;
     mods::register_standalone_models();
     mods::register_layer_definitions();
+    mods::register_build();
+    // Mods a server sent while the last run still held the copies they
+    // replace wait for this start, before any mod is read.
+    if options.execution_role.is_client() {
+        horizon_client::mod_transfer::apply_pending(
+            &std::env::current_dir()?.join(horizon_client::mod_list::DIR),
+        );
+    }
     let mut early_settings = Settings::load(&Game::options_path());
     // Minecraft.<init>: read the last start's flag, then mark this one as not
     // finished until onGameLoadFinished. A dedicated server has no options.txt.

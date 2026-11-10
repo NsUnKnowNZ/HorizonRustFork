@@ -145,19 +145,308 @@ pub enum Screen {
         /// Wrapped reason lines, set by the last draw; the buttons sit below them.
         lines: std::cell::Cell<usize>,
     },
+    /// A Horizon server turned this game away over its mods (Horizon's own,
+    /// in the Disconnected screen's place): what differs, both builds, and
+    /// the server's mods to download.
+    ModMismatch(Box<ModMismatch>),
 }
 /// What a click asks the title screen to do.
 pub enum Outcome {
     None,
     Back,
     Connect { address: String, lan: bool },
+    /// Download the server's mods the mismatch screen names (`ModMismatch::wanted`).
+    FetchMods,
+    /// Turn the extra mods off and start the game again, into that server.
+    ApplyMods,
 }
+
+/// The screen a join refused over mods opens: the server's mods and build
+/// beside this game's, and what a click can do about the difference.
+#[derive(Clone, Debug)]
+pub struct ModMismatch {
+    /// The server's own words, for the narrator and a harness.
+    pub reason: String,
+    pub address: String,
+    pub name: String,
+    /// The server was picked from LAN discovery.
+    pub lan: bool,
+    /// The server refused over the content registry, not the list: what the
+    /// mods add differs though their names may match (`net::BUILD_REFUSED`).
+    pub registry: bool,
+    /// The mods the server named; none when it named none.
+    pub server_mods: Vec<horizon_protocol::mod_list::Entry>,
+    pub detail: horizon_protocol::mod_list::Detailed,
+    /// The server's build, when it said (an older Horizon does not).
+    pub server_build: Option<horizon_protocol::build_id::Build>,
+    pub client_build: Option<horizon_protocol::build_id::Build>,
+    /// The server sends its mods' files, up to this many bytes.
+    pub offer: Option<u64>,
+    /// The download, while it runs.
+    pub job: Option<crate::mod_transfer::Job>,
+    /// Also turn off the mods the server does not have.
+    pub turn_off_extra: bool,
+    /// Why the last attempt did nothing.
+    pub note: Option<String>,
+    scroll: crate::ui::Scroll,
+    /// The list's top, bottom and content height as last drawn, for the wheel.
+    view: std::cell::Cell<[f32; 3]>,
+}
+
+/// What the mismatch screen's main button does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MismatchFix {
+    /// Download the mods that are missing or differ, then restart.
+    Fetch,
+    /// The lists match and the builds too: download every shared mod again.
+    FetchAgain,
+    /// Only extra mods are in the way: turn them off and restart.
+    Apply,
+}
+
+impl ModMismatch {
+    pub fn new(
+        reason: String,
+        (address, name, lan): (String, String, bool),
+        registry: bool,
+        server_mods: Vec<horizon_protocol::mod_list::Entry>,
+        client_mods: &[horizon_protocol::mod_list::Entry],
+        builds: [Option<horizon_protocol::build_id::Build>; 2],
+        offer: Option<u64>,
+    ) -> Self {
+        let detail = horizon_protocol::mod_list::compare_detailed(&server_mods, client_mods);
+        let [server_build, client_build] = builds;
+        Self {
+            reason,
+            address,
+            name,
+            lan,
+            registry,
+            server_mods,
+            detail,
+            server_build,
+            client_build,
+            offer,
+            job: None,
+            turn_off_extra: true,
+            note: None,
+            scroll: crate::ui::Scroll::default(),
+            view: std::cell::Cell::new([0.0; 3]),
+        }
+    }
+    /// Both builds are known to be the same game.
+    pub fn same_build(&self) -> bool {
+        match (&self.server_build, &self.client_build) {
+            (Some(server), Some(client)) => server.same_as(client),
+            _ => false,
+        }
+    }
+    /// The server's mods a download would bring: the missing and differing
+    /// ones; or, when the lists match and the builds too but the server still
+    /// refused, every shared one (a folder's edits change no version).
+    pub fn wanted(&self) -> Vec<horizon_protocol::mod_list::Entry> {
+        let differing = self.detail.wanted();
+        if differing.is_empty()
+            && self.registry
+            && self.detail.extra.is_empty()
+            && self.same_build()
+        {
+            return horizon_protocol::mod_list::shared(&self.server_mods);
+        }
+        differing
+    }
+    /// The ids of the mods to turn off before the restart.
+    pub fn extra_to_turn_off(&self) -> Vec<String> {
+        match self.turn_off_extra {
+            true => self.detail.extra.iter().map(|e| e.id.clone()).collect(),
+            false => Vec::new(),
+        }
+    }
+    fn downloading(&self) -> bool {
+        self.job.as_ref().is_some_and(|job| job.running())
+    }
+    /// What the main button would do now; none when nothing here can help.
+    pub fn fix(&self) -> Option<MismatchFix> {
+        if self.downloading() {
+            return None;
+        }
+        if !self.wanted().is_empty() {
+            return self.offer.map(|_| match self.detail.wanted().is_empty() {
+                true => MismatchFix::FetchAgain,
+                false => MismatchFix::Fetch,
+            });
+        }
+        (self.turn_off_extra && !self.detail.extra.is_empty()).then_some(MismatchFix::Apply)
+    }
+    /// The screen as a harness reads it (`horizon-ctl`'s title state).
+    pub fn report(&self) -> serde_json::Value {
+        let named = |e: &horizon_protocol::mod_list::Entry| format!("{} {}", e.id, e.version);
+        let label = |b: &Option<horizon_protocol::build_id::Build>| b.as_ref().map(|b| b.label());
+        serde_json::json!({
+            "address": self.address,
+            "registry": self.registry,
+            "missing": self.detail.missing.iter().map(named).collect::<Vec<_>>(),
+            "changed": self.detail.changed.iter().map(|(s, _)| named(s)).collect::<Vec<_>>(),
+            "extra": self.detail.extra.iter().map(named).collect::<Vec<_>>(),
+            "server_build": label(&self.server_build),
+            "client_build": label(&self.client_build),
+            "same_build": self.same_build(),
+            "offer": self.offer,
+            "fix": self.fix().map(|fix| format!("{fix:?}")),
+            "turn_off_extra": self.turn_off_extra,
+            "lines": self.lines().into_iter().map(|(_, text)| text).collect::<Vec<_>>(),
+            "status": self.status(),
+        })
+    }
+    /// The list: a heading for each kind of difference, then its mods.
+    fn lines(&self) -> Vec<(bool, String)> {
+        let get = crate::lang::get_or;
+        let mut lines = Vec::new();
+        let mut section = |key: &str, fallback: &str, rows: Vec<String>| {
+            if !rows.is_empty() {
+                lines.push((true, format!("{} ({})", get(key, fallback), rows.len())));
+                lines.extend(rows.into_iter().map(|row| (false, row)));
+            }
+        };
+        let d = &self.detail;
+        let named = |e: &horizon_protocol::mod_list::Entry| format!("{} {}", e.id, e.version);
+        section(
+            "horizon.mods.mismatch.missing",
+            "Missing",
+            d.missing.iter().map(named).collect(),
+        );
+        section(
+            "horizon.mods.mismatch.changed",
+            "Different version or file",
+            d.changed
+                .iter()
+                .map(|(server, yours)| match server.version != yours.version {
+                    true => format!(
+                        "{}: server {}, yours {}",
+                        server.id, server.version, yours.version
+                    ),
+                    false => format!("{} {}: your file differs", server.id, server.version),
+                })
+                .collect(),
+        );
+        section(
+            "horizon.mods.mismatch.extra",
+            "Not on this server",
+            d.extra.iter().map(named).collect(),
+        );
+        if let (Some(server), Some(client)) = (&self.server_build, &self.client_build) {
+            section(
+                "horizon.mods.mismatch.native",
+                "Native mods that differ",
+                server.native_difference(client),
+            );
+        }
+        if lines.is_empty() {
+            lines.push((
+                false,
+                get(
+                    "horizon.mods.mismatch.same_lists",
+                    "Both sides name the same mods and versions.",
+                ),
+            ));
+        }
+        lines
+    }
+    /// The note under the builds: why a download cannot help, or what it would do.
+    fn build_note(&self) -> Option<String> {
+        let get = crate::lang::get_or;
+        if self.server_build.is_some() && self.client_build.is_some() && !self.same_build() {
+            return Some(get(
+                "horizon.mods.mismatch.builds_differ",
+                "Native mods are built into the game and can't be downloaded. Both players need the same build.",
+            ));
+        }
+        (self.registry && self.detail.is_empty()).then(|| {
+            get(
+                "horizon.mods.mismatch.contents_differ",
+                "The mods' names and versions match, but what they add does not: a mod's files were changed on one side.",
+            )
+        })
+    }
+    /// The line over the buttons: the download's progress, else why nothing
+    /// happened, else what the player can do.
+    fn status(&self) -> String {
+        use crate::mod_transfer::{State, megabytes};
+        let get = crate::lang::get_or;
+        match self.job.as_ref().map(|job| job.state()) {
+            Some(State::Connecting) => get(
+                "horizon.mods.mismatch.connecting",
+                "Connecting to the server...",
+            ),
+            Some(State::Receiving(p)) if p.id.is_empty() => get(
+                "horizon.mods.mismatch.asking",
+                "Asking the server for its mods...",
+            ),
+            Some(State::Receiving(p)) => format!(
+                "{} {} {} / {} ({} {} {})",
+                get("horizon.mods.mismatch.downloading", "Downloading"),
+                p.id,
+                megabytes(p.received),
+                megabytes(p.size),
+                p.index,
+                get("horizon.mods.mismatch.of", "of"),
+                p.count
+            ),
+            Some(State::Installing) => get("horizon.mods.mismatch.installing", "Installing..."),
+            Some(State::Done(_)) => get("horizon.mods.mismatch.restarting", "Restarting..."),
+            Some(State::Failed(why)) => why,
+            None => match &self.note {
+                Some(note) => note.clone(),
+                None if !self.wanted().is_empty() && self.offer.is_none() => get(
+                    "horizon.mods.mismatch.not_shared",
+                    "This server does not share its mods' files: ask its owner for them.",
+                ),
+                None => String::new(),
+            },
+        }
+    }
+}
+
+/// Where the mismatch screen's parts sit, in GUI pixels from the top.
+struct MismatchLayout {
+    title: f32,
+    builds: f32,
+    note: f32,
+    /// The list, between its separators.
+    top: f32,
+    bottom: f32,
+    status: f32,
+    /// The main button, and the row under it.
+    fix: f32,
+    row: f32,
+}
+/// The title, both builds and `note_lines` rows of note at the top; the
+/// status line and two rows of buttons at the bottom; the list takes the rest.
+fn mismatch_layout(h: f32, note_lines: usize) -> MismatchLayout {
+    let h = h.ceil();
+    let note = 48.0;
+    let top = note + note_lines as f32 * 9.0 + if note_lines > 0 { 5.0 } else { 0.0 };
+    let (status, fix, row) = (h - 64.0, h - 50.0, h - 26.0);
+    MismatchLayout {
+        title: 10.0,
+        builds: 24.0,
+        note,
+        top,
+        // Never upside down in a window too small for the list.
+        bottom: (status - 5.0).max(top),
+        status,
+        fix,
+        row,
+    }
+}
+/// A row of the mismatch screen's list.
+const MISMATCH_ROW: f32 = 10.0;
 
 /// The job of [`Screen::buttons`]'s button `id`, for the controller.
 pub fn button_action(id: u8) -> Option<crate::widgets::Action> {
     use crate::widgets::Action;
     match id {
-        46 => Some(Action::Back),
+        46 | 63 => Some(Action::Back),
         50 => Some(Action::Done),
         51 | 53 | 57 | 59 => Some(Action::Cancel),
         _ => None,
@@ -177,6 +466,23 @@ impl Screen {
             Self::ConfirmDelete { .. } => "server_delete",
             Self::Friend { .. } => "friends_join",
             Self::Disconnected { .. } => "disconnected",
+            Self::ModMismatch(_) => "mod_mismatch",
+        }
+    }
+    /// Why the server ended the connection, on the screens that say: the
+    /// Disconnected screen and the mod mismatch screen.
+    pub fn disconnect_reason(&self) -> Option<&str> {
+        match self {
+            Self::Disconnected { reason, .. } => Some(reason),
+            Self::ModMismatch(m) => Some(&m.reason),
+            _ => None,
+        }
+    }
+    /// The mod mismatch screen, when it is the one open.
+    pub fn mod_mismatch_mut(&mut self) -> Option<&mut ModMismatch> {
+        match self {
+            Self::ModMismatch(m) => Some(m),
+            _ => None,
         }
     }
 }
@@ -916,6 +1222,59 @@ impl Screen {
                 }
                 v
             }
+            Self::ModMismatch(m) => {
+                let get = crate::lang::get_or;
+                let l = mismatch_layout(h, 0);
+                let mut v = Vec::new();
+                if m.downloading() {
+                    v.push(b(
+                        half(w) - 100.0,
+                        l.fix,
+                        200.0,
+                        &get("gui.cancel", "Cancel"),
+                        true,
+                        64,
+                    ));
+                } else if let Some(fix) = m.fix() {
+                    let label = match fix {
+                        MismatchFix::Fetch => {
+                            get("horizon.mods.mismatch.fetch", "Download and restart")
+                        }
+                        MismatchFix::FetchAgain => get(
+                            "horizon.mods.mismatch.fetch_again",
+                            "Download the server's mods again",
+                        ),
+                        MismatchFix::Apply => get(
+                            "horizon.mods.mismatch.apply",
+                            "Restart without the extra mods",
+                        ),
+                    };
+                    v.push(b(half(w) - 100.0, l.fix, 200.0, &label, true, 61));
+                }
+                let back = get("gui.toMenu", "Back to Server List");
+                if m.detail.extra.is_empty() {
+                    v.push(b(half(w) - 100.0, l.row, 200.0, &back, true, 63));
+                } else {
+                    let state = match m.turn_off_extra {
+                        true => get("options.on", "ON"),
+                        false => get("options.off", "OFF"),
+                    };
+                    let label = format!(
+                        "{}: {state}",
+                        get("horizon.mods.mismatch.turn_off", "Turn off extra mods")
+                    );
+                    v.push(b(
+                        half(w) - 154.0,
+                        l.row,
+                        150.0,
+                        &label,
+                        !m.downloading(),
+                        62,
+                    ));
+                    v.push(b(half(w) + 4.0, l.row, 150.0, &back, true, 63));
+                }
+                v
+            }
         }
     }
     /// An EditBox and its label: the label at `label_y` (one pixel in, in
@@ -1001,6 +1360,17 @@ impl Screen {
             Self::Disconnected { reason, .. } => ScreenInfo::new(
                 "multiplayer/disconnected",
                 join(&[&get("disconnect.lost", "Connection Lost"), reason]),
+            ),
+            // Its title, then the server's own words, which name the mods.
+            Self::ModMismatch(m) => ScreenInfo::new(
+                "multiplayer/mod_mismatch",
+                join(&[
+                    &get(
+                        "horizon.mods.mismatch.title",
+                        "Your mods don't match this server's",
+                    ),
+                    &m.reason,
+                ]),
             ),
         }
     }
@@ -1504,6 +1874,120 @@ impl Screen {
                     centered(batch, &text, l.retry, rgba(170, 170, 170, 255));
                 }
             }
+            Self::ModMismatch(m) => {
+                let get = crate::lang::get_or;
+                let (white, gray) = (u32::MAX, rgba(170, 170, 170, 255));
+                let (green, red, yellow) = (
+                    rgba(85, 255, 85, 255),
+                    rgba(255, 85, 85, 255),
+                    rgba(255, 255, 85, 255),
+                );
+                let note = m
+                    .build_note()
+                    .map(|note| wrap(&note, (w.ceil() - 50.0).max(1.0), atlas))
+                    .unwrap_or_default();
+                let l = mismatch_layout(h, note.len());
+                centered(
+                    batch,
+                    &get(
+                        "horizon.mods.mismatch.title",
+                        "Your mods don't match this server's",
+                    ),
+                    l.title,
+                    white,
+                );
+                // Both builds: green when they are the same game.
+                let same = m.same_build();
+                let label = |build: &Option<horizon_protocol::build_id::Build>| match build {
+                    Some(build) => build.label(),
+                    None => get(
+                        "horizon.mods.mismatch.build_unknown",
+                        "not told (an older Horizon)",
+                    ),
+                };
+                let server = format!(
+                    "{}: {}",
+                    get("horizon.mods.mismatch.server", "Server"),
+                    label(&m.server_build)
+                );
+                let yours = format!(
+                    "{}: {}",
+                    get("horizon.mods.mismatch.you", "You"),
+                    label(&m.client_build)
+                );
+                let differ = m.server_build.is_some() && m.client_build.is_some() && !same;
+                centered(batch, &server, l.builds, if same { green } else { white });
+                centered(
+                    batch,
+                    &yours,
+                    l.builds + 10.0,
+                    match (same, differ) {
+                        (true, _) => green,
+                        (_, true) => red,
+                        _ => white,
+                    },
+                );
+                for (i, line) in note.iter().enumerate() {
+                    centered(batch, line, l.note + i as f32 * 9.0, gray);
+                }
+                // The list, scrolled and clipped as the server list is.
+                let lines = m.lines();
+                let content = lines.len() as f32 * MISMATCH_ROW + 8.0;
+                let mut scroll = m.scroll;
+                scroll.clamp(l.top, l.bottom, content);
+                m.view.set([l.top, l.bottom, content]);
+                crate::ui::list_background(batch, atlas, l.top, l.bottom, false);
+                let first = batch.vertices.len();
+                let left = half(w) - 150.0;
+                for (i, (heading, text)) in lines.iter().enumerate() {
+                    let y = l.top + 4.0 - scroll.amount.trunc() + i as f32 * MISMATCH_ROW;
+                    if y + MISMATCH_ROW < l.top || y > l.bottom {
+                        continue;
+                    }
+                    let (x, color) = match *heading {
+                        true => (left, yellow),
+                        false => (left + 8.0, white),
+                    };
+                    batch.text(atlas, text, x, y, color, true);
+                    // The control socket's widget tree names the row.
+                    crate::widgets::record_as(
+                        text,
+                        [left, y, 300.0, MISMATCH_ROW],
+                        true,
+                        crate::widgets::Kind::Row,
+                    );
+                }
+                batch.clip_since(first, 0.0, l.top, w.ceil(), l.bottom);
+                crate::ui::separators(batch, atlas, l.top, l.bottom, false);
+                crate::ui::scrollbar(
+                    batch,
+                    atlas,
+                    half(w) + 156.0,
+                    l.top,
+                    l.bottom,
+                    content,
+                    scroll.amount,
+                );
+                let status = m.status();
+                if !status.is_empty() {
+                    // One line: the buttons sit right under it.
+                    let line = wrap(&status, (w.ceil() - 20.0).max(1.0), atlas)
+                        .into_iter()
+                        .next()
+                        .unwrap_or_default();
+                    let color = match m.job.is_some() {
+                        true => white,
+                        false => yellow,
+                    };
+                    centered(batch, &line, l.status, color);
+                    crate::widgets::record_as(
+                        &status,
+                        [0.0, l.status, w.ceil(), 9.0],
+                        true,
+                        crate::widgets::Kind::Row,
+                    );
+                }
+            }
         }
     }
     /// `DirectJoinServerScreen.keyPressed`: Enter joins the typed address
@@ -1786,6 +2270,28 @@ impl Screen {
                 Some(51 | 53 | 54 | 57),
             ) => *self = Self::list(saves),
             (Self::Disconnected { retry, .. }, Some(55)) => *retry = None,
+            (Self::ModMismatch(m), Some(61)) => match m.fix() {
+                Some(MismatchFix::Fetch | MismatchFix::FetchAgain) => return Outcome::FetchMods,
+                Some(MismatchFix::Apply) => return Outcome::ApplyMods,
+                None => {}
+            },
+            (Self::ModMismatch(m), Some(62)) => {
+                if !m.downloading() {
+                    m.turn_off_extra = !m.turn_off_extra;
+                }
+            }
+            (Self::ModMismatch(m), Some(63)) => {
+                // Leaving stops the download; what it brought so far is dropped.
+                if let Some(job) = &m.job {
+                    job.cancel();
+                }
+                *self = Self::list(saves);
+            }
+            (Self::ModMismatch(m), Some(64)) => {
+                if let Some(job) = &m.job {
+                    job.cancel();
+                }
+            }
             (Self::Direct { address }, Some(52)) => {
                 let address = direct_address(address);
                 remember_direct_join(saves, &address);
@@ -1890,6 +2396,13 @@ impl Screen {
             if cursor.1 >= top && cursor.1 < bottom {
                 let content = content_height(servers.len(), lan.games().len());
                 scroll.wheel(delta, ROW_HEIGHT / 2.0, top, bottom, content);
+            }
+        }
+        if let Self::ModMismatch(m) = self {
+            let [top, bottom, content] = m.view.get();
+            if cursor.1 >= top && cursor.1 < bottom {
+                m.scroll
+                    .wheel(delta, MISMATCH_ROW * 2.0, top, bottom, content);
             }
         }
     }
@@ -2101,6 +2614,13 @@ impl Screen {
                     },
                 );
                 *self = list;
+                false
+            }
+            Self::ModMismatch(m) => {
+                if let Some(job) = &m.job {
+                    job.cancel();
+                }
+                *self = Self::list(saves);
                 false
             }
             _ => {
@@ -2427,6 +2947,234 @@ mod tests {
         // centeredText: `width / 2 - font.width(text) / 2`.
         assert_eq!(centered_x(427.0, 85.0), 171.0);
         assert_eq!(centered_x(320.0, 84.0), 118.0);
+    }
+
+    fn shared_mod(id: &str, version: &str, hash: u8) -> horizon_protocol::mod_list::Entry {
+        horizon_protocol::mod_list::Entry {
+            id: id.into(),
+            version: version.into(),
+            sha256: Some([hash; 32]),
+            side: horizon_protocol::mod_list::Side::Both,
+        }
+    }
+
+    fn build_with(native: &[(&str, &str)]) -> horizon_protocol::build_id::Build {
+        horizon_protocol::build_id::Build {
+            version: "0.1.0".into(),
+            nightly: None,
+            revision: "e42afee0c02067".into(),
+            dirty: false,
+            fingerprint: [7; 32],
+            native: native
+                .iter()
+                .map(|(id, version)| ((*id).to_owned(), (*version).to_owned()))
+                .collect(),
+        }
+    }
+
+    fn mismatch(
+        registry: bool,
+        server: &[horizon_protocol::mod_list::Entry],
+        client: &[horizon_protocol::mod_list::Entry],
+        builds: [&[(&str, &str)]; 2],
+        offer: bool,
+    ) -> ModMismatch {
+        ModMismatch::new(
+            "Your mods don't match this server's.".into(),
+            ("192.168.1.20:25570".into(), "Player".into(), false),
+            registry,
+            server.to_vec(),
+            client,
+            [Some(build_with(builds[0])), Some(build_with(builds[1]))],
+            offer.then_some(1 << 30),
+        )
+    }
+
+    fn button_ids(m: &ModMismatch) -> Vec<(u8, bool)> {
+        Screen::ModMismatch(Box::new(m.clone()))
+            .buttons(427.0, 240.0)
+            .iter()
+            .map(|b| (b.5, b.4))
+            .collect()
+    }
+
+    #[test]
+    fn the_mod_mismatch_screen_lists_the_differences_and_what_helps() {
+        let server = [shared_mod("ruby", "1.2", 1), shared_mod("pipes", "2.0", 2)];
+        let client = [shared_mod("pipes", "1.0", 3), shared_mod("xray", "1", 4)];
+        let jei = [("jei", "0.3")];
+        let mut m = mismatch(false, &server, &client, [&jei, &jei], true);
+        let screen = Screen::ModMismatch(Box::new(m.clone()));
+        assert_eq!(screen.id(), "mod_mismatch");
+        assert_eq!(
+            screen.disconnect_reason(),
+            Some("Your mods don't match this server's.")
+        );
+        let lines: Vec<String> = m.lines().into_iter().map(|(_, text)| text).collect();
+        assert_eq!(
+            lines,
+            [
+                "Missing (1)",
+                "ruby 1.2",
+                "Different version or file (1)",
+                "pipes: server 2.0, yours 1.0",
+                "Not on this server (1)",
+                "xray 1",
+            ]
+        );
+        // Something to download and a server that sends it: both go in one step.
+        assert_eq!(m.fix(), Some(MismatchFix::Fetch));
+        let wanted: Vec<String> = m.wanted().into_iter().map(|e| e.id).collect();
+        assert_eq!(wanted, ["ruby", "pipes"]);
+        assert_eq!(m.extra_to_turn_off(), ["xray"]);
+        // The main button over a row of two, on whole GUI pixels.
+        let at: Vec<(f32, f32, f32, u8)> = screen
+            .buttons(427.0, 240.0)
+            .iter()
+            .map(|b| (b.0, b.1, b.2, b.5))
+            .collect();
+        assert_eq!(
+            at,
+            [
+                (113.0, 190.0, 200.0, 61),
+                (59.0, 214.0, 150.0, 62),
+                (217.0, 214.0, 150.0, 63)
+            ]
+        );
+        let labels: Vec<String> = screen
+            .buttons(427.0, 240.0)
+            .into_iter()
+            .map(|b| b.3)
+            .collect();
+        assert_eq!(
+            labels,
+            [
+                "Download and restart",
+                "Turn off extra mods: ON",
+                "Back to Server List"
+            ]
+        );
+        // The list sits between the builds and the status line.
+        let l = mismatch_layout(240.0, 0);
+        assert!(l.builds + 20.0 <= l.top && l.top < l.bottom && l.bottom < l.status);
+        assert!(l.status + 9.0 <= l.fix && l.fix + 20.0 <= l.row && l.row + 20.0 <= 240.0);
+        let noted = mismatch_layout(240.0, 2);
+        assert!(noted.top >= noted.note + 18.0 && noted.top < noted.bottom);
+        // Keeping the extra mods on is the player's choice.
+        m.turn_off_extra = false;
+        assert!(m.extra_to_turn_off().is_empty());
+        assert_eq!(m.fix(), Some(MismatchFix::Fetch));
+        // A server that does not send its mods: nothing to press, and the screen says why.
+        m.offer = None;
+        assert_eq!(m.fix(), None);
+        assert_eq!(button_ids(&m), [(62, true), (63, true)]);
+        assert!(m.status().contains("does not share"), "{}", m.status());
+    }
+
+    #[test]
+    fn only_extra_mods_restart_without_them() {
+        let server = [shared_mod("ruby", "1.2", 1)];
+        let client = [shared_mod("ruby", "1.2", 1), shared_mod("xray", "1", 4)];
+        let mut m = mismatch(true, &server, &client, [&[], &[]], false);
+        assert!(m.wanted().is_empty());
+        assert_eq!(m.fix(), Some(MismatchFix::Apply));
+        assert_eq!(button_ids(&m), [(61, true), (62, true), (63, true)]);
+        m.turn_off_extra = false;
+        assert_eq!(m.fix(), None);
+        // No extra mods either: one button, centred.
+        let same = mismatch(false, &server, &server, [&[], &[]], false);
+        let at: Vec<(f32, f32, f32, u8)> = Screen::ModMismatch(Box::new(same))
+            .buttons(427.0, 240.0)
+            .iter()
+            .map(|b| (b.0, b.1, b.2, b.5))
+            .collect();
+        assert_eq!(at, [(113.0, 214.0, 200.0, 63)]);
+    }
+
+    #[test]
+    fn the_same_lists_and_builds_download_every_shared_mod_again() {
+        let server = [shared_mod("ruby", "1.2", 1), shared_mod("pipes", "2.0", 2)];
+        // The client runs its copies from folders: same versions, no file to compare.
+        let client: Vec<_> = server
+            .iter()
+            .map(|e| horizon_protocol::mod_list::Entry {
+                sha256: None,
+                ..e.clone()
+            })
+            .collect();
+        let jei = [("jei", "0.3")];
+        let m = mismatch(true, &server, &client, [&jei, &jei], true);
+        assert!(m.detail.is_empty() && m.same_build());
+        assert_eq!(m.fix(), Some(MismatchFix::FetchAgain));
+        assert_eq!(m.wanted(), server);
+        assert!(m.build_note().unwrap().contains("were changed"));
+        assert_eq!(
+            m.lines(),
+            [(
+                false,
+                "Both sides name the same mods and versions.".to_owned()
+            )]
+        );
+        // Another build explains the refusal: no download changes a build.
+        let other = [("jade", "1.0"), ("jei", "0.4")];
+        let m = mismatch(true, &server, &client, [&other, &jei], true);
+        assert!(!m.same_build());
+        assert_eq!(m.fix(), None);
+        assert!(m.wanted().is_empty());
+        assert!(m.build_note().unwrap().contains("same build"));
+        let lines: Vec<String> = m.lines().into_iter().map(|(_, text)| text).collect();
+        assert_eq!(
+            lines,
+            [
+                "Native mods that differ (2)",
+                "jade 1.0 (server only)",
+                "jei (server 0.4, yours 0.3)",
+            ]
+        );
+        // The list refusal with matching builds keeps to the mods that differ.
+        let m = mismatch(false, &server, &[], [&jei, &jei], true);
+        assert_eq!(m.fix(), Some(MismatchFix::Fetch));
+        assert_eq!(m.wanted(), server);
+    }
+
+    #[test]
+    fn a_running_download_shows_its_progress_and_can_be_cancelled() {
+        use crate::mod_transfer::{Job, Progress, State};
+        let server = [shared_mod("ruby", "1.2", 1)];
+        let client = [shared_mod("xray", "1", 4)];
+        let mut m = mismatch(false, &server, &client, [&[], &[]], true);
+        m.job = Some(Job::in_state(State::Receiving(Progress {
+            id: "ruby".into(),
+            received: 3_100_000,
+            size: 12_400_000,
+            index: 2,
+            count: 5,
+        })));
+        assert_eq!(m.fix(), None);
+        // Cancel in the main button's place; the toggle waits for the download.
+        assert_eq!(button_ids(&m), [(64, true), (62, false), (63, true)]);
+        assert_eq!(m.status(), "Downloading ruby 3.1 MB / 12.4 MB (2 of 5)");
+        let mut screen = Screen::ModMismatch(Box::new(m.clone()));
+        let saves = Path::new("unused-saves");
+        assert!(matches!(
+            screen.click(Some(62), 0.0, 0.0, (427.0, 240.0), saves),
+            Outcome::None
+        ));
+        assert!(screen.mod_mismatch_mut().unwrap().turn_off_extra);
+        // A failed download leaves its reason and the button comes back.
+        m.job = Some(Job::in_state(State::Failed("The server closed.".into())));
+        assert_eq!(m.status(), "The server closed.");
+        assert_eq!(m.fix(), Some(MismatchFix::Fetch));
+        let mut screen = Screen::ModMismatch(Box::new(m));
+        assert!(matches!(
+            screen.click(Some(61), 0.0, 0.0, (427.0, 240.0), saves),
+            Outcome::FetchMods
+        ));
+        assert!(matches!(
+            screen.click(Some(62), 0.0, 0.0, (427.0, 240.0), saves),
+            Outcome::None
+        ));
+        assert!(!screen.mod_mismatch_mut().unwrap().turn_off_extra);
     }
 
     #[test]

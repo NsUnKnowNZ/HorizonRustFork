@@ -1154,7 +1154,7 @@ pub use build::{generate, inject};
 mod injection;
 pub use injection::{TraitContract, TraitInjection};
 mod staged;
-pub use staged::{MIXINS_STAGE, staged_mods};
+pub use staged::{MIXINS_STAGE, staged_fingerprint, staged_mods, staged_native};
 #[cfg(test)]
 mod injection_tests;
 

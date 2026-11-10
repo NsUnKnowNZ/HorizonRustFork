@@ -1,0 +1,65 @@
+Launch
+C command "gamemode creative"
+C command "execute in minecraft:overworld run tp @s 1000.5 152 996.5 0 10"
+C wait 80
+C command "fill 990 150 990 1010 158 1010 minecraft:air"
+C command "fill 990 149 990 1010 149 1010 minecraft:grass_block"
+C command "fill 999 149 1001 1002 153 1001 minecraft:obsidian"
+C command "fill 1000 150 1001 1001 152 1001 minecraft:air"
+C command "setblock 1000 150 1001 minecraft:fire"
+C command "time set 6000"
+C command "tp @s 1000.9 150 998.5 0 5"
+C wait 160
+C screenshot "$shots\p3-first.png"
+C key w down
+C wait 40
+C key w up
+C state
+C wait 60
+C screenshot "$shots\p3-nether1.png"
+C command "tp @s ~ ~ ~ 180 5"
+C wait 100
+C screenshot "$shots\p3-nether-back.png"
+C key w down
+C wait 40
+C key w up
+C state
+C wait 40
+C command "tp @s 1000.9 150 999.0 0 5"
+C wait 120
+C screenshot "$shots\p3-front.png"
+C command "tp @s 1000.9 150 1000.6 0 5"
+C wait 20
+C screenshot "$shots\p3-s0.png"
+C key shift down
+C key w down
+C wait 3
+C screenshot "$shots\p3-s1.png"
+C wait 3
+C screenshot "$shots\p3-s2.png"
+C wait 3
+C screenshot "$shots\p3-s3.png"
+C wait 3
+C screenshot "$shots\p3-s4.png"
+C wait 3
+C screenshot "$shots\p3-s5.png"
+C wait 3
+C screenshot "$shots\p3-s6.png"
+C wait 3
+C screenshot "$shots\p3-s7.png"
+C key w up
+C key shift up
+C state
+C wait 40
+C screenshot "$shots\p3-end.png"
+C command "execute in minecraft:overworld run tp @s 203.6 151.2 201.5 35 5"
+C wait 80
+C key f3 down
+C key g tap
+C key f3 up
+C wait 20
+C screenshot "$shots\p5-f3g.png"
+C key f3 down
+C key g tap
+C key f3 up
+C logs --lines 30

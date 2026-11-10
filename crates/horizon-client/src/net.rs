@@ -50,6 +50,14 @@ pub enum Event {
     ModNet,
     /// The server samples far terrain for this client (`lod_net`).
     FarTerrain(crate::lod_net::Offer),
+    /// Which build the server runs (`horizon_protocol::build_id`).
+    ServerBuild(horizon_protocol::build_id::Build),
+    /// The mods the server has on, as it named them (`horizon_protocol::mod_list`);
+    /// a reconfiguration's list replaces the first.
+    ServerMods(Vec<horizon_protocol::mod_list::Entry>),
+    /// The server shares its content mods' files, up to this many bytes a
+    /// request (`horizon_protocol::mod_files`).
+    ModFilesOffer(u64),
     /// ClientConfigurationPacketListenerImpl.handleEnabledFeatures.
     Features(Vec<String>),
     /// Configuration finished: the play state begins with these registries.
@@ -608,6 +616,12 @@ fn status(send: &Sender<Event>, text: &str) {
     let _ = send.send(Event::Status(text.to_owned()));
 }
 
+/// The status a join through the friends relay reports (`join_friend`): a mod
+/// download reads it to stay off the relay (`mod_transfer`).
+pub(crate) fn relayed_status(lang: &Language) -> String {
+    tr(lang, "horizon.multiplayer.connected_friend_relay")
+}
+
 /// Shown when an online-mode server asks a client without an account to authenticate.
 pub const NOT_SIGNED_IN: &str = "This server is in online mode. Sign in with your Microsoft account in the Horizon launcher to join it.";
 
@@ -758,27 +772,23 @@ fn connection_lost(e: horizon_protocol::Error, lang: &Language) -> String {
     }
 }
 
-/// `ClientHandshakePacketListenerImpl.handleHello`: the whole connection.
-/// Ok: why it ended for good (the server's reason, or
-/// a refusal no retry fixes); Err: the connection failed.
-fn run(
+/// `ConnectScreen.startConnecting` and `ClientHandshakePacketListenerImpl`, up to the login the
+/// server finished and this side acknowledged: the connection, in configuration, and the
+/// profile it plays as. `connected` sees the connection as soon as it is open. Ok(Err): the
+/// server refused the login for good, with its reason; Err: the connection failed. A mod
+/// download (`mod_transfer`) logs in through here too.
+pub(crate) fn connect_and_login(
     local: Option<horizon_protocol::connection::Pipe>,
     address: &str,
     name: &str,
     auth: Option<&AuthSession>,
-    info: cfg::ClientInformation,
     lang: &Language,
     send: &Sender<Event>,
-    shared_writer: &Mutex<Option<ConnWriter>>,
-    configuring: &AtomicBool,
-    shared_counters: &Mutex<Option<Arc<Counters>>>,
     cookies: &Cookies,
-    far: &crate::lod_net::Inbox,
     transferred: bool,
-    resources: &Path,
     lan: bool,
-    recorder: &Arc<Mutex<Option<StudioRecorder>>>,
-) -> Result<Reason, Reason> {
+    connected: &mut dyn FnMut(&Connection),
+) -> Result<Result<(Connection, login::GameProfile), Reason>, Reason> {
     let (host, port, mut c) = if let Some(pipe) = local {
         (address.to_owned(), 0, Connection::local(pipe))
     } else {
@@ -816,7 +826,7 @@ fn run(
         }
         (host, port, c)
     };
-    *shared_counters.lock().unwrap() = Some(c.reader.counters.clone());
+    connected(&c);
     let e = |e: horizon_protocol::Error| Reason::plain(connection_lost(e, lang));
     c.send(
         &handshake::Serverbound::Intention(handshake::Intention {
@@ -852,7 +862,7 @@ fn run(
                 break p.profile;
             }
             login::Clientbound::Disconnect(p) => {
-                return Ok(Reason::component(&p.reason_json, lang));
+                return Ok(Err(Reason::component(&p.reason_json, lang)));
             }
             login::Clientbound::Hello(hello) => {
                 status(send, &tr(lang, "connect.authorizing"));
@@ -927,6 +937,49 @@ fn run(
             login::Clientbound::Unknown(..) => {}
         }
     };
+    Ok(Ok((c, profile)))
+}
+
+/// `ClientHandshakePacketListenerImpl.handleHello`: the whole connection.
+/// Ok: why it ended for good (the server's reason, or
+/// a refusal no retry fixes); Err: the connection failed.
+fn run(
+    local: Option<horizon_protocol::connection::Pipe>,
+    address: &str,
+    name: &str,
+    auth: Option<&AuthSession>,
+    info: cfg::ClientInformation,
+    lang: &Language,
+    send: &Sender<Event>,
+    shared_writer: &Mutex<Option<ConnWriter>>,
+    configuring: &AtomicBool,
+    shared_counters: &Mutex<Option<Arc<Counters>>>,
+    cookies: &Cookies,
+    far: &crate::lod_net::Inbox,
+    transferred: bool,
+    resources: &Path,
+    lan: bool,
+    recorder: &Arc<Mutex<Option<StudioRecorder>>>,
+) -> Result<Reason, Reason> {
+    let joined = connect_and_login(
+        local,
+        address,
+        name,
+        auth,
+        lang,
+        send,
+        cookies,
+        transferred,
+        lan,
+        &mut |c: &Connection| {
+            *shared_counters.lock().unwrap() = Some(c.reader.counters.clone());
+        },
+    )?;
+    let (mut c, profile) = match joined {
+        Ok(joined) => joined,
+        Err(refused) => return Ok(refused),
+    };
+    let e = |e: horizon_protocol::Error| Reason::plain(connection_lost(e, lang));
     status(send, &tr(lang, "connect.joining"));
     // ClientHandshakePacketListenerImpl.handleLoginFinished: the brand, then
     // the client information.
@@ -1137,6 +1190,8 @@ fn configure(
 ) -> Result<Dynamic, Reason> {
     let mut registries = Dynamic::default();
     let mut content_verified = false;
+    // The server's mods, when it named them: a refusal over them is told from any other.
+    let mut server_mods: Option<Vec<horizon_protocol::mod_list::Entry>> = None;
     let reply = |p: cfg::Serverbound| -> Result<(), Reason> {
         match writer.lock().unwrap().as_mut() {
             Some(w) => w
@@ -1172,6 +1227,11 @@ fn configure(
                         &horizon_protocol::mod_list::local(),
                     )),
                 }))?;
+                // Kept for the screen that lists the differences when the server refuses.
+                if let Ok(list) = horizon_protocol::mod_list::decode(&p.data) {
+                    let _ = send.send(Event::ServerMods(list.clone()));
+                    server_mods = Some(list);
+                }
             }
             cfg::Clientbound::CustomPayload(p) => {
                 // Horizon servers use the client brand to negotiate their extensions.
@@ -1243,7 +1303,13 @@ fn configure(
                 });
                 return Err(Reason::keyed("disconnect.transfer", lang));
             }
-            cfg::Clientbound::Disconnect(d) => return Err(Reason::tag(&d.reason, lang)),
+            cfg::Clientbound::Disconnect(d) => {
+                return Err(mods_refusal(
+                    Reason::tag(&d.reason, lang),
+                    server_mods.as_deref(),
+                    &horizon_protocol::mod_list::local(),
+                ));
+            }
             cfg::Clientbound::FinishConfiguration(_) => {
                 registries.custom_components = content_verified;
                 let mut w = writer.lock().unwrap_or_else(|e| e.into_inner());
@@ -1258,11 +1324,42 @@ fn configure(
     }
 }
 
+/// The key of a refusal over the mod list: the mods named differ
+/// (`horizon_protocol::mod_list`). The game shows the mismatch screen for it
+/// and for [`BUILD_REFUSED`], and auto-reconnect never retries either.
+pub const MODS_REFUSED: &str = "horizon.disconnect.mods";
+/// The key of a refusal over the content registry (`content_identity::MISMATCH`):
+/// the mods named match and what they add does not, as with another build's
+/// native mods.
+pub const BUILD_REFUSED: &str = "horizon.disconnect.build";
+
+/// A configuration disconnect with the key of the refusal it is, when the
+/// server refused this client over its mods: its own text is kept. `server`
+/// is the list the server named, `client` this game's.
+fn mods_refusal(
+    mut reason: Reason,
+    server: Option<&[horizon_protocol::mod_list::Entry]>,
+    client: &[horizon_protocol::mod_list::Entry],
+) -> Reason {
+    use horizon_protocol::mod_list;
+    if reason.key.is_some() {
+        return reason;
+    }
+    if reason.text == crate::content_identity::MISMATCH {
+        reason.key = Some(BUILD_REFUSED.to_owned());
+    } else if reason.text.starts_with(mod_list::REFUSAL)
+        && server.is_some_and(|server| !mod_list::compare(server, client).is_empty())
+    {
+        reason.key = Some(MODS_REFUSED.to_owned());
+    }
+    reason
+}
+
 /// `KnownPacksManager.trySelectingPacks`: the packs of the server's list the
 /// client has too. Horizon carries vanilla's core pack (the prepared
 /// resources' `data/`), so it names that one when the server offers it, and
 /// the server leaves that pack's entries' data out (`fill_known_entries`).
-fn select_known_packs(offered: Vec<cfg::KnownPack>) -> Vec<cfg::KnownPack> {
+pub(crate) fn select_known_packs(offered: Vec<cfg::KnownPack>) -> Vec<cfg::KnownPack> {
     let (namespace, id, version) = crate::lan::data::CORE_PACK;
     offered
         .into_iter()
@@ -1315,11 +1412,20 @@ fn receive_brand(payload: &cfg::CustomPayload, send: &Sender<Event>) {
         && let Some(offer) = crate::lod_net::Offer::decode(&payload.data)
     {
         let _ = send.send(Event::FarTerrain(offer));
+    } else if payload.channel == horizon_protocol::build_id::CHANNEL
+        && let Ok(build) = horizon_protocol::build_id::Build::decode(&payload.data)
+    {
+        let _ = send.send(Event::ServerBuild(build));
+    } else if payload.channel == horizon_protocol::mod_files::CHANNEL
+        && let Ok(horizon_protocol::mod_files::Clientbound::Offer { max_total }) =
+            horizon_protocol::mod_files::Clientbound::decode(&payload.data)
+    {
+        let _ = send.send(Event::ModFilesOffer(max_total));
     }
 }
 
 /// `ClientBrandRetriever.getClientModName`: vanilla's default client brand.
-fn brand() -> Vec<u8> {
+pub(crate) fn brand() -> Vec<u8> {
     let mut w = horizon_protocol::buf::Writer::new();
     w.string("vanilla");
     w.data
@@ -2028,6 +2134,136 @@ mod tests {
             std::env::temp_dir().join(format!("horizon-content-identity-{}", std::process::id())),
         )
         .unwrap();
+    }
+
+    fn shared_mod(id: &str, version: &str) -> horizon_protocol::mod_list::Entry {
+        horizon_protocol::mod_list::Entry {
+            id: id.into(),
+            version: version.into(),
+            sha256: None,
+            side: horizon_protocol::mod_list::Side::Both,
+        }
+    }
+
+    #[test]
+    fn a_refusal_over_mods_is_keyed_and_what_the_server_said_is_kept() {
+        use horizon_protocol::{build_id::Build, mod_files, mod_list};
+        let server_mods = vec![shared_mod("ruby", "1.2")];
+        let build = Build {
+            version: "0.1.0".into(),
+            revision: "e42afee".into(),
+            native: vec![("jei".into(), "0.3".into())],
+            ..Build::default()
+        };
+        let (client, server) = horizon_protocol::connection::Pipe::pair();
+        let (mut reader, writer) = Connection::local(client).split();
+        let writer = Mutex::new(Some(writer));
+        let (send, events) = channel();
+        let thread = std::thread::spawn(move || {
+            configure(
+                &mut reader,
+                &writer,
+                &AtomicBool::new(true),
+                &Language::new(),
+                &send,
+                &Cookies::default(),
+                Path::new("unused"),
+            )
+            .map(|_| ())
+        });
+        let mut server = Connection::local(server);
+        let mut tell = |channel: &str, data: Vec<u8>| {
+            server
+                .send(
+                    &cfg::Clientbound::CustomPayload(cfg::CustomPayload {
+                        channel: channel.into(),
+                        data,
+                    })
+                    .encode(),
+                )
+                .unwrap();
+        };
+        tell(horizon_protocol::build_id::CHANNEL, build.encode());
+        tell(
+            mod_files::CHANNEL,
+            mod_files::Clientbound::Offer {
+                max_total: mod_files::MAX_REQUEST,
+            }
+            .encode(),
+        );
+        tell(mod_list::CHANNEL, mod_list::encode(&server_mods));
+        // The client names its own mods (none in a test), and the server judges.
+        let (id, body) = server.recv().unwrap();
+        assert_eq!(
+            cfg::Serverbound::decode(id, &body).unwrap(),
+            cfg::Serverbound::CustomPayload(cfg::CustomPayload {
+                channel: mod_list::CHANNEL.into(),
+                data: mod_list::encode(&[]),
+            })
+        );
+        let text = mod_list::compare(&server_mods, &[]).reason();
+        server
+            .send(
+                &cfg::Clientbound::Disconnect(cfg::Disconnect {
+                    reason: Tag::String(JavaString::from(text.as_str())),
+                })
+                .encode(),
+            )
+            .unwrap();
+        let Err(reason) = thread.join().unwrap() else {
+            panic!("the server refused");
+        };
+        assert_eq!(reason.key.as_deref(), Some(MODS_REFUSED));
+        assert_eq!(reason.text, text);
+        let events: Vec<Event> = events.try_iter().collect();
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::ServerBuild(b) if *b == build))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::ServerMods(m) if *m == server_mods))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Event::ModFilesOffer(n) if *n == mod_files::MAX_REQUEST))
+        );
+    }
+
+    #[test]
+    fn only_refusals_over_mods_get_their_keys() {
+        use horizon_protocol::mod_list;
+        let server = [shared_mod("ruby", "1.2")];
+        let refusal = mod_list::compare(&server, &[]).reason();
+        let keyed = |text: &str, server: Option<&[mod_list::Entry]>, client: &[mod_list::Entry]| {
+            mods_refusal(Reason::plain(text), server, client).key
+        };
+        assert_eq!(
+            keyed(crate::content_identity::MISMATCH, None, &[]).as_deref(),
+            Some(BUILD_REFUSED)
+        );
+        assert_eq!(
+            keyed(&refusal, Some(&server), &[]).as_deref(),
+            Some(MODS_REFUSED)
+        );
+        // The same mods on both sides: whatever the text says, not their refusal.
+        assert_eq!(keyed(&refusal, Some(&server), &server), None);
+        assert_eq!(keyed(&refusal, None, &[]), None);
+        // Another kick while the mods differ stays what it is.
+        assert_eq!(keyed("Kicked by an operator", Some(&server), &[]), None);
+        // A reason that came with a key keeps it.
+        let kept = mods_refusal(
+            Reason {
+                text: crate::content_identity::MISMATCH.to_owned(),
+                key: Some("multiplayer.disconnect.kicked".to_owned()),
+            },
+            None,
+            &[],
+        );
+        assert_eq!(kept.key.as_deref(), Some("multiplayer.disconnect.kicked"));
     }
 
     #[test]

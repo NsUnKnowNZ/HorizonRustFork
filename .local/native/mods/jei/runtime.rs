@@ -110,6 +110,14 @@ impl Lang {
         }
     }
 
+    /// A workbench's note: any one of the slot's `n` blocks fits.
+    fn any_of(self, n: usize) -> String {
+        match self {
+            Lang::En => format!("Any of these {n}"),
+            Lang::Es => format!("Cualquiera de estos {n}"),
+        }
+    }
+
     fn no_recipes(self) -> &'static str {
         match self {
             Lang::En => "No recipes for",
@@ -520,7 +528,8 @@ pub struct Ingredient {
     pub components: String,
 }
 
-/// The vanilla recipe kinds the game gives a viewer.
+/// The recipe kinds: vanilla's, which the game gives a viewer, and the types
+/// of mods the viewer reads from their recipe files.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     CraftingShaped,
@@ -532,6 +541,13 @@ pub enum Kind {
     Stonecutting,
     Smithing,
     Brewing,
+    /// Charm's woodcutter (`charm:woodcutting`): one input, as stonecutting.
+    Woodcutting,
+    /// Charm's kiln (`charm:firing`): one input cooked, as smelting.
+    Firing,
+    /// A workbench of Chipped's (`chipped:workbench`), by its place in the
+    /// viewer's benches: a block of a group for another of the same group.
+    Workbench(u16),
 }
 
 /// The station a kind is made at, in the order of the tabs.
@@ -545,10 +561,15 @@ pub enum Station {
     Stonecutter,
     Smithing,
     Brewing,
+    Woodcutter,
+    Kiln,
+    /// A workbench, by its place in the viewer's benches.
+    Workbench(u16),
 }
 
 impl Station {
-    pub const ALL: [Station; 8] = [
+    /// The stations that are always the same; the workbenches follow them.
+    pub const ALL: [Station; 10] = [
         Station::Crafting,
         Station::Furnace,
         Station::BlastFurnace,
@@ -557,9 +578,12 @@ impl Station {
         Station::Stonecutter,
         Station::Smithing,
         Station::Brewing,
+        Station::Woodcutter,
+        Station::Kiln,
     ];
 
-    /// The item whose icon stands for the station in the tabs.
+    /// The item whose icon stands for the station in the tabs. A workbench's
+    /// is the viewer's to say (`Viewer::station_icon`).
     pub fn icon(self) -> &'static str {
         match self {
             Station::Crafting => "minecraft:crafting_table",
@@ -570,10 +594,27 @@ impl Station {
             Station::Stonecutter => "minecraft:stonecutter",
             Station::Smithing => "minecraft:smithing_table",
             Station::Brewing => "minecraft:brewing_stand",
+            Station::Woodcutter => "charm:woodcutter",
+            Station::Kiln => "charm:kiln",
+            Station::Workbench(_) => "minecraft:crafting_table",
+        }
+    }
+
+    /// The vanilla station nearest a mod's, for when its own item is not in
+    /// the game.
+    fn stand_in(self) -> &'static str {
+        match self {
+            Station::Woodcutter => "minecraft:stonecutter",
+            Station::Kiln => "minecraft:furnace",
+            Station::Workbench(_) => "minecraft:stonecutter",
+            _ => "minecraft:crafting_table",
         }
     }
 
     fn order(self) -> usize {
+        if let Station::Workbench(bench) = self {
+            return Station::ALL.len() + bench as usize;
+        }
         Station::ALL
             .iter()
             .position(|s| *s == self)
@@ -592,6 +633,9 @@ impl Kind {
             Kind::Stonecutting => Station::Stonecutter,
             Kind::Smithing => Station::Smithing,
             Kind::Brewing => Station::Brewing,
+            Kind::Woodcutting => Station::Woodcutter,
+            Kind::Firing => Station::Kiln,
+            Kind::Workbench(bench) => Station::Workbench(bench),
         }
     }
 }
@@ -611,6 +655,178 @@ pub struct Recipe {
     pub experience: f32,
     /// The recipe book's id, or -1.
     pub book_id: i32,
+}
+
+/// Blocks a workbench turns into one another, one for one (Chipped: the
+/// items of one tag). A recipe for every pair would be hundreds of thousands,
+/// so the viewer keeps the group and makes a page's recipes from it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Group {
+    /// The workbench: its place in the viewer's benches.
+    pub bench: u16,
+    /// Its items, as indexes into the viewer's items, in their order.
+    pub members: Vec<u32>,
+}
+
+/// What a recipe file names as an ingredient: an item, or a tag without the
+/// `#`. A bare name is `minecraft:`'s, as vanilla reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Source {
+    Item(String),
+    Tag(String),
+}
+
+/// `minecraft:stone` for `stone`.
+fn qualified(name: &str) -> std::borrow::Cow<'_, str> {
+    if name.contains(':') {
+        std::borrow::Cow::Borrowed(name)
+    } else {
+        std::borrow::Cow::Owned(format!("minecraft:{name}"))
+    }
+}
+
+/// The items by id and by tag, to read the recipe files of mods' own types.
+pub struct Lookup<'a> {
+    ids: std::collections::HashMap<&'a str, u32>,
+    tags: std::collections::HashMap<&'a str, Vec<u32>>,
+}
+
+impl<'a> Lookup<'a> {
+    pub fn new(items: &'a [Item]) -> Self {
+        let mut ids = std::collections::HashMap::with_capacity(items.len());
+        let mut tags: std::collections::HashMap<&'a str, Vec<u32>> =
+            std::collections::HashMap::new();
+        for (index, item) in items.iter().enumerate() {
+            ids.insert(item.id.as_str(), index as u32);
+            for tag in &item.tags {
+                tags.entry(tag.as_str()).or_default().push(index as u32);
+            }
+        }
+        Self { ids, tags }
+    }
+
+    /// An item's index, by its id.
+    pub fn item(&self, id: &str) -> Option<u32> {
+        self.ids.get(qualified(id).as_ref()).copied()
+    }
+
+    /// The items the sources name, each once, in the items' order; the ones
+    /// the game doesn't know are left out.
+    pub fn items(&self, sources: &[Source]) -> Vec<u32> {
+        let mut found: Vec<u32> = Vec::new();
+        for source in sources {
+            match source {
+                Source::Item(id) => found.extend(self.item(id)),
+                Source::Tag(tag) => {
+                    let members = self.tags.get(qualified(tag).as_ref());
+                    found.extend(members.into_iter().flatten());
+                }
+            }
+        }
+        found.sort_unstable();
+        found.dedup();
+        found
+    }
+}
+
+/// What the recipe types of mods add to the game's tables.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Custom {
+    pub recipes: Vec<Recipe>,
+    /// The workbenches: the id of the item that stands for each.
+    pub benches: Vec<String>,
+    pub groups: Vec<Group>,
+}
+
+impl Custom {
+    /// A recipe of `kind`: its slots' sources and what it makes. Nothing is
+    /// added, and false comes back, when a slot or the result names no item
+    /// the game knows.
+    #[allow(clippy::too_many_arguments)]
+    pub fn recipe(
+        &mut self,
+        lookup: &Lookup<'_>,
+        kind: Kind,
+        slots: &[Vec<Source>],
+        result: &str,
+        count: u32,
+        cooking_time: u32,
+        experience: f32,
+    ) -> bool {
+        let Some(result) = lookup.item(result) else {
+            return false;
+        };
+        let mut filled: Vec<Vec<Ingredient>> = Vec::with_capacity(slots.len());
+        for slot in slots {
+            let items = lookup.items(slot);
+            if items.is_empty() {
+                return false;
+            }
+            filled.push(items.into_iter().map(plain).collect());
+        }
+        if filled.is_empty() {
+            return false;
+        }
+        self.recipes.push(Recipe {
+            kind,
+            width: 0,
+            height: 0,
+            slots: filled,
+            results: vec![Ingredient {
+                count: count.clamp(1, 99),
+                ..plain(result)
+            }],
+            cooking_time,
+            experience,
+            book_id: -1,
+        });
+        true
+    }
+
+    /// A workbench and its groups: `icon` is the item that stands for it, and
+    /// each group's sources name the blocks it turns into one another. A
+    /// group of fewer than two known items says nothing and is left out, as
+    /// is a bench without groups. Returns the groups it added.
+    pub fn bench(&mut self, lookup: &Lookup<'_>, icon: &str, groups: &[Vec<Source>]) -> usize {
+        let Ok(bench) = u16::try_from(self.benches.len()) else {
+            return 0;
+        };
+        let before = self.groups.len();
+        for sources in groups {
+            let members = lookup.items(sources);
+            if members.len() >= 2 {
+                self.groups.push(Group { bench, members });
+            }
+        }
+        let added = self.groups.len() - before;
+        if added > 0 {
+            self.benches.push(qualified(icon).into_owned());
+        }
+        added
+    }
+}
+
+/// One of an item, without components.
+fn plain(item: u32) -> Ingredient {
+    Ingredient {
+        item,
+        count: 1,
+        components: String::new(),
+    }
+}
+
+/// A workbench's recipe: any one of `inputs` for `result`.
+fn workbench_recipe(bench: u16, inputs: &[u32], result: u32) -> Recipe {
+    Recipe {
+        kind: Kind::Workbench(bench),
+        width: 0,
+        height: 0,
+        slots: vec![inputs.iter().copied().map(plain).collect()],
+        results: vec![plain(result)],
+        cooking_time: 0,
+        experience: 0.0,
+        book_id: -1,
+    }
 }
 
 /// How the panel lays a recipe out.
@@ -1159,6 +1375,11 @@ pub struct Viewer {
     variants: std::collections::HashMap<u32, Vec<Variant>>,
     /// Recipes made and uses, by item index and components ("" for any).
     counts: std::collections::HashMap<(u32, String), Counts>,
+    /// The workbenches: the id of the item that stands for each.
+    benches: Vec<String>,
+    /// The workbenches' groups, and each item's (item, group), in order.
+    groups: Vec<Group>,
+    grouped: Vec<(u32, u32)>,
     lang: Lang,
     sort: Sort,
     /// The panel's rows now, after the search and the sort.
@@ -1179,6 +1400,23 @@ impl Viewer {
         variants: Vec<Variant>,
         lang: Lang,
     ) -> (Self, Out) {
+        Self::with_groups(items, recipes, variants, Vec::new(), Vec::new(), lang)
+    }
+
+    /// The same, with the workbenches of mods and their groups (`Custom`).
+    pub fn with_groups(
+        items: Vec<Item>,
+        recipes: Vec<Recipe>,
+        variants: Vec<Variant>,
+        benches: Vec<String>,
+        groups: Vec<Group>,
+        lang: Lang,
+    ) -> (Self, Out) {
+        let mut grouped: Vec<(u32, u32)> = (groups.iter().enumerate())
+            .flat_map(|(index, group)| group.members.iter().map(move |&item| (item, index as u32)))
+            .collect();
+        grouped.sort_unstable();
+        grouped.dedup();
         let ids = (items.iter().enumerate())
             .map(|(index, item)| (item.id.clone(), index as u32))
             .collect();
@@ -1194,6 +1432,9 @@ impl Viewer {
             recipes,
             variants: variants_by_item,
             counts,
+            benches,
+            groups,
+            grouped,
             lang,
             sort: Sort::Name,
             listed: Vec::new(),
@@ -1216,6 +1457,131 @@ impl Viewer {
 
     pub fn recipe_count(&self) -> usize {
         self.recipes.len()
+    }
+
+    /// What `/jei` adds about the recipe types of mods: how many there are,
+    /// and how many items have a recipe with them and without. None when the
+    /// tables have none of them.
+    pub fn about_custom(&self) -> Option<String> {
+        let of = |kind: Kind| self.recipes.iter().filter(|r| r.kind == kind).count();
+        let (woodcutting, firing) = (of(Kind::Woodcutting), of(Kind::Firing));
+        if woodcutting + firing + self.groups.len() == 0 {
+            return None;
+        }
+        // Each item: 1 when a vanilla kind makes it, 2 when a mod's does.
+        let mut made = vec![0u8; self.items.len()];
+        for recipe in &self.recipes {
+            let own = matches!(recipe.kind, Kind::Woodcutting | Kind::Firing);
+            for result in &recipe.results {
+                if let Some(mark) = made.get_mut(result.item as usize) {
+                    *mark |= if own { 2 } else { 1 };
+                }
+            }
+        }
+        let mut blocks = 0;
+        for &(item, _) in &self.grouped {
+            if let Some(mark) = made.get_mut(item as usize) {
+                blocks += usize::from(*mark & 4 == 0);
+                *mark |= 2 | 4;
+            }
+        }
+        let with = made.iter().filter(|mark| **mark != 0).count();
+        let without = made.iter().filter(|mark| **mark & 1 != 0).count();
+        let stations = format!(
+            "{woodcutting} woodcutting, {firing} kiln, {} workbenches with {} groups of {blocks} blocks",
+            self.benches.len(),
+            self.groups.len()
+        );
+        Some(format!(
+            "{NAME}: {stations}; {with} of {} items have a recipe, {without} without these",
+            self.items.len()
+        ))
+    }
+
+    /// The groups an item is in.
+    fn groups_of(&self, item: u32) -> impl Iterator<Item = &Group> + '_ {
+        let start = self.grouped.partition_point(|&(member, _)| member < item);
+        (self.grouped[start..].iter())
+            .take_while(move |&&(member, _)| member == item)
+            .filter_map(|&(_, group)| self.groups.get(group as usize))
+    }
+
+    /// What an item's groups add to its counts: a recipe for as many of the
+    /// group's other blocks as a slot cycles through, a use for each.
+    fn group_counts(&self, item: u32) -> Counts {
+        let mut counts = Counts::default();
+        for group in self.groups_of(item) {
+            let others = group.members.len().saturating_sub(1);
+            counts.recipes += others.div_ceil(STACKS_MAX) as u32;
+            counts.uses += others as u32;
+        }
+        counts
+    }
+
+    /// The recipes an item's groups stand for. Making it: one recipe whose
+    /// input lists the rest of the group, as many as a slot cycles through.
+    /// Using it: one recipe for each block it turns into, as a stonecutter's.
+    fn group_recipes(&self, item: u32, uses: bool) -> Vec<Recipe> {
+        let mut out = Vec::new();
+        for group in self.groups_of(item) {
+            let others: Vec<u32> = (group.members.iter().copied())
+                .filter(|&member| member != item)
+                .collect();
+            if uses {
+                let made = |&other: &u32| workbench_recipe(group.bench, &[item], other);
+                out.extend(others.iter().map(made));
+            } else {
+                let made = |inputs: &[u32]| workbench_recipe(group.bench, inputs, item);
+                out.extend(others.chunks(STACKS_MAX).map(made));
+            }
+        }
+        out
+    }
+
+    /// The id of the item that stands for a station: a workbench's is its own.
+    fn station_icon(&self, station: Station) -> &str {
+        match station {
+            Station::Workbench(bench) => {
+                (self.benches.get(bench as usize)).map_or(station.icon(), String::as_str)
+            }
+            _ => station.icon(),
+        }
+    }
+
+    /// The name of a mod's station whose item is not in the game (the game
+    /// has its recipes and not the block): its id in words, `Mason Table` for
+    /// `chipped:mason_table`. None for a station that has its item.
+    fn station_label(&self, station: Station) -> Option<String> {
+        let own = matches!(
+            station,
+            Station::Woodcutter | Station::Kiln | Station::Workbench(_)
+        );
+        let icon = self.station_icon(station);
+        if !own || self.ids.contains_key(icon) {
+            return None;
+        }
+        let path = icon.rsplit([':', '/']).next().unwrap_or(icon);
+        let words: Vec<String> = (path.split(|c: char| !c.is_alphanumeric()))
+            .filter(|word| !word.is_empty())
+            .map(|word| {
+                let mut chars = word.chars();
+                let first = chars.next().map(|c| c.to_ascii_uppercase());
+                first.into_iter().chain(chars).collect()
+            })
+            .collect();
+        Some(words.join(" "))
+    }
+
+    /// A station's tab: its item, or, for a station without one, the vanilla
+    /// station nearest it under the station's name.
+    fn station_tab(&self, station: Station) -> Stack {
+        match self.station_label(station) {
+            Some(label) => Stack {
+                components: format!("[minecraft:custom_name=\"{label}\"]"),
+                ..Stack::item(station.stand_in())
+            },
+            None => Stack::item(self.station_icon(station)),
+        }
     }
 
     /// The order of the list now.
@@ -1254,15 +1620,18 @@ impl Viewer {
         let Some(&index) = self.ids.get(item) else {
             return Counts::default();
         };
-        if !components.is_empty()
-            && let Some(counts) = self.counts.get(&(index, components.to_owned()))
-        {
-            return *counts;
-        }
-        self.counts
-            .get(&(index, String::new()))
+        let named = (!components.is_empty())
+            .then(|| self.counts.get(&(index, components.to_owned())))
+            .flatten();
+        let listed = named
+            .or_else(|| self.counts.get(&(index, String::new())))
             .copied()
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let grouped = self.group_counts(index);
+        Counts {
+            recipes: listed.recipes + grouped.recipes,
+            uses: listed.uses + grouped.uses,
+        }
     }
 
     fn convert(&self, ingredient: &Ingredient) -> Stack {
@@ -1271,12 +1640,6 @@ impl Viewer {
             count: ingredient.count,
             components: ingredient.components.clone(),
         }
-    }
-
-    /// The same item, and the same components when `want` names some.
-    fn matches(&self, ingredient: &Ingredient, want: &Stack) -> bool {
-        self.id(ingredient.item) == want.item
-            && (want.components.is_empty() || ingredient.components == want.components)
     }
 
     /// The items the search keeps, each followed by its variants, in the
@@ -1340,20 +1703,30 @@ impl Viewer {
         }
     }
 
-    /// The recipes the current page lists, across every station.
-    fn found(&self, page: &Page) -> Vec<&Recipe> {
-        (self.recipes.iter())
+    /// The recipes the current page lists, across every station: the
+    /// tables', then the ones the item's workbench groups stand for.
+    fn found(&self, page: &Page) -> Vec<std::borrow::Cow<'_, Recipe>> {
+        let Some(&item) = self.ids.get(&page.item.item) else {
+            return Vec::new();
+        };
+        // The same item, and the same components when the page names some.
+        let components = page.item.components.as_str();
+        let hit = |s: &Ingredient| {
+            s.item == item && (components.is_empty() || s.components == components)
+        };
+        let mut found: Vec<std::borrow::Cow<'_, Recipe>> = (self.recipes.iter())
             .filter(|r| {
                 if page.uses {
-                    r.slots
-                        .iter()
-                        .flatten()
-                        .any(|s| self.matches(s, &page.item))
+                    r.slots.iter().flatten().any(hit)
                 } else {
-                    r.results.iter().any(|s| self.matches(s, &page.item))
+                    r.results.iter().any(hit)
                 }
             })
-            .collect()
+            .map(std::borrow::Cow::Borrowed)
+            .collect();
+        let grouped = self.group_recipes(item, page.uses);
+        found.extend(grouped.into_iter().map(std::borrow::Cow::Owned));
+        found
     }
 
     /// Opens a page, pushing it on the history; says why when it is empty.
@@ -1362,7 +1735,12 @@ impl Viewer {
             count: 1,
             ..item.clone()
         };
-        let page = Page { item, uses, tab: 0 };
+        let mut page = Page { item, uses, tab: 0 };
+        if !page.item.components.is_empty() && self.found(&page).is_empty() {
+            // A stack the tables don't name with its components (a worn tool,
+            // a named block) has its item's recipes, as its tooltip counts.
+            page.item.components.clear();
+        }
         if self.found(&page).is_empty() {
             let name = self.name(&page.item.item).to_owned();
             return vec![Out::Say(format!(
@@ -1401,15 +1779,24 @@ impl Viewer {
         let selected = stations.get(page.tab).copied();
         let on_station: Vec<&Recipe> = found
             .iter()
-            .copied()
+            .map(|r| r.as_ref())
             .filter(|r| Some(r.kind.station()) == selected)
             .collect();
         let total = on_station.len();
-        let views: Vec<View> = on_station
+        let mut views: Vec<View> = on_station
             .iter()
             .take(RECIPES_MAX)
             .map(|&r| self.view(r, known))
             .collect();
+        // A station without an item of its own is named on its first recipe.
+        let label = selected.and_then(|station| self.station_label(station));
+        if let (Some(label), Some(first)) = (label, views.first_mut()) {
+            first.note = if first.note.is_empty() {
+                label
+            } else {
+                format!("{label}: {}", first.note)
+            };
+        }
         self.shown = on_station
             .iter()
             .take(RECIPES_MAX)
@@ -1427,7 +1814,7 @@ impl Viewer {
         if total > views.len() {
             title.push_str(&format!(" ({} of {total})", views.len()));
         }
-        let tabs = (stations.iter()).map(|s| Stack::item(s.icon())).collect();
+        let tabs = (stations.iter()).map(|s| self.station_tab(*s)).collect();
         if let Some(top) = self.history.last_mut() {
             top.tab = page.tab;
         }
@@ -1469,7 +1856,7 @@ impl Viewer {
                     self.lang.shapeless().into(),
                 )
             }
-            Kind::Smelting | Kind::Blasting | Kind::Smoking | Kind::Campfire => {
+            Kind::Smelting | Kind::Blasting | Kind::Smoking | Kind::Campfire | Kind::Firing => {
                 let seconds = recipe.cooking_time as f32 / 20.0;
                 (
                     Layout::Cooking,
@@ -1481,7 +1868,17 @@ impl Viewer {
                     ),
                 )
             }
-            Kind::Stonecutting => (Layout::Single, 1, 1, String::new()),
+            Kind::Stonecutting | Kind::Woodcutting => (Layout::Single, 1, 1, String::new()),
+            Kind::Workbench(_) => {
+                // One input: the note says when any block of several fits.
+                let fit = recipe.slots.first().map_or(0, Vec::len);
+                let note = if fit > 1 {
+                    self.lang.any_of(fit)
+                } else {
+                    String::new()
+                };
+                (Layout::Single, 1, 1, note)
+            }
             Kind::Smithing => (Layout::Smithing, 3, 1, String::new()),
             Kind::Brewing => (Layout::Brewing, 2, 1, String::new()),
         };
@@ -2459,6 +2856,378 @@ mod tests {
         );
         assert_eq!(viewer.item_name("minecraft:nope"), "minecraft:nope");
         assert_eq!(viewer.sort(), super::Sort::Name);
+    }
+
+    // The recipe types of mods: a woodcutter, a kiln and a workbench's groups.
+    fn tagged(id: &str, name: &str, tags: &[&str]) -> super::Item {
+        super::Item {
+            tags: tags.iter().map(|t| (*t).to_owned()).collect(),
+            ..item(id, name)
+        }
+    }
+
+    fn tag(name: &str) -> Vec<super::Source> {
+        vec![super::Source::Tag(name.to_owned())]
+    }
+
+    fn one(id: &str) -> Vec<super::Source> {
+        vec![super::Source::Item(id.to_owned())]
+    }
+
+    /// Oak Planks, Oak Stairs, Clay, Terracotta, Amethyst and three variants
+    /// of it, a pillar in a second group, the three stations and a lone block.
+    fn mod_items() -> Vec<super::Item> {
+        vec![
+            tagged("minecraft:oak_planks", "Oak Planks", &["minecraft:planks"]),
+            item("minecraft:oak_stairs", "Oak Stairs"),
+            item("minecraft:clay", "Clay"),
+            item("minecraft:terracotta", "Terracotta"),
+            tagged(
+                "minecraft:amethyst_block",
+                "Block of Amethyst",
+                &["chipped:amethyst_block"],
+            ),
+            tagged(
+                "chipped:amethyst_bricks",
+                "Amethyst Bricks",
+                &["chipped:amethyst_block"],
+            ),
+            tagged(
+                "chipped:amethyst_pillar",
+                "Amethyst Pillar",
+                &["chipped:amethyst_block", "chipped:pillars"],
+            ),
+            tagged(
+                "chipped:amethyst_tiles",
+                "Amethyst Tiles",
+                &["chipped:amethyst_block"],
+            ),
+            tagged("chipped:stone_pillar", "Stone Pillar", &["chipped:pillars"]),
+            item("charm:woodcutter", "Woodcutter"),
+            item("charm:kiln", "Kiln"),
+            item("chipped:mason_table", "Mason Table"),
+            tagged("chipped:lonely", "Lonely", &["chipped:lonely"]),
+        ]
+    }
+
+    fn mod_viewer() -> super::Viewer {
+        let items = mod_items();
+        let lookup = super::Lookup::new(&items);
+        let mut custom = super::Custom::default();
+        assert!(custom.recipe(
+            &lookup,
+            super::Kind::Woodcutting,
+            &[tag("minecraft:planks")],
+            "minecraft:oak_stairs",
+            1,
+            0,
+            0.0
+        ));
+        assert!(custom.recipe(
+            &lookup,
+            super::Kind::Firing,
+            &[one("clay")],
+            "terracotta",
+            1,
+            100,
+            0.1
+        ));
+        // Unknown items add nothing.
+        assert!(!custom.recipe(
+            &lookup,
+            super::Kind::Firing,
+            &[one("nope:clay")],
+            "terracotta",
+            1,
+            100,
+            0.1
+        ));
+        assert!(!custom.recipe(
+            &lookup,
+            super::Kind::Firing,
+            &[one("clay")],
+            "nope:pot",
+            1,
+            100,
+            0.1
+        ));
+        // A group of one block and an unknown tag are left out.
+        let groups = [
+            tag("chipped:amethyst_block"),
+            tag("chipped:pillars"),
+            tag("chipped:lonely"),
+            tag("chipped:nothing"),
+        ];
+        assert_eq!(custom.bench(&lookup, "chipped:mason_table", &groups), 2);
+        assert_eq!(custom.bench(&lookup, "chipped:empty_table", &[]), 0);
+        assert_eq!(custom.benches, vec!["chipped:mason_table".to_owned()]);
+        drop(lookup);
+        let (viewer, _) = super::Viewer::with_groups(
+            items,
+            custom.recipes,
+            Vec::new(),
+            custom.benches,
+            custom.groups,
+            super::Lang::En,
+        );
+        viewer
+    }
+
+    fn page(out: &[super::Out]) -> (&str, Vec<&str>, &[super::View]) {
+        let super::Out::Recipes {
+            title, tabs, views, ..
+        } = &out[0]
+        else {
+            panic!("not a page: {out:?}");
+        };
+        let tabs = tabs.iter().map(|t| t.item.as_str()).collect();
+        (title.as_str(), tabs, views.as_slice())
+    }
+
+    fn ids(stacks: &[super::Stack]) -> Vec<&str> {
+        stacks.iter().map(|s| s.item.as_str()).collect()
+    }
+
+    fn open(viewer: &mut super::Viewer, id: &str, uses: bool) -> Vec<super::Out> {
+        viewer.handle(
+            super::Event::Open {
+                stack: stack(id),
+                uses,
+            },
+            &context(&[]),
+        )
+    }
+
+    #[test]
+    fn lookups_read_items_and_tags() {
+        let items = mod_items();
+        let lookup = super::Lookup::new(&items);
+        assert_eq!(lookup.item("oak_planks"), Some(0));
+        assert_eq!(lookup.item("minecraft:oak_planks"), Some(0));
+        assert_eq!(lookup.item("nope"), None);
+        assert_eq!(
+            lookup.items(&tag("chipped:amethyst_block")),
+            vec![4, 5, 6, 7]
+        );
+        // A bare tag is vanilla's; an item named twice is listed once.
+        let mut sources = tag("planks");
+        sources.extend(one("oak_planks"));
+        sources.extend(one("minecraft:clay"));
+        assert_eq!(lookup.items(&sources), vec![0, 2]);
+        assert!(lookup.items(&tag("chipped:nothing")).is_empty());
+    }
+
+    #[test]
+    fn woodcutting_and_firing_have_their_stations() {
+        let mut viewer = mod_viewer();
+        let out = open(&mut viewer, "minecraft:oak_stairs", false);
+        let (title, tabs, views) = page(&out);
+        assert_eq!(title, "Recipes: Oak Stairs");
+        assert_eq!(tabs, vec!["charm:woodcutter"]);
+        assert_eq!(views[0].layout, super::Layout::Single);
+        assert_eq!(ids(&views[0].slots[0]), vec!["minecraft:oak_planks"]);
+        assert_eq!(views[0].action, None);
+
+        let out = open(&mut viewer, "minecraft:clay", true);
+        let (title, tabs, views) = page(&out);
+        assert_eq!(title, "Uses: Clay");
+        assert_eq!(tabs, vec!["charm:kiln"]);
+        assert_eq!(views[0].layout, super::Layout::Cooking);
+        assert_eq!(views[0].note, "5 s, 0.1 XP");
+        assert_eq!(ids(&views[0].results), vec!["minecraft:terracotta"]);
+        let about = viewer.about_custom().unwrap_or_default();
+        let stations = "JEI: 1 woodcutting, 1 kiln, 1 workbenches with 2 groups of 5 blocks;";
+        assert!(about.starts_with(stations), "{about}");
+        let items = "7 of 13 items have a recipe, 0 without these";
+        assert!(about.ends_with(items), "{about}");
+    }
+
+    #[test]
+    fn a_workbench_makes_a_block_from_the_rest_of_its_group() {
+        let mut viewer = mod_viewer();
+        let out = open(&mut viewer, "chipped:amethyst_bricks", false);
+        let (title, tabs, views) = page(&out);
+        assert_eq!(title, "Recipes: Amethyst Bricks");
+        assert_eq!(tabs, vec!["chipped:mason_table"]);
+        assert_eq!(views.len(), 1);
+        assert_eq!(views[0].layout, super::Layout::Single);
+        assert_eq!(views[0].note, "Any of these 3");
+        assert_eq!(
+            ids(&views[0].slots[0]),
+            vec![
+                "minecraft:amethyst_block",
+                "chipped:amethyst_pillar",
+                "chipped:amethyst_tiles"
+            ]
+        );
+        assert_eq!(ids(&views[0].results), vec!["chipped:amethyst_bricks"]);
+    }
+
+    #[test]
+    fn a_workbench_turns_a_block_into_each_other_of_its_groups() {
+        let mut viewer = mod_viewer();
+        let out = open(&mut viewer, "minecraft:amethyst_block", true);
+        let (title, tabs, views) = page(&out);
+        assert_eq!(title, "Uses: Block of Amethyst");
+        assert_eq!(tabs, vec!["chipped:mason_table"]);
+        let made: Vec<&str> = views.iter().flat_map(|v| ids(&v.results)).collect();
+        assert_eq!(
+            made,
+            vec![
+                "chipped:amethyst_bricks",
+                "chipped:amethyst_pillar",
+                "chipped:amethyst_tiles"
+            ]
+        );
+        assert!(views.iter().all(|v| v.note.is_empty()));
+        assert!(
+            views
+                .iter()
+                .all(|v| ids(&v.slots[0]) == vec!["minecraft:amethyst_block"])
+        );
+
+        // The pillar is in two groups: both make it, and it makes both's.
+        let out = open(&mut viewer, "chipped:amethyst_pillar", false);
+        let (_, _, views) = page(&out);
+        assert_eq!(views.len(), 2);
+        assert_eq!(ids(&views[1].slots[0]), vec!["chipped:stone_pillar"]);
+        assert!(views[1].note.is_empty());
+        let out = open(&mut viewer, "chipped:amethyst_pillar", true);
+        assert_eq!(page(&out).2.len(), 4);
+        assert_eq!(
+            viewer.counts("chipped:amethyst_pillar", ""),
+            super::Counts {
+                recipes: 2,
+                uses: 4
+            }
+        );
+        assert_eq!(
+            viewer.counts("minecraft:amethyst_block", ""),
+            super::Counts {
+                recipes: 1,
+                uses: 3
+            }
+        );
+        // A block alone in its tag, and one outside every group.
+        assert_eq!(
+            viewer.counts("chipped:lonely", ""),
+            super::Counts::default()
+        );
+        let out = open(&mut viewer, "chipped:lonely", false);
+        assert_eq!(out, vec![super::Out::Say("No recipes for: Lonely".into())]);
+    }
+
+    #[test]
+    fn a_large_group_is_made_in_slots_of_sixty_four() {
+        let mut items = vec![item("chipped:mason_table", "Mason Table")];
+        for n in 0..70 {
+            items.push(tagged(
+                &format!("chipped:brick_{n:02}"),
+                &format!("Brick {n:02}"),
+                &["chipped:bricks"],
+            ));
+        }
+        let lookup = super::Lookup::new(&items);
+        let mut custom = super::Custom::default();
+        assert_eq!(
+            custom.bench(&lookup, "chipped:mason_table", &[tag("chipped:bricks")]),
+            1
+        );
+        drop(lookup);
+        let (mut viewer, _) = super::Viewer::with_groups(
+            items,
+            Vec::new(),
+            Vec::new(),
+            custom.benches,
+            custom.groups,
+            super::Lang::En,
+        );
+        let out = open(&mut viewer, "chipped:brick_00", false);
+        let (_, _, views) = page(&out);
+        assert_eq!(views.len(), 2);
+        assert_eq!(views[0].slots[0].len(), 64);
+        assert_eq!(views[0].note, "Any of these 64");
+        assert_eq!(views[1].slots[0].len(), 5);
+        let out = open(&mut viewer, "chipped:brick_00", true);
+        assert_eq!(page(&out).2.len(), 69);
+        assert_eq!(
+            viewer.counts("chipped:brick_00", ""),
+            super::Counts {
+                recipes: 2,
+                uses: 69
+            }
+        );
+        assert_eq!(viewer.recipe_count(), 0);
+    }
+
+    #[test]
+    fn a_missing_station_item_has_a_vanilla_icon() {
+        let items = vec![
+            tagged("chipped:a", "A", &["chipped:g"]),
+            tagged("chipped:b", "B", &["chipped:g"]),
+            item("minecraft:stick", "Stick"),
+        ];
+        let lookup = super::Lookup::new(&items);
+        let mut custom = super::Custom::default();
+        custom.bench(&lookup, "chipped:mason_table", &[tag("chipped:g")]);
+        assert!(custom.recipe(
+            &lookup,
+            super::Kind::Woodcutting,
+            &[one("chipped:a")],
+            "stick",
+            4,
+            0,
+            0.0
+        ));
+        drop(lookup);
+        let (mut viewer, _) = super::Viewer::with_groups(
+            items,
+            custom.recipes,
+            Vec::new(),
+            custom.benches,
+            custom.groups,
+            super::Lang::Es,
+        );
+        let out = open(&mut viewer, "chipped:a", true);
+        let (title, tabs, views) = page(&out);
+        assert_eq!(title, "Usos: A");
+        assert_eq!(tabs, vec!["minecraft:stonecutter", "minecraft:stonecutter"]);
+        assert_eq!(views[0].results[0].count, 4);
+        // The stations are not items here: each tab and first recipe names its own.
+        assert_eq!(views[0].note, "Woodcutter");
+        let out = viewer.handle(super::Event::Tab(1), &context(&[]));
+        let super::Out::Recipes { tabs, views, .. } = &out[0] else {
+            panic!("not a page: {out:?}");
+        };
+        assert_eq!(tabs[0].components, "[minecraft:custom_name=\"Woodcutter\"]");
+        assert_eq!(
+            tabs[1].components,
+            "[minecraft:custom_name=\"Mason Table\"]"
+        );
+        assert_eq!(views[0].note, "Mason Table");
+        let out = open(&mut viewer, "chipped:b", false);
+        assert_eq!(page(&out).2[0].note, "Mason Table");
+    }
+
+    #[test]
+    fn a_stack_with_components_falls_back_to_its_item() {
+        let (items, recipes) = tables();
+        let (mut viewer, _) = viewer(items, recipes, super::Lang::En);
+        let worn = super::Stack {
+            item: "minecraft:diamond".into(),
+            count: 1,
+            components: "[minecraft:custom_name=\"Shiny\"]".into(),
+        };
+        let out = viewer.handle(
+            super::Event::Open {
+                stack: worn,
+                uses: false,
+            },
+            &context(&[]),
+        );
+        let (title, tabs, _) = page(&out);
+        assert_eq!(title, "Recipes: Diamond");
+        assert_eq!(tabs.len(), 3);
     }
 
     #[test]

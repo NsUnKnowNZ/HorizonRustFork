@@ -141,6 +141,19 @@ impl ModList {
         }
         self.enabled.insert(m.id.clone());
     }
+    /// Turn the mod `id` off, installed or not (a dev mod stays on): the
+    /// content it adds is not read at the next start. A native mod's line
+    /// says `false`, as when `toggle` turns it off.
+    pub fn turn_off(&mut self, id: &str) {
+        let listed = self.installed.iter().find(|m| m.id == id);
+        if listed.is_some_and(|m| m.dev) {
+            return;
+        }
+        self.enabled.remove(id);
+        if listed.is_some_and(|m| m.native.is_some()) {
+            self.disabled.insert(id.to_owned());
+        }
+    }
     pub fn toggle(&mut self, i: usize) {
         let Some(m) = self.installed.get(i).filter(|m| !m.dev) else {
             return;
@@ -216,5 +229,35 @@ mod tests {
         list.toggle(2);
         assert!(list.is_on(2));
         assert_eq!(list.serialize(), "mod.c:true\n");
+    }
+
+    #[test]
+    fn turning_a_mod_off_by_id_spares_dev_mods() {
+        let installed = |id: &str, dev, native: bool| Installed {
+            id: id.into(),
+            title: id.into(),
+            description: String::new(),
+            problem: None,
+            dev,
+            native: native.then(NativePage::default),
+        };
+        let mut list = ModList {
+            installed: vec![
+                installed("a", false, false),
+                installed("dev", true, false),
+                installed("n", false, true),
+            ],
+            ..Default::default()
+        };
+        for id in ["a", "dev", "n", "unlisted"] {
+            list.enabled.insert(id.into());
+        }
+        for id in ["a", "dev", "n", "unlisted", "never_seen"] {
+            list.turn_off(id);
+        }
+        // A dev mod is always on; a native one rests, as its toggle leaves it.
+        assert_eq!(list.enabled.iter().collect::<Vec<_>>(), ["dev"]);
+        assert_eq!(list.disabled.iter().collect::<Vec<_>>(), ["n"]);
+        assert!(!list.is_on(0) && list.is_on(1) && !list.is_on(2));
     }
 }

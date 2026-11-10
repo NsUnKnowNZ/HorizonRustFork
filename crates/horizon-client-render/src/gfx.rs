@@ -1231,6 +1231,11 @@ pub struct Renderer {
     debug_lines_opaque: wgpu::RenderPipeline,
     debug_lines: wgpu::RenderPipeline,
     debug_lines_on_top: wgpu::RenderPipeline,
+    /// The debug lines over a shader pack's finished picture (`DEBUG_OVER`): those the
+    /// pack's depth may hide and those on top, their bindings and their uniforms.
+    debug_over: [wgpu::RenderPipeline; 2],
+    debug_over_layout: wgpu::BindGroupLayout,
+    debug_over_uniform: wgpu::Buffer,
     debug_crosshair: Option<wgpu::RenderPipeline>,
     debug_line_buffer: wgpu::Buffer,
     debug_line_capacity: u64,
@@ -1504,6 +1509,17 @@ pub struct Renderer {
     pack_post: Option<(i32, Option<pack_post::PackPost>)>,
     /// A `shaders/` pack whose pipelines build on a thread of their own (`load_shader_pack`).
     pack_loading: Option<PackLoading>,
+    /// The label (`load_shader_pack`'s) of the `shaders/` pack that runs.
+    pack_label: Option<String>,
+    /// `shaders/` packs built for other dimensions than the one drawn, with their labels: the
+    /// pack of a dimension the player left, and one built ahead for the dimension a portal
+    /// leads to. Back there, it runs again at once (`resume_shader_pack`) where building it
+    /// takes seconds. Emptied whenever what a pack is built from changes.
+    pack_parked: Vec<(i32, String, pack_post::PackPost)>,
+    /// A pack building ahead for another dimension (`load_shader_pack`'s `ahead`), and the
+    /// dimensions for which that failed.
+    pack_ahead: Option<PackLoading>,
+    pack_ahead_failed: Vec<i32>,
     /// The post passes of one of Horizon's own shader packs; never beside `pack_post`'s.
     native: Option<native_pack::NativePack>,
     /// Time the shader pack's passes on the GPU (F3, or `HORIZON_SHADER_PACK_TIMING`).
@@ -3291,6 +3307,80 @@ impl Renderer {
             false,
             Some(alpha_blend),
         );
+        // With a shader pack the debug lines go over the pack's picture.
+        let debug_over_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Debug lines over a shader pack"),
+            source: wgpu::ShaderSource::Wgsl(DEBUG_OVER.into()),
+        });
+        let debug_over_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Debug lines over a shader pack"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // A depth view through an unfilterable float binding.
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+        let debug_over_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Debug lines over a shader pack"),
+                bind_group_layouts: &[Some(&debug_over_layout)],
+                ..Default::default()
+            });
+        let debug_over = ["fs_line", "fs_line_on_top"].map(|entry| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Debug lines over a shader pack"),
+                layout: Some(&debug_over_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &debug_over_shader,
+                    entry_point: Some("vs_line"),
+                    compilation_options: Default::default(),
+                    buffers: &debug_line_buffers,
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &debug_over_shader,
+                    entry_point: Some(entry),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: frame_format,
+                        blend: Some(alpha_blend),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        });
+        let debug_over_uniform = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Debug lines over a shader pack"),
+            size: 80,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let debug_crosshair = hud_coverage.then(|| {
             pipeline_with(
                 &sprite_constants,
@@ -4902,6 +4992,9 @@ impl Renderer {
             debug_lines_opaque,
             debug_lines,
             debug_lines_on_top,
+            debug_over,
+            debug_over_layout,
+            debug_over_uniform,
             debug_crosshair,
             debug_line_buffer,
             debug_line_capacity: 4096,
@@ -5069,6 +5162,10 @@ impl Renderer {
             hdr_marker: None,
             pack_post: None,
             pack_loading: None,
+            pack_label: None,
+            pack_parked: Vec::new(),
+            pack_ahead: None,
+            pack_ahead_failed: Vec::new(),
             native: None,
             pass_timing: pack_timing::PassTiming::logging(),
             pass_timing_gap: std::time::Duration::ZERO,
@@ -6973,6 +7070,7 @@ impl Renderer {
         pack: Option<horizon_shaders::Post>,
         block_ids: &[i32],
     ) -> std::result::Result<Option<(Vec<String>, Vec<String>)>, pack_post::Refused> {
+        self.forget_parked_shader_packs();
         if pack.is_none() {
             self.pack_atlas = None;
             self.pack_material_atlases = None;
@@ -7047,9 +7145,11 @@ impl Renderer {
         dimension: i32,
         post: std::result::Result<Option<pack_post::PackPost>, pack_post::Refused>,
     ) -> std::result::Result<Option<(Vec<String>, Vec<String>)>, pack_post::Refused> {
+        self.pack_label = None;
         let mut post = match post {
             Ok(post) => post,
             Err(e) => {
+                self.forget_parked_shader_packs();
                 self.pack_post = Some((dimension, None));
                 self.pack_atlas = None;
                 self.pack_material_atlases = None;
@@ -7119,6 +7219,10 @@ impl Renderer {
     /// As `set_shader_pack` with a pack, but its pipelines build on a thread of their own while
     /// the game keeps drawing without one: the driver compiles a big pack's programs for seconds.
     /// `poll_shader_pack` runs it once they are built. `label` and `started` come back with it.
+    ///
+    /// The pack that ran, built for another dimension, is kept for the way back
+    /// (`resume_shader_pack`). `ahead` builds for a dimension the player is not in yet: the
+    /// pack that runs carries on, and the new one is kept the same way once it is built.
     pub fn load_shader_pack(
         &mut self,
         dimension: i32,
@@ -7126,6 +7230,7 @@ impl Renderer {
         block_ids: Vec<i32>,
         label: String,
         started: std::time::Instant,
+        ahead: bool,
     ) {
         let device = self.device.clone();
         let queue = self.queue.clone();
@@ -7200,9 +7305,19 @@ impl Renderer {
             .name("Shader pack".into())
             .spawn(move || crate::crash::contain(build));
         match thread {
+            Ok(thread) if ahead => {
+                self.pack_ahead = Some(PackLoading {
+                    dimension,
+                    thread,
+                    label,
+                    started,
+                    _cancel: CancelOnDrop(cancel),
+                });
+            }
             Ok(thread) => {
-                // The last pack doesn't draw this dimension meanwhile.
-                self.pack_post = None;
+                // The last pack doesn't draw this dimension meanwhile: it is kept for its own.
+                self.park_shader_pack();
+                self.pack_ahead = None;
                 self.pack_loading = Some(PackLoading {
                     dimension,
                     thread,
@@ -7210,6 +7325,10 @@ impl Renderer {
                     started,
                     _cancel: CancelOnDrop(cancel),
                 });
+            }
+            Err(e) if ahead => {
+                log::warn!("shader pack {label}: no thread to build it ahead on: {e}");
+                self.pack_ahead_failed.push(dimension);
             }
             Err(e) => {
                 log::error!("shader pack {label}: no thread to build it on: {e}");
@@ -7231,6 +7350,31 @@ impl Renderer {
         std::time::Instant,
         std::result::Result<Option<(Vec<String>, Vec<String>)>, pack_post::Refused>,
     )> {
+        // A pack built ahead is kept until the player is in its dimension.
+        if self.pack_ahead.as_ref().is_some_and(|a| a.thread.is_finished())
+            && let Some(ahead) = self.pack_ahead.take()
+        {
+            match ahead.thread.join() {
+                Ok(Ok(Ok(post))) => {
+                    log::info!(
+                        "shader pack {}: built ahead for dimension {} in {} ms",
+                        ahead.label,
+                        ahead.dimension,
+                        ahead.started.elapsed().as_millis()
+                    );
+                    self.pack_parked.retain(|p| p.0 != ahead.dimension);
+                    self.pack_parked.push((ahead.dimension, ahead.label, post));
+                }
+                _ => {
+                    log::warn!(
+                        "shader pack {}: not built ahead for dimension {}",
+                        ahead.label,
+                        ahead.dimension
+                    );
+                    self.pack_ahead_failed.push(ahead.dimension);
+                }
+            }
+        }
         if !self.pack_loading.as_ref()?.thread.is_finished() {
             return None;
         }
@@ -7247,7 +7391,57 @@ impl Renderer {
             }),
         };
         let report = self.install_shader_pack(loading.dimension, built.map(Some));
+        if matches!(self.pack_post, Some((_, Some(_)))) {
+            self.pack_label = Some(loading.label.clone());
+        }
         Some((loading.dimension, loading.label, loading.started, report))
+    }
+    /// Sets the running `shaders/` pack aside for its dimension, without what it kept from
+    /// earlier frames (its targets are made again when it next draws).
+    fn park_shader_pack(&mut self) {
+        let (running, label) = (self.pack_post.take(), self.pack_label.take());
+        if let (Some((dimension, Some(mut post))), Some(label)) = (running, label) {
+            // A frame still on the submit thread uses the targets let go of here.
+            self.land_frame();
+            post.reset_history(&self.device);
+            self.pack_parked.retain(|p| p.0 != dimension);
+            self.pack_parked.push((dimension, label, post));
+        }
+    }
+    /// Runs again the pack `label` built for `dimension` before and kept since; false when
+    /// none is kept, and it has to be built (`load_shader_pack`).
+    pub fn resume_shader_pack(&mut self, dimension: i32, label: &str) -> bool {
+        let Some(at) = (self.pack_parked.iter()).position(|p| p.0 == dimension && p.1 == label)
+        else {
+            return false;
+        };
+        let (_, label, post) = self.pack_parked.swap_remove(at);
+        self.park_shader_pack();
+        self.pack_loading = None;
+        self.pack_post = Some((dimension, Some(post)));
+        self.pack_label = Some(label);
+        self.native = None;
+        true
+    }
+    /// Whether the pack `label`, running for another dimension, is to be built ahead for
+    /// `dimension`: none is kept for it, none is building, and building one has not failed.
+    pub fn wants_shader_pack_ahead(&self, dimension: i32, label: &str) -> bool {
+        matches!(&self.pack_post, Some((running, Some(_))) if *running != dimension)
+            && self.pack_label.as_deref() == Some(label)
+            && self.pack_loading.is_none()
+            && self.pack_ahead.is_none()
+            && !self.pack_ahead_failed.contains(&dimension)
+            && !self.pack_parked.iter().any(|p| p.0 == dimension)
+    }
+    /// A pack could not be built ahead for `dimension`: it is not tried again.
+    pub fn shader_pack_ahead_failed(&mut self, dimension: i32) {
+        self.pack_ahead_failed.push(dimension);
+    }
+    /// What the kept packs were built from is changing: they are let go of.
+    fn forget_parked_shader_packs(&mut self) {
+        self.pack_parked.clear();
+        self.pack_ahead = None;
+        self.pack_ahead_failed.clear();
     }
     /// Whether a `shaders/` pack is still building (`load_shader_pack`).
     pub fn shader_pack_loading(&self) -> bool {
@@ -7255,6 +7449,8 @@ impl Renderer {
     }
     /// Drops the running shader pack, of either kind.
     pub fn drop_shader_packs(&mut self) {
+        self.forget_parked_shader_packs();
+        self.pack_label = None;
         self.pack_loading = None;
         self.pack_post = None;
         self.native = None;
@@ -7324,6 +7520,8 @@ impl Renderer {
         )?;
         self.native = pack.draws().then_some(pack);
         if self.native.is_some() {
+            self.forget_parked_shader_packs();
+            self.pack_label = None;
             self.pack_post = None;
             self.pack_atlas = None;
             self.pack_material_atlases = None;
@@ -7374,6 +7572,8 @@ impl Renderer {
             self.pack_atlas = None;
         }
         if self.pack_atlas.is_none() {
+            // The kept packs read the atlas that is gone.
+            self.forget_parked_shader_packs();
             let mut encoder = self.device.create_command_encoder(&Default::default());
             let layers = self
                 .sprite_textures
@@ -10873,17 +11073,19 @@ impl Renderer {
                 self.draw_outline(&mut pass, outline_edges as u32, frame.outline_high_contrast);
             }
             // DrawableGizmoPrimitives' opaque group writes depth, the translucent one does not.
-            if debug_opaque > 0 {
+            // A shader pack's picture takes the lines afterwards (`debug_over`): drawn into
+            // the world, its passes (its fog, its antialiasing) thin them out.
+            if debug_opaque > 0 && !pack_post {
                 pass.set_pipeline(&self.debug_lines_opaque);
                 pass.set_vertex_buffer(0, self.debug_line_buffer.slice(..));
                 pass.draw(0..4, 0..debug_opaque);
             }
-            if debug_depth > debug_opaque {
+            if debug_depth > debug_opaque && !pack_post {
                 pass.set_pipeline(&self.debug_lines);
                 pass.set_vertex_buffer(0, self.debug_line_buffer.slice(..));
                 pass.draw(0..4, debug_opaque..debug_depth);
             }
-            if debug_top > 0 {
+            if debug_top > 0 && !pack_post {
                 pass.set_pipeline(&self.debug_lines_on_top);
                 pass.set_vertex_buffer(0, self.debug_line_buffer.slice(..));
                 pass.draw(0..4, debug_depth..debug_depth + debug_top);
@@ -11385,6 +11587,63 @@ impl Renderer {
                 &pages,
                 &mut terrain,
             );
+            // The debug lines (chunk borders, hitboxes, gizmos) over the pack's picture, those
+            // drawn with depth where the pack's depth (else the world's) has nothing nearer.
+            if debug_depth + debug_top > 0 {
+                let (nearest, gl) = match post.depth() {
+                    Some(d) => (d.clone(), 1.0f32),
+                    None => (depth.clone(), 0.0),
+                };
+                let mut uniform = [0.0f32; 20];
+                uniform[..16].copy_from_slice(&view_proj.to_cols_array());
+                uniform[16] = self.config.width as f32;
+                uniform[17] = self.config.height as f32;
+                uniform[18] = gl;
+                self.uploads.buffer(
+                    &mut encoder,
+                    &self.debug_over_uniform,
+                    0,
+                    bytemuck::cast_slice(&uniform),
+                );
+                let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Debug lines over a shader pack"),
+                    layout: &self.debug_over_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: self.debug_over_uniform.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&nearest),
+                        },
+                    ],
+                });
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Debug lines over a shader pack"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view_target,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    ..Default::default()
+                });
+                pass.set_bind_group(0, &group, &[]);
+                pass.set_vertex_buffer(0, self.debug_line_buffer.slice(..));
+                if debug_depth > 0 {
+                    pass.set_pipeline(&self.debug_over[0]);
+                    pass.draw(0..4, 0..debug_depth);
+                }
+                if debug_top > 0 {
+                    pass.set_pipeline(&self.debug_over[1]);
+                    pass.draw(0..4, debug_depth..debug_depth + debug_top);
+                }
+            }
             self.pack_post = Some((dimension, Some(post)));
         } else if let Some((color, depth)) = &scaled
             && native_post
@@ -12627,6 +12886,59 @@ fn camera_section(camera: DVec3, min_y: i32) -> SectionKey {
 
 /// The near plane of the world's projection, in blocks.
 const NEAR_PLANE: f32 = 0.05;
+/// The debug lines over a shader pack's finished picture, as `vs_debug_line` lays them out
+/// (terrain.wgsl), without fog. `fs_line` leaves a line out where the depth has something
+/// nearer: a pack's `depthtex0` (GL's window depth, rows upside down; `params.z` 1), else the
+/// world's reverse-Z depth. `params.xy` is the screen's size.
+const DEBUG_OVER: &str = r"
+struct Over {
+    view_proj: mat4x4<f32>,
+    params: vec4<f32>,
+}
+@group(0) @binding(0) var<uniform> over: Over;
+@group(0) @binding(1) var nearest_depth: texture_2d<f32>;
+struct LineOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) color: vec4<f32>,
+    @location(1) at: vec4<f32>,
+}
+@vertex fn vs_line(@builtin(vertex_index) vertex: u32,
+    @location(0) start: vec3<f32>, @location(1) end: vec3<f32>,
+    @location(2) argb: vec4<f32>, @location(3) width: f32) -> LineOut {
+    let position = select(start, end, vertex >= 2u);
+    let view_shrink = 1.0 - 1.0 / 256.0;
+    let line_start = over.view_proj * vec4(position * view_shrink, 1.0);
+    let line_end = over.view_proj * vec4((position + (end - start)) * view_shrink, 1.0);
+    let ndc1 = line_start.xyz / line_start.w;
+    let ndc2 = line_end.xyz / line_end.w;
+    let screen = over.params.xy;
+    let direction = normalize((ndc2.xy - ndc1.xy) * screen);
+    var offset = vec2(-direction.y, direction.x) * width / screen;
+    if offset.x < 0.0 { offset = -offset; }
+    if vertex % 2u != 0u { offset = -offset; }
+    var out: LineOut;
+    out.clip = vec4((ndc1 + vec3(offset, 0.0)) * line_start.w, line_start.w);
+    out.at = out.clip;
+    // ARGB in a little-endian u32 reads as B, G, R, A.
+    out.color = argb.zyxw;
+    return out;
+}
+@fragment fn fs_line(in: LineOut) -> @location(0) vec4<f32> {
+    let ndc = in.at.xyz / in.at.w;
+    var place = ndc.xy * vec2(0.5, -0.5) + vec2(0.5, 0.5);
+    let size = vec2<f32>(textureDimensions(nearest_depth));
+    if over.params.z > 0.5 { place.y = 1.0 - place.y; }
+    let texel = vec2<i32>(clamp(place * size, vec2(0.0), size - vec2(1.0)));
+    var nearest = textureLoad(nearest_depth, texel, 0).r;
+    if over.params.z > 0.5 { nearest = 1.0 - nearest; }
+    // Reverse-Z: larger is nearer.
+    if nearest > ndc.z * 1.0005 + 1.0e-7 { discard; }
+    return in.color;
+}
+@fragment fn fs_line_on_top(in: LineOut) -> @location(0) vec4<f32> {
+    return in.color;
+}
+";
 
 /// Counts and offsets `Renderer::draw_overlay` draws from this frame's buffers.
 struct Overlay {

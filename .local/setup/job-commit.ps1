@@ -16,22 +16,47 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
 git add -u -- crates docs 2>&1 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/prune_compat.py .local/setup/charm_chest_items.py .local/setup/body-ui2.txt .local/setup/body-charm.txt .local/setup/body-merge.txt .local/setup/body-ui.txt .local/setup/body-chest.txt .local/setup/job-commit.ps1 .local/ports/better-oneblock/NATIVE-PORTS.md 2>&1 | ForEach-Object { "$_" }
+git add -f .local/setup/job-commit.ps1 .local/patches/horizon-portals/dev/portal_dev.py .local/patches/horizon-portals/dev/check_apply.py .local/setup/body-modsync.txt .local/setup/body-jei-custom.txt .local/setup/body-portal-seamless.txt docs/design/mod-mismatch-download.md crates/horizon-client/src/game/mod_sync.rs crates/horizon-client/src/mod_transfer.rs crates/horizon-client/src/mod_transfer/tests.rs crates/horizon-client/tests/mod_download.rs crates/horizon-protocol/src/build_id.rs crates/horizon-protocol/src/mod_files.rs 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-Mod files are linked into the content root, not copied; a crash after a merge fixed
+Portals connect straight through; a mod mismatch screen that downloads; JEI mod recipes
 
-- mod_content: a folder mod's files are shared with the root as the base's are
-  (hard link on Windows, symlink on Unix, copy as fallback). Only what the merge
-  parses is read: tags, atlases, biome modifiers, worldgen entries, structure
-  templates. A friend's first start spent 16 minutes reading 84,000 files, about
-  13 ms each on first open; a link opens nothing.
-- the log says "merging mods: N of M files" every two seconds; the boot screen
-  shows the log, so a long merge no longer looks frozen
-- hand: attack_item_info looks at the attack item before the items table, which
-  is not there before a world's resources load (a frame hook on the title screen
-  reached it: "world resources joined before entry")
-- Enhanced Attack Indicator: its frame hook does nothing without a player
+Portals (the Horizon Portals patch)
+- a portal's surface shows the other side with a shaders/ pack on too: the view goes over
+  the pack's picture, behind what the pack's depth has in front of it
+- a portal's blocks draw nothing of their own (no purple); until the other side is here the
+  surface shows that level's fog colour
+- a Horizon client's player goes through as its middle crosses the portal's plane: no wait,
+  no cooldown, landed in the same tick where the other side is loaded already, and it
+  keeps its place, look and motion (the landing is relative to where its client stands)
+- the level seen through the portal is the level entered: its columns come along, and the
+  last frame stays up (200 ms at most) until the section the player came out in is drawn
+- the arrival is laid out as the view is: the portals' middles together, a quarter turn
+  between portals facing different ways
+
+Shader packs
+- the pack built for a dimension is kept when the player leaves it and runs again at once
+  on the way back; with a portal in view, the pack for its other side is built ahead. Every
+  change of dimension used to build it again for 2 to 3 seconds
+- debug lines (chunk borders, hitboxes, gizmos) are drawn over the pack's picture; drawn
+  into the world, the pack's fog and antialiasing thinned them out
+
+Joining a server whose mods differ (docs/design/mod-mismatch-download.md)
+- the screen lists what is missing, different and extra, with both builds' ids (release,
+  revision, native mod count, source fingerprint)
+- "Download and restart" takes the missing and different content mods from the server
+  (horizon:mod_files, 256 KiB chunks, checked by hash), installs them, turns extra ones
+  off and joins again; horizon-serve-mods=false in server.properties turns serving off
+
+JEI
+- recipes of mod stations are listed: Chipped's workbenches (a group per tag), Charm's
+  woodcutter and kiln. A stack with components falls back to its item's recipes
+
+Also
+- tag files: an entry without a namespace is minecraft:'s (Chipped's tags name vanilla
+  blocks that way and lost them)
+- the mod content root is no longer built again for every new build of the game: its
+  stamp names the code that merges, not the game's file
 
 Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
@@ -49,7 +74,7 @@ $env:CARGO_TARGET_DIR = "$env:TEMP\horizon-verify-target"
 (Get-Process -Id $PID).PriorityClass = "BelowNormal"
 & cargo check --locked -p horizon-client 2>&1 | ForEach-Object { "$_" } | Select-String -Pattern "^error|Finished|-->|could not|failed|panicked" | Select-Object -First 40 | ForEach-Object { "$_" }
 "CLEAN CHECK EXIT $LASTEXITCODE"
-& cargo test --locked -p horizon-client --lib a_folder_mods_file_is_shared 2>&1 | ForEach-Object { "$_" } | Select-String -Pattern "^error|test result|FAILED|panicked|failed" | Select-Object -First 20 | ForEach-Object { "$_" }
+& cargo test --locked -p horizon-client --bin horizon-client a_folder_mods_file_is_shared 2>&1 | ForEach-Object { "$_" } | Select-String -Pattern "^error|test result|FAILED|panicked|failed" | Select-Object -First 20 | ForEach-Object { "$_" }
 "LINK TEST EXIT $LASTEXITCODE"
 Pop-Location
 Remove-Item Env:CARGO_TARGET_DIR

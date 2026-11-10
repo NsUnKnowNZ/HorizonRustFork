@@ -72,6 +72,12 @@ fn native_declared() -> &'static (
         (blocks, items)
     })
 }
+/// The ids of the items native mods declare in code: a content mod's file
+/// may name one of its own mod's as a crafting remainder
+/// (`Content::read_declaring`), so a download's check knows them too.
+pub(super) fn native_item_ids() -> Vec<String> {
+    native_declared().1.iter().map(|i| i.id.clone()).collect()
+}
 /// The native mods' standalone models (`native_standalone_models`), set once
 /// before the resources first load.
 pub(super) fn register_standalone_models() {
@@ -79,6 +85,74 @@ pub(super) fn register_standalone_models() {
     Game::native_standalone_models(&mut names);
     horizon_client::models::register_standalone(names);
 }
+/// Which build this game is, kept once at start for a join's `horizon:build`
+/// (`horizon_protocol::build_id`): what the build script read (`build.rs`:
+/// the revision, the mixins record's fingerprint and its native mods), with
+/// the mods the launcher wrote into [`BUILD_INFO`] beside the executable.
+pub(super) fn register_build() {
+    use horizon_core::release;
+    let (revision, dirty) = match option_env!("HORIZON_BUILD_REV") {
+        Some(rev) => match rev.strip_suffix('+') {
+            Some(rev) => (rev, true),
+            None => (rev, false),
+        },
+        None => ("unknown", false),
+    };
+    let fingerprint = option_env!("HORIZON_BUILD_FINGERPRINT")
+        .and_then(build_fingerprint)
+        .unwrap_or([0; 32]);
+    let mut native: Vec<(String, String)> = option_env!("HORIZON_BUILD_NATIVE")
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|pair| pair.split_once('='))
+        .map(|(id, version)| (id.to_owned(), version.to_owned()))
+        .collect();
+    let built = std::env::current_exe()
+        .ok()
+        .and_then(|exe| std::fs::read_to_string(exe.with_file_name(BUILD_INFO)).ok());
+    for (id, version) in built.as_deref().map(build_info_mods).unwrap_or_default() {
+        if !native.iter().any(|(other, _)| *other == id) {
+            native.push((id, version));
+        }
+    }
+    let build = horizon_protocol::build_id::Build {
+        version: release::VERSION.to_owned(),
+        nightly: release::NIGHTLY.map(str::to_owned),
+        revision: revision.to_owned(),
+        dirty,
+        fingerprint,
+        native,
+    };
+    log::info!("Horizon: build {}", build.label());
+    horizon_protocol::build_id::set_local(build);
+}
+
+/// The build script's fingerprint, 64 hex digits, as its bytes.
+fn build_fingerprint(hex: &str) -> Option<[u8; 32]> {
+    if hex.len() != 64 || !hex.is_ascii() {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (byte, pair) in out.iter_mut().zip(hex.as_bytes().chunks_exact(2)) {
+        *byte = u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()?;
+    }
+    Some(out)
+}
+
+/// [`BUILD_INFO`]'s mods, id and version.
+fn build_info_mods(built: &str) -> Vec<(String, String)> {
+    let info: serde_json::Value = serde_json::from_str(built).unwrap_or_default();
+    info["mods"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            let id = m["id"].as_str().filter(|id| !id.is_empty())?;
+            Some((id.to_owned(), m["version"].as_str().unwrap_or("?").to_owned()))
+        })
+        .collect()
+}
+
 /// The native mods' entity model layers (`native_layer_definitions`), kept
 /// once at start for `native_bake_layer`.
 pub(super) fn register_layer_definitions() {
@@ -107,6 +181,9 @@ pub(super) fn content_root(
     // The first load's list stays (`set_local`): a reload does not hash the files again.
     let announce = !horizon_protocol::mod_list::is_set();
     let mut announced = Vec::new();
+    // Where each announced mod was loaded from: all a server ever sends a
+    // client that lacks it (`mod_transfer::serve`).
+    let mut sources = Vec::new();
     for path in &paths {
         let Ok(package) = Package::read(path) else {
             continue;
@@ -149,7 +226,15 @@ pub(super) fn content_root(
             content,
         };
         match mod_content::accept_mod(&mut mods, candidate, known) {
-            Ok(_) if announce => announced.push(announced_entry(m, path)),
+            Ok(_) if announce => {
+                let entry = announced_entry(m, path);
+                sources.push(horizon_client::mod_transfer::Source {
+                    entry: entry.clone(),
+                    path: path.clone(),
+                    declared,
+                });
+                announced.push(entry);
+            }
             Ok(_) => {}
             Err(e) => log::warn!("Horizon: mod {} content not loaded: {e}", m.id),
         }
@@ -177,6 +262,7 @@ pub(super) fn content_root(
         Ok(out) => {
             if announce {
                 horizon_protocol::mod_list::set_local(announced);
+                horizon_client::mod_transfer::set_sources(sources);
             }
             if out != root {
                 log::info!(

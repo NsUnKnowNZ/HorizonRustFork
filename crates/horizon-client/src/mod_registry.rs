@@ -235,6 +235,21 @@ pub fn install(
     })
 }
 
+/// Forgets what `mod-browser.json` in `home` says about `horizon-mods/<id>.hmod`: the file there
+/// was replaced by one from another place (a server's, `mod_transfer`), so the version and
+/// checksum noted for it are another file's.
+pub fn forget_file(home: &Path, id: &str) {
+    let relative = format!("{}/{id}.hmod", crate::mod_list::DIR);
+    let mut list = Installed::load(home);
+    let before = list.entries.len();
+    list.entries.retain(|e| e["file"] != relative.as_str());
+    if list.entries.len() != before
+        && let Err(e) = list.save(home)
+    {
+        log::warn!("Horizon: {e}");
+    }
+}
+
 /// Downloads `url` (at most `max` bytes): `https://` only, or a `file://` path
 /// when the index itself is a local test registry.
 pub fn download(url: &str, max: u64) -> Result<Vec<u8>, String> {

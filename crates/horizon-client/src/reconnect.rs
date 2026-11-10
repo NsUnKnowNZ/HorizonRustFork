@@ -69,7 +69,7 @@ fn classified_key(key: &str) -> Option<bool> {
     // whitelists, version refusals, the account's session refusals and
     // Horizon's own refusals: never. Shutdowns, timeouts, a full server, a
     // slow login and the session servers being down: retry.
-    const NEVER: [&str; 14] = [
+    const NEVER: [&str; 16] = [
         "multiplayer.disconnect.banned",
         "multiplayer.disconnect.ip_banned",
         "multiplayer.disconnect.kicked",
@@ -84,6 +84,10 @@ fn classified_key(key: &str) -> Option<bool> {
         "disconnect.loginFailedInfo.userBanned",
         "horizon.multiplayer.not_signed_in",
         "horizon.multiplayer.invalid_address",
+        // The mods or the build differ from the server's (`net::MODS_REFUSED`,
+        // `net::BUILD_REFUSED`): joining again changes nothing.
+        "horizon.disconnect.mods",
+        "horizon.disconnect.build",
     ];
     const RETRY: [&str; 6] = [
         "multiplayer.disconnect.server_shutdown",
@@ -212,6 +216,19 @@ mod tests {
         assert!(tracker.ended("Server closed", None, true, now).unwrap().lan);
         tracker.connecting("127.0.0.1:25565", "Tester", false);
         assert!(!tracker.ended("Server closed", None, true, now).unwrap().lan);
+    }
+
+    #[test]
+    fn a_refusal_over_mods_or_the_build_is_never_retried() {
+        // Both arrive as a configuration that failed, which is retried otherwise.
+        let refusal = "Your mods don't match this server's. Missing: ruby 1.2";
+        assert!(allowed(refusal, None, false));
+        assert!(!allowed(refusal, Some(crate::net::MODS_REFUSED), false));
+        assert!(!allowed(
+            crate::content_identity::MISMATCH,
+            Some(crate::net::BUILD_REFUSED),
+            false
+        ));
     }
 
     #[test]

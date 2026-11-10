@@ -19,6 +19,31 @@ fn main() {
     if !staged.is_empty() {
         println!("cargo:rustc-env=HORIZON_MIXIN_MODS={}", staged.join(","));
     }
+    // Which build this is, for `game::mods::register_build`: a player whose mods differ from a
+    // server's reads both builds (`horizon_protocol::build_id`). The revision, the fingerprint
+    // of what horizon-mixins built from (it tells uncommitted changes apart, which the revision
+    // cannot) and the native mods with their versions.
+    let (revision, dirty) = build_revision(&root);
+    println!(
+        "cargo:rustc-env=HORIZON_BUILD_REV={revision}{}",
+        if dirty { "+" } else { "" }
+    );
+    if let Some(fingerprint) = horizon_mod_api_gen::staged_fingerprint(&root) {
+        println!("cargo:rustc-env=HORIZON_BUILD_FINGERPRINT={fingerprint}");
+    }
+    let native: Vec<String> = horizon_mod_api_gen::staged_native(&root)
+        .iter()
+        .map(|(id, version)| {
+            let version: String = version
+                .chars()
+                .map(|c| if c == ',' || c.is_control() { '_' } else { c })
+                .collect();
+            format!("{id}={version}")
+        })
+        .collect();
+    if !native.is_empty() {
+        println!("cargo:rustc-env=HORIZON_BUILD_NATIVE={}", native.join(","));
+    }
     let manifest_dir = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let ico = manifest_dir
         .join("../..")
@@ -77,6 +102,50 @@ fn main() {
         }
         result.expect("embedding Horizon's icon in Windows resources");
     }
+}
+
+/// The source revision this build is of, and whether the source had changes it does not name.
+/// A workspace exported for a native build says it in `.horizon-revision` (its changes are in
+/// the mixins record's fingerprint); a git checkout is asked; anything else is `unknown`. Read
+/// when this script runs, so a checkout's answer is as of the last change to this crate's inputs.
+fn build_revision(root: &std::path::Path) -> (String, bool) {
+    let is_revision =
+        |text: &str| (7..=40).contains(&text.len()) && text.bytes().all(|b| b.is_ascii_hexdigit());
+    let exported = root.join(".horizon-revision");
+    if let Ok(text) = std::fs::read_to_string(&exported) {
+        println!("cargo:rerun-if-changed={}", exported.display());
+        if is_revision(text.trim()) {
+            return (text.trim().to_owned(), false);
+        }
+    }
+    let git = |args: &[&str]| -> Option<String> {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .ok()?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+    };
+    let Some(revision) = git(&["rev-parse", "HEAD"]).filter(|r| is_revision(r)) else {
+        return ("unknown".to_owned(), false);
+    };
+    // A commit or a checkout moves HEAD or the branch it names.
+    if let Some(dir) = git(&["rev-parse", "--absolute-git-dir"]) {
+        let dir = std::path::PathBuf::from(dir);
+        let branch = git(&["symbolic-ref", "-q", "HEAD"]);
+        for file in std::iter::once("HEAD").chain(branch.as_deref()) {
+            let file = dir.join(file);
+            if file.is_file() {
+                println!("cargo:rerun-if-changed={}", file.display());
+            }
+        }
+    }
+    let dirty = git(&["status", "--porcelain", "--", "crates", "Cargo.toml", "Cargo.lock"])
+        .is_some_and(|changes| !changes.is_empty());
+    (revision, dirty)
 }
 
 /// `path` as the resource compiler takes it: an error only when GNU windres would need an 8.3 alias

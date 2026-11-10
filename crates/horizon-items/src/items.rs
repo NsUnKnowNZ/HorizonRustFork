@@ -522,6 +522,19 @@ pub fn load_tags(
         .map(|(k, v)| (k, v.into_iter().collect()))
         .collect())
 }
+/// A tag file's entry as a full id: one written without a namespace is `minecraft:`'s
+/// (`Identifier.parse`), an element and a `#tag` alike.
+fn qualified_entry(entry: &str) -> String {
+    let (mark, id) = match entry.strip_prefix('#') {
+        Some(id) => ("#", id),
+        None => ("", entry),
+    };
+    if id.contains(':') {
+        entry.to_owned()
+    } else {
+        format!("{mark}minecraft:{id}")
+    }
+}
 /// Every tag's contents in `TagLoader.tryBuildTag` order (a `LinkedHashSet`).
 /// `overlay` adds a world's data packs over the game's own tag files.
 pub(crate) fn load_tag_lists(
@@ -539,7 +552,7 @@ pub(crate) fn load_tag_lists(
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter_map(|e| e.as_str().or_else(|| e["id"].as_str()).map(str::to_owned))
+                .filter_map(|e| e.as_str().or_else(|| e["id"].as_str()).map(qualified_entry))
                 .collect();
             raw.insert(format!("{namespace}:{}", file.name), values);
         }
@@ -571,7 +584,7 @@ pub(crate) fn load_tag_lists(
                     .as_array()
                     .into_iter()
                     .flatten()
-                    .filter_map(|e| e.as_str().or_else(|| e["id"].as_str()).map(str::to_owned)),
+                    .filter_map(|e| e.as_str().or_else(|| e["id"].as_str()).map(qualified_entry)),
             );
         }
     }

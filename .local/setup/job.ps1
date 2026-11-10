@@ -1,2 +1,1 @@
-﻿# Runs the commit, push and server sync job.
-& "$PSScriptRoot\job-commit.ps1"
+﻿& "$PSScriptRoot\job-commit.ps1"

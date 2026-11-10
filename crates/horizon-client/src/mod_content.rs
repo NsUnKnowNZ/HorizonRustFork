@@ -2835,8 +2835,8 @@ pub fn build(base: &Path, mods: &[ContentMod], out: &Path) -> Result<Vec<String>
 /// another (docs/design/mod-hotload.md). Roots of other sets unused for a day
 /// are removed.
 ///
-/// The root is built once and kept: later starts with the same build, base
-/// and mod files reuse it. With ATM10's carried mods a build takes about
+/// The root is built once and kept: later starts with the same merge code,
+/// base and mod files reuse it, a newer build of the game included. With ATM10's carried mods a build takes about
 /// 25 s and peaks above 3 GB, more than everything the game keeps.
 pub fn resource_root(base: &Path, mods: &[ContentMod], cache: &Path) -> Result<PathBuf> {
     if mods
@@ -2951,9 +2951,15 @@ const WARNINGS: &str = "horizon-mod-content-warnings.txt";
 /// In a root built by [`resource_root`]: what it was built from.
 const STAMP: &str = "horizon-mod-content.stamp";
 
-/// What a content root is built from: this build of the game, the base's
-/// manifest and the tables [`build`] rewrites, and every file of every mod
-/// in order. Files count by size and modification time, as build tools do.
+/// What a content root is built from: the code that builds it (this file),
+/// the base's manifest and the tables [`build`] rewrites, and every file of
+/// every mod in order. Files count by size and modification time, as build
+/// tools do.
+///
+/// The game's own file is not part of it: a new build that merges the same
+/// way reuses the root, where each one used to spend a minute or more
+/// building its own from 80,000 files. A change outside this file that alters
+/// what [`build`] writes must raise the number in the first part.
 fn stamp(base: &Path, mods: &[ContentMod]) -> Result<String> {
     use sha2::{Digest, Sha256};
     let meta = |path: &Path| -> Result<String> {
@@ -2969,8 +2975,11 @@ fn stamp(base: &Path, mods: &[ContentMod]) -> Result<String> {
             modified.as_nanos()
         ))
     };
-    let mut parts = vec!["horizon mod content 1".to_owned()];
-    parts.push(meta(&std::env::current_exe()?)?);
+    let mut parts = vec!["horizon mod content 2".to_owned()];
+    parts.push(format!(
+        "{:x}",
+        Sha256::digest(include_bytes!("mod_content.rs"))
+    ));
     let base = std::path::absolute(base)?;
     parts.push(
         String::from_utf8_lossy(&fs::read(base.join("horizon-resources.json"))?).into_owned(),

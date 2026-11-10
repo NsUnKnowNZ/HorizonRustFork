@@ -23,6 +23,9 @@ fn jei_command(game: &mut crate::game::Game<'_>, command: &str, ran: &mut bool) 
                 None => m::about(),
             };
             game.native_chat(&text);
+            if let Some(line) = crate::game::jei_glue::custom_line() {
+                game.native_chat(&line);
+            }
         }
         m::Command::ToggleGive => {
             let on = m::give(game.native_setting(m::ID, "give").as_deref());

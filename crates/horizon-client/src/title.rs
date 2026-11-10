@@ -401,6 +401,11 @@ pub enum Action {
         dir: PathBuf,
         selected: Vec<String>,
     },
+    /// The mod mismatch screen's download: the game starts it and hands the
+    /// screen its job (`multiplayer::ModMismatch`).
+    FetchMods,
+    /// The mod mismatch screen's restart without the extra mods.
+    ApplyMods,
 }
 pub struct Title {
     pub mode: Mode,
@@ -3660,6 +3665,8 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
                 crate::multiplayer::Outcome::Connect { address, lan } => {
                     Action::Connect { address, lan }
                 }
+                crate::multiplayer::Outcome::FetchMods => Action::FetchMods,
+                crate::multiplayer::Outcome::ApplyMods => Action::ApplyMods,
                 crate::multiplayer::Outcome::None => Action::None,
             },
             (Mode::Main, Some(5)) => {
@@ -4575,6 +4582,13 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
             Mode::Edit { focused, .. } => *focused = false,
             Mode::Create { focus, .. } => *focus = 2,
             _ => {}
+        }
+    }
+    /// The mod mismatch screen, when it is the one open.
+    pub fn mod_mismatch_mut(&mut self) -> Option<&mut crate::multiplayer::ModMismatch> {
+        match &mut self.mode {
+            Mode::Multiplayer(screen) => screen.mod_mismatch_mut(),
+            _ => None,
         }
     }
     /// The server auto-reconnect retries now, once its countdown is over.

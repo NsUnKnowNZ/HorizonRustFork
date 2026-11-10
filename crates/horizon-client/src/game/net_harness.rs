@@ -44,9 +44,14 @@ impl Game<'_> {
             self.update_world();
             if self.remote.is_none() {
                 error = Some(match self.title.as_ref().map(|t| &t.mode) {
-                    Some(horizon_client::title::Mode::Multiplayer(
-                        horizon_client::multiplayer::Screen::Disconnected { reason, .. },
-                    )) => format!("disconnected: {reason}"),
+                    Some(horizon_client::title::Mode::Multiplayer(screen))
+                        if screen.disconnect_reason().is_some() =>
+                    {
+                        format!(
+                            "disconnected: {}",
+                            screen.disconnect_reason().unwrap_or_default()
+                        )
+                    }
                     _ => "disconnected".to_owned(),
                 });
                 break;

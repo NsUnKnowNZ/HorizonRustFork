@@ -22,6 +22,9 @@ pub const MAX_ENTRIES: usize = 128;
 pub const MAX_TEXT: usize = 64;
 /// Mods named in a refusal's reason per kind of difference; the rest is counted.
 const SHOWN: usize = 6;
+/// How a refusal over the mod list begins ([`Difference::reason`]): a client
+/// tells it from any other kick by this.
+pub const REFUSAL: &str = "Your mods don't match this server's.";
 
 /// Where a mod runs (a manifest's `side`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -182,39 +185,90 @@ impl Difference {
             }
             parts.push(format!("{label}: {text}"));
         }
-        format!("Your mods don't match this server's. {}", parts.join(". "))
+        format!("{REFUSAL} {}", parts.join(". "))
     }
 }
 
-/// What a client must change to join a server. Only `Both` mods count, on
+/// How a client's mods differ from a server's, as the entries themselves:
+/// what the mismatch screen lists and what a download asks the server for.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Detailed {
+    /// The server has it on and the client does not: the server's entry.
+    pub missing: Vec<Entry>,
+    /// The client has it on, the server does not, and it changes the world:
+    /// the client's entry.
+    pub extra: Vec<Entry>,
+    /// Both have it, not the same: the server's entry, then the client's.
+    pub changed: Vec<(Entry, Entry)>,
+}
+
+impl Detailed {
+    pub fn is_empty(&self) -> bool {
+        self.missing.is_empty() && self.extra.is_empty() && self.changed.is_empty()
+    }
+
+    /// The server's entries a client lacks or has otherwise: what a download
+    /// would bring.
+    pub fn wanted(&self) -> Vec<Entry> {
+        self.missing
+            .iter()
+            .chain(self.changed.iter().map(|(server, _)| server))
+            .cloned()
+            .collect()
+    }
+
+    /// The same differences as the lines of a refusal.
+    pub fn difference(&self) -> Difference {
+        Difference {
+            missing: self
+                .missing
+                .iter()
+                .map(|s| format!("{} {}", s.id, s.version))
+                .collect(),
+            extra: self
+                .extra
+                .iter()
+                .map(|c| format!("{} {}", c.id, c.version))
+                .collect(),
+            changed: self
+                .changed
+                .iter()
+                .map(|(s, c)| match s.version != c.version {
+                    true => format!("{} (server {}, yours {})", s.id, s.version, c.version),
+                    false => format!("{} {} (your file was changed)", s.id, s.version),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// [`compare`], keeping each differing entry. Only `Both` mods count, on
 /// either side: a `Server` mod is the server's business, a `Client` one the
 /// player's.
-pub fn compare(server: &[Entry], client: &[Entry]) -> Difference {
-    let mut difference = Difference::default();
+pub fn compare_detailed(server: &[Entry], client: &[Entry]) -> Detailed {
+    let mut detailed = Detailed::default();
     for s in server.iter().filter(|s| s.side == Side::Both) {
         match client.iter().find(|c| c.id == s.id) {
-            None => difference.missing.push(format!("{} {}", s.id, s.version)),
+            None => detailed.missing.push(s.clone()),
             Some(c) => {
                 let other_file = matches!((s.sha256, c.sha256), (Some(a), Some(b)) if a != b);
-                if s.version != c.version {
-                    difference.changed.push(format!(
-                        "{} (server {}, yours {})",
-                        s.id, s.version, c.version
-                    ));
-                } else if other_file {
-                    difference
-                        .changed
-                        .push(format!("{} {} (your file was changed)", s.id, s.version));
+                if s.version != c.version || other_file {
+                    detailed.changed.push((s.clone(), c.clone()));
                 }
             }
         }
     }
     for c in client.iter().filter(|c| c.side == Side::Both) {
         if !server.iter().any(|s| s.id == c.id) {
-            difference.extra.push(format!("{} {}", c.id, c.version));
+            detailed.extra.push(c.clone());
         }
     }
-    difference
+    detailed
+}
+
+/// What a client must change to join a server, as a refusal's lines.
+pub fn compare(server: &[Entry], client: &[Entry]) -> Difference {
+    compare_detailed(server, client).difference()
 }
 
 #[cfg(test)]
@@ -312,6 +366,43 @@ mod tests {
         assert_eq!(d.missing, ["pipes 2.0", "glass 1.0"]);
         let reason = d.reason();
         assert!(reason.contains("Missing: pipes 2.0, glass 1.0"), "{reason}");
+    }
+
+    #[test]
+    fn the_detailed_comparison_keeps_the_entries() {
+        let server = [
+            entry("ruby", "1.0", 1, Side::Both),
+            entry("pipes", "2.0", 2, Side::Both),
+            entry("glass", "1.0", 3, Side::Both),
+            entry("lamps", "1.0", 5, Side::Both),
+            entry("anti_grief", "1", 6, Side::Server),
+        ];
+        let client = [
+            entry("ruby", "1.0", 1, Side::Both),
+            entry("pipes", "2.0", 99, Side::Both),
+            entry("glass", "0.9", 3, Side::Both),
+            entry("xray_blocks", "1.0", 4, Side::Both),
+            entry("minimap", "3", 7, Side::Client),
+        ];
+        let d = compare_detailed(&server, &client);
+        assert_eq!(d.missing, [server[3].clone()]);
+        assert_eq!(d.extra, [client[3].clone()]);
+        assert_eq!(
+            d.changed,
+            [
+                (server[1].clone(), client[1].clone()),
+                (server[2].clone(), client[2].clone())
+            ]
+        );
+        // What a download asks for: the server's entries, never the client's.
+        assert_eq!(
+            d.wanted(),
+            [server[3].clone(), server[1].clone(), server[2].clone()]
+        );
+        assert_eq!(d.difference(), compare(&server, &client));
+        assert!(!d.is_empty());
+        assert!(compare_detailed(&server, &server).is_empty());
+        assert!(compare_detailed(&[], &[]).wanted().is_empty());
     }
 
     #[test]

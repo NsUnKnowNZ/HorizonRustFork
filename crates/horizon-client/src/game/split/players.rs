@@ -57,9 +57,9 @@ fn local_server(address: &str) -> bool {
 
 /// Why a player's game left its server, when the server said (its Disconnected or error screen).
 fn turned_away(game: &Game<'_>) -> Option<String> {
-    use horizon_client::{multiplayer::Screen, title::Mode};
+    use horizon_client::title::Mode;
     let why = match &game.title.as_ref()?.mode {
-        Mode::Multiplayer(Screen::Disconnected { reason, .. }) => reason.clone(),
+        Mode::Multiplayer(screen) => screen.disconnect_reason()?.to_owned(),
         Mode::Error { message, .. } => message.clone(),
         _ => return None,
     };

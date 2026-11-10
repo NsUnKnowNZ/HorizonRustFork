@@ -1143,6 +1143,10 @@ impl Game<'_> {
                 .raw
                 .get(horizon_client::lan::HORIZON_CLIENTS_ONLY)
                 .is_some_and(|v| v.trim().eq_ignore_ascii_case("true")),
+            serve_mods: !props
+                .raw
+                .get(horizon_client::lan::SERVE_MODS)
+                .is_some_and(|v| v.trim().eq_ignore_ascii_case("false")),
             accept_older_clients: props
                 .raw
                 .get(horizon_client::lan::ACCEPT_OLDER_CLIENTS)

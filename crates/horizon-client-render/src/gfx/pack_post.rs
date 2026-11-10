@@ -4375,6 +4375,18 @@ impl PackPost {
         self.hand.is_some()
     }
 
+    /// `depthtex0` as the frame left it, when the pack keeps one (GL's window depth, rows
+    /// upside down), for what is drawn over the pack's picture.
+    pub fn depth(&self) -> Option<&wgpu::TextureView> {
+        self.targets.as_ref().filter(|_| self.blit_depth).map(|t| &t.depth)
+    }
+
+    /// The same before translucent terrain was drawn (`depthtex1`), when the pack keeps it.
+    pub fn opaque_depth(&self) -> Option<&wgpu::TextureView> {
+        let targets = self.targets.as_ref().filter(|_| self.blit_depth)?;
+        targets.depth1.as_ref().map(|d| &d.1)
+    }
+
     /// The clouds `set_clouds` gave for this frame, with `gbuffers_clouds`.
     fn draw_clouds(
         &mut self,
