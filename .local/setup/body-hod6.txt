@@ -1,0 +1,82 @@
+$env:HORIZON_SPIKES = "20"
+$icon = "$repo\saves\NativeTest\icon.png"
+Remove-Item -Force $icon -ErrorAction SilentlyContinue
+$pic = "$repo\screenshots\worlds\singleplayer\NativeTest.png"
+$before = (Get-Item $pic -ErrorAction SilentlyContinue).LastWriteTime
+LaunchOff
+Platform
+$log = "$env:TEMP\horizon-native-test.log"
+function Count($pat) { return (Select-String -Path $log -Pattern $pat -AllMatches).Count }
+C wait 100
+$a = Count 'slow frame'
+C stats reset
+C wait 600
+"=== STATS standing 30 s"
+C stats
+$b = Count 'slow frame'
+"slow frames standing: $($b - $a)"
+"picture before: $before, now: $((Get-Item $pic -ErrorAction SilentlyContinue).LastWriteTime)"
+"icon: $(Test-Path $icon) $((Get-Item $icon -ErrorAction SilentlyContinue).Length) bytes"
+Get-ChildItem "$repo\screenshots\worlds\singleplayer", "$repo\saves\NativeTest" -Filter "*.part" -ErrorAction SilentlyContinue | ForEach-Object { "left over: $($_.FullName)" }
+Select-String -Path $log -Pattern 'Horizon renderer: (the picture|no thread)' | ForEach-Object { "$_" }
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "setblock 200 150 205 farmersdelight:stove[facing=south,lit=true]"
+C command "setblock 200 151 205 farmersdelight:skillet[facing=north]"
+C command "setblock 202 150 205 farmersdelight:cutting_board[facing=south]"
+C command "item replace entity @s hotbar.0 with minecraft:bread 2"
+C command "item replace entity @s hotbar.1 with farmersdelight:beef_patty 2"
+C command "item replace entity @s hotbar.2 with farmersdelight:cabbage_leaf 2"
+C command "item replace entity @s hotbar.3 with farmersdelight:tomato 2"
+C command "item replace entity @s hotbar.4 with farmersdelight:onion 2"
+C command "item replace entity @s hotbar.5 with minecraft:beef 3"
+C command "item replace entity @s hotbar.6 with farmersdelight:iron_knife"
+function Scene {
+  $l = Select-String -Path "$env:TEMP\horizon-native-test.log" -Pattern 'scene at strip (-?\d+) (-?\d+) card (-?\d+) (-?\d+) middle (-?\d+) (-?\d+) book (-?\d+) (-?\d+) handle (-?\d+) (-?\d+)' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $script:sx=[int]$g[1].Value; $script:sy=[int]$g[2].Value; $script:mx=[int]$g[5].Value; $script:my=[int]$g[6].Value; $script:bx=[int]$g[7].Value; $script:by=[int]$g[8].Value; $script:hx=[int]$g[9].Value; $script:hy=[int]$g[10].Value
+  "scene: $($l.Line)"
+}
+C command "tp @s 202.5 150 204.3 0 60"
+C wait 40
+C mouse right click
+C wait 30
+Scene
+foreach ($k in 0..4) { C click-at ($sx+20*$k) $sy; C click-at $mx $my; C wait 5 }
+C wait 10
+C command "data get block 202 150 205"
+C screenshot "$shots\hod6-2-burger.png"
+"--- take the burger (the onion still carried)"
+C click-at $mx $my
+C wait 10
+C command "data get block 202 150 205"
+C command "data get entity @s Inventory"
+C key e tap
+C wait 30
+C command "tp @s 200.5 150 206.6 180 27"
+C wait 20
+C mouse right click
+C wait 30
+Scene
+C screenshot "$shots\hod6-3-skillet.png"
+C click-at ($sx+100) $sy
+C click-at $mx $my
+C wait 120
+C command "data get block 200 151 205"
+C screenshot "$shots\hod6-4-frying.png"
+C drag-at $hx $hy $hx ($hy-20) $hx ($hy-45)
+C wait 3
+C screenshot "$shots\hod6-5-toss.png"
+C wait 20
+C command "data get block 200 151 205"
+C wait 290
+C drag-at $hx $hy $hx ($hy-20) $hx ($hy-45)
+C wait 200
+C command "data get block 200 151 205"
+C screenshot "$shots\hod6-6-done.png"
+C click-at $mx $my
+C wait 10
+C command "data get entity @s Inventory"
+C key e tap
+C wait 20

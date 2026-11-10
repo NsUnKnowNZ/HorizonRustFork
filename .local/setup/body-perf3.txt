@@ -1,0 +1,25 @@
+$env:HORIZON_SPIKES = "20"
+$icon = "$repo\saves\NativeTest\icon.png"
+Remove-Item -Force $icon -ErrorAction SilentlyContinue
+$pic = "$repo\screenshots\worlds\singleplayer\NativeTest.png"
+$before = (Get-Item $pic -ErrorAction SilentlyContinue).LastWriteTime
+Launch
+Platform
+$log = "$env:TEMP\horizon-native-test.log"
+function Count($pat) { return (Select-String -Path $log -Pattern $pat -AllMatches).Count }
+C wait 100
+$a = Count 'slow frame'; $ra = Count 'submitted in place: readback'
+C stats reset
+C wait 800
+"=== STATS standing 40 s"
+C stats
+$b = Count 'slow frame'; $rb = Count 'submitted in place: readback'
+"slow frames standing: $($b - $a)"
+"in-place readback frames: $($rb - $ra)"
+"picture before: $before, now: $((Get-Item $pic -ErrorAction SilentlyContinue).LastWriteTime)"
+"icon: $(Test-Path $icon) $((Get-Item $icon -ErrorAction SilentlyContinue).Length) bytes"
+Get-ChildItem "$repo\screenshots\worlds\singleplayer", "$repo\saves\NativeTest" -Filter "*.part" -ErrorAction SilentlyContinue | ForEach-Object { "left over: $($_.FullName)" }
+Select-String -Path $log -Pattern 'Horizon renderer: (the picture|no thread)' | ForEach-Object { "$_" }
+Select-String -Path $log -Pattern 'slow frame' | Select-Object -Last 10 | ForEach-Object { $t = "$_"; $t.Substring(0, [Math]::Min(300, $t.Length)) }
+C screenshot "$shots\perf3-f2.png"
+"f2 picture: $((Get-Item "$shots\perf3-f2.png" -ErrorAction SilentlyContinue).Length) bytes"

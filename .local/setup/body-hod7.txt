@@ -1,0 +1,30 @@
+LaunchOff
+Platform
+C command "gamemode survival"
+C command "kill @e[type=!player]"
+C command "clear @s"
+C command "setblock 200 150 205 farmersdelight:stove[facing=south,lit=true]"
+C command "setblock 200 151 205 farmersdelight:skillet[facing=north]"
+C command "item replace entity @s hotbar.5 with minecraft:beef 3"
+function Scene {
+  $l = Select-String -Path "$env:TEMP\horizon-native-test.log" -Pattern 'scene at strip (-?\d+) (-?\d+) card (-?\d+) (-?\d+) middle (-?\d+) (-?\d+) book (-?\d+) (-?\d+) handle (-?\d+) (-?\d+)' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $script:sx=[int]$g[1].Value; $script:sy=[int]$g[2].Value; $script:mx=[int]$g[5].Value; $script:my=[int]$g[6].Value; $script:bx=[int]$g[7].Value; $script:by=[int]$g[8].Value; $script:hx=[int]$g[9].Value; $script:hy=[int]$g[10].Value
+  "scene: $($l.Line)"
+}
+C command "tp @s 200.5 150 206.6 180 27"
+C wait 20
+C mouse right click
+C wait 30
+Scene
+C click-at ($sx+100) $sy
+C click-at $mx $my
+C wait 100
+C screenshot "$shots\hod7-1-frying.png"
+C drag-at $hx $hy $hx ($hy-20) $hx ($hy-45)
+C wait 3
+C screenshot "$shots\hod7-2-toss.png"
+C wait 10
+C command "data get block 200 151 205"
+C key e tap
+C wait 20

@@ -1,0 +1,9 @@
+function LaunchOff {
+  C launch --world NativeTest --wait --offscreen
+  for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+  "ready after $($i*5)s more"
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = "Normal" }
+  C wait 20
+  C respawn
+  C wait 20
+}

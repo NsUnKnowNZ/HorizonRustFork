@@ -29,6 +29,9 @@ use std::rc::Rc;
 pub(super) const BOARD: &str = "farmersdelight:cutting_board";
 pub(super) const STOVE: &str = "farmersdelight:stove";
 pub(super) const POT: &str = "farmersdelight:cooking_pot";
+pub(super) const SKILLET: &str = "farmersdelight:skillet";
+/// How many of one food a skillet fries at once.
+pub(super) const SKILLET_MAX: u32 = 8;
 const POT_MENU: &str = "farmersdelight:cooking_pot";
 const POT_GUI: &str = "farmersdelight:gui/cooking_pot";
 const CAMPFIRE: &str = "minecraft:campfire_cooking";
@@ -37,13 +40,15 @@ pub(super) const MEAL: usize = 6;
 const CONTAINER: usize = 7;
 const OUTPUT: usize = 8;
 const STOVE_SLOTS: usize = 6;
+/// The board's item, then the layers stacked on it (Hands-On Delight's sandwiches).
+pub(super) const BOARD_LAYERS: usize = 6;
 /// The stove's six spots on its top, in the block's own frame (north is -z).
 const STOVE_SPOTS: [[f32; 2]; STOVE_SLOTS] =
     [[0.25, 0.32], [0.5, 0.32], [0.75, 0.32], [0.25, 0.68], [0.5, 0.68], [0.75, 0.68]];
 const BLOCKS: usize = 4; // SoundSource.BLOCKS
 
 fn ours(block: &str) -> bool {
-    matches!(block, BOARD | STOVE | POT)
+    matches!(block, BOARD | STOVE | POT | SKILLET)
 }
 
 pub(super) fn key(s: &str) -> JavaString {
@@ -57,7 +62,7 @@ pub(super) fn entity(block: &str, entity: &mut Option<(String, Compound)>) {
 }
 
 pub(super) fn ticks(block: &str, ticks: &mut bool) {
-    if block == STOVE || block == POT {
+    if block == STOVE || block == POT || block == SKILLET {
         *ticks = true;
     }
 }
@@ -74,8 +79,9 @@ pub(super) fn container(block: &str, container: &mut Option<ModContainer>) {
         menu: None,
     };
     *container = match block {
-        BOARD => Some(closed(1)),
+        BOARD => Some(closed(BOARD_LAYERS)),
         STOVE => Some(closed(STOVE_SLOTS)),
+        SKILLET => Some(closed(1)),
         POT => {
             // Hoppers fill the ingredients from above and the container slot from the sides, and
             // take the served meals from below.
@@ -225,6 +231,72 @@ pub(super) fn meals(game: &Game<'_>) -> Rc<Vec<Meal>> {
     })
 }
 
+/// A sandwich built on the board (Hands-On Delight): bread first, then the fillings in any order;
+/// the last one turns the stack into `result`. From the shapeless crafting recipes of mods' foods
+/// with bread among their ingredients (Farmer's Delight's hamburger, sandwiches and wrap).
+pub(super) struct Sandwich {
+    pub(super) base: Ingredient,
+    pub(super) fillings: Vec<Ingredient>,
+    pub(super) result: ItemStack,
+}
+
+thread_local! {
+    static SANDWICHES: RefCell<(usize, usize, Rc<Vec<Sandwich>>)> = RefCell::new((0, 0, Rc::default()));
+}
+
+pub(super) fn sandwiches(game: &Game<'_>) -> Rc<Vec<Sandwich>> {
+    let recipes = &game.recipes().crafting;
+    let stamp = (recipes.as_ptr() as usize, recipes.len());
+    SANDWICHES.with_borrow_mut(|(at, len, list)| {
+        if (*at, *len) != stamp {
+            let bread = ItemStack::new("minecraft:bread", 1);
+            *list = Rc::new(
+                recipes
+                    .iter()
+                    .filter_map(|(_, recipe)| {
+                        let horizon_client::crafting::Recipe::Shapeless { ingredients, result } = recipe else {
+                            return None;
+                        };
+                        let item = result.item.as_deref()?;
+                        if item.starts_with("minecraft:") || ingredients.len() < 2 || ingredients.len() > BOARD_LAYERS {
+                            return None;
+                        }
+                        let b = ingredients.iter().position(|i| i.test(&bread))?;
+                        let fillings = ingredients.iter().enumerate().filter(|(i, _)| *i != b).map(|(_, g)| g.clone()).collect();
+                        Some(Sandwich {
+                            base: ingredients[b].clone(),
+                            fillings,
+                            result: ItemStack::new(item, result.count.max(1)),
+                        })
+                    })
+                    .collect(),
+            );
+            (*at, *len) = stamp;
+        }
+        Rc::clone(list)
+    })
+}
+
+/// Whether the stacks can each take a different one of the ingredients (some may be left over).
+pub(super) fn partial(ingredients: &[Ingredient], stacks: &[&ItemStack]) -> bool {
+    fn assign(i: usize, ingredients: &[Ingredient], stacks: &[&ItemStack], used: &mut [bool]) -> bool {
+        if i == stacks.len() {
+            return true;
+        }
+        for (j, ingredient) in ingredients.iter().enumerate() {
+            if !used[j] && ingredient.test(stacks[i]) {
+                used[j] = true;
+                if assign(i + 1, ingredients, stacks, used) {
+                    return true;
+                }
+                used[j] = false;
+            }
+        }
+        false
+    }
+    stacks.len() <= ingredients.len() && assign(0, ingredients, stacks, &mut vec![false; ingredients.len()])
+}
+
 /// Whether the ingredients take the stacks one each, in any order (a shapeless match).
 pub(super) fn matches(ingredients: &[Ingredient], stacks: &[&ItemStack]) -> bool {
     fn assign(i: usize, ingredients: &[Ingredient], stacks: &[&ItemStack], used: &mut [bool]) -> bool {
@@ -352,12 +424,29 @@ pub(super) fn click(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut bool) {
     match name.as_str() {
         BOARD => board_click(game, pos, canceled),
         STOVE => stove_click(game, pos, canceled),
+        SKILLET => skillet_click(game, pos, canceled),
         _ => pot_click(game, pos, canceled),
     }
 }
 
 fn board_click(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut bool) {
-    let board = items_at(game, pos).into_iter().next().flatten();
+    let items = items_at(game, pos);
+    let top = items.iter().rposition(Option::is_some);
+    if let Some(top) = top.filter(|&t| t > 0) {
+        // A stack of layers: an empty hand takes the top one back.
+        if game.held().is_none() && game.hand == Hand::Main {
+            if let Some(Some(item)) = items.get(top).cloned() {
+                set_slot(game, pos, top, None);
+                game.give_or_drop(item);
+                game.guest_inventory_resend = true;
+                game.native_play_sound_in_place("farmersdelight:block.cutting_board.remove_item", center(pos, 0.1), BLOCKS, 1.0, 1.0);
+                game.swing_arm();
+                *canceled = true;
+            }
+        }
+        return;
+    }
+    let board = items.into_iter().next().flatten();
     let held = game.held().cloned();
     let at = center(pos, 0.1);
     match (board, held) {
@@ -487,6 +576,177 @@ fn pot_click(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut bool) {
     }
 }
 
+/// A right click on a skillet: food that a campfire cooks goes in (up to eight of one kind, while
+/// none has started frying); an empty hand takes it all back.
+fn skillet_click(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut bool) {
+    let held = game.held().cloned();
+    match held {
+        Some(_) => {
+            if skillet_put_from(game, pos, None) > 0 {
+                game.swing_arm();
+                *canceled = true;
+            }
+        }
+        None if game.hand == Hand::Main => {
+            if let Some(Some(food)) = items_at(game, pos).into_iter().next() {
+                set_slot(game, pos, 0, None);
+                skillet_reset(game, pos);
+                game.give_or_drop(food);
+                game.guest_inventory_resend = true;
+                game.swing_arm();
+                *canceled = true;
+            }
+        }
+        None => {}
+    }
+}
+
+/// Puts what it can of `held` (the acting hand's stack) in the skillet; how many went in.
+pub(super) fn skillet_put_from(game: &mut Game<'_>, pos: [i32; 3], slot: Option<usize>) -> u32 {
+    let stack = match slot {
+        Some(slot) => game.inventory.get(slot).cloned().flatten(),
+        None => game.held().cloned(),
+    };
+    let Some(stack) = stack else { return 0 };
+    if game.recipes().cook(CAMPFIRE, &stack).is_none() {
+        return 0;
+    }
+    let items = items_at(game, pos);
+    let pan = items.first().cloned().flatten();
+    let started = skillet_sides(game, pos).is_some_and(|(a, b, _)| a > 0 || b > 0);
+    let room = match &pan {
+        None => SKILLET_MAX,
+        Some(p) if p.same_item_same_components(&stack) && !started => SKILLET_MAX.saturating_sub(p.count),
+        Some(_) => 0,
+    };
+    let n = room.min(stack.count);
+    if n == 0 {
+        return 0;
+    }
+    let mut cell = pan;
+    add_to(&mut cell, ItemStack { count: n, ..stack.clone() });
+    set_slot(game, pos, 0, cell);
+    if !game.creative {
+        let source = match slot {
+            Some(slot) => game.inventory.get_mut(slot),
+            None => Some(game.held_mut()),
+        };
+        if let Some(source) = source {
+            shrink(source, n);
+        }
+    }
+    game.guest_inventory_resend = true;
+    game.native_play_sound_in_place("farmersdelight:block.skillet.add_food", center(pos, 0.1), BLOCKS, 0.8, 1.0);
+    n
+}
+
+fn skillet_sides(game: &Game<'_>, pos: [i32; 3]) -> Option<(i32, i32, bool)> {
+    match game.world.block_entities.get(&(pos[0], pos[1], pos[2])) {
+        Some(BlockEntity::Mod(m)) => {
+            let get = |k: &str| match m.nbt.get(&key(k)) {
+                Some(Tag::Int(v)) => *v,
+                _ => 0,
+            };
+            Some((get("SideA"), get("SideB"), get("Flipped") != 0))
+        }
+        _ => None,
+    }
+}
+
+pub(super) fn skillet_reset(game: &mut Game<'_>, pos: [i32; 3]) {
+    game.native_with_mod_block_entity(pos, |m| {
+        for k in ["SideA", "SideB", "Flipped"] {
+            m.nbt.insert(key(k), Tag::Int(0));
+        }
+    });
+    game.native_block_entity_sync(pos);
+}
+
+/// The skillet tossed (Hands-On Delight): its food turns over in the air, the other side down.
+pub(super) fn tossed(game: &mut Game<'_>, pos: [i32; 3]) {
+    let now = game.world.game_time as i32;
+    let has_food = matches!(items_at(game, pos).first(), Some(Some(_)));
+    if !has_food {
+        return;
+    }
+    game.native_with_mod_block_entity(pos, |m| {
+        let flipped = matches!(m.nbt.get(&key("Flipped")), Some(Tag::Int(v)) if *v != 0);
+        m.nbt.insert(key("Flipped"), Tag::Int(i32::from(!flipped)));
+        m.nbt.insert(key("FlipAt"), Tag::Int(now));
+    });
+    game.native_block_entity_sync(pos);
+    game.native_play_sound_in_place("farmersdelight:block.skillet.add_food", center(pos, 0.3), BLOCKS, 0.6, 1.4);
+}
+
+fn skillet_tick(game: &mut Game<'_>, pos: [i32; 3], e: &mut ModBlockEntity) {
+    if e.items.is_empty() {
+        e.items.resize(1, None);
+    }
+    let time = game.world.game_time;
+    if time % 20 == 0 {
+        let below = game.world.block(pos[0], pos[1] - 1, pos[2]);
+        let name = game.res.facts().get(below).name.clone();
+        let tray = game.items().block_in_tag("farmersdelight:tray_heat_sources", &name);
+        let want = if tray { "true" } else { "false" };
+        if game.native_block_property(pos, "support").as_deref().is_some_and(|v| v != want) {
+            game.native_set_block_property(pos, "support", want);
+        }
+    }
+    let get = |e: &ModBlockEntity, k: &str| match e.nbt.get(&key(k)) {
+        Some(Tag::Int(v)) => *v,
+        _ => 0,
+    };
+    let hot = heated(game, pos);
+    let Some(food) = e.items[0].clone() else {
+        e.nbt.insert(key("Hot"), Tag::Int(i32::from(hot)));
+        return;
+    };
+    // Food a campfire cooks fries a side at a time, each for half the campfire's time.
+    let Some((total, result)) = game.recipes().cook(CAMPFIRE, &food).map(|r| (r.time as i32, r.result.clone())) else {
+        e.nbt.insert(key("Hot"), Tag::Int(i32::from(hot)));
+        return;
+    };
+    let half = (total / 2).max(1);
+    let flipped = get(e, "Flipped") != 0;
+    let (mut a, mut b) = (get(e, "SideA"), get(e, "SideB"));
+    if hot {
+        if flipped {
+            b += 1;
+        } else {
+            a += 1;
+        }
+        if time % 50 == 0 {
+            game.native_play_sound_in_place("farmersdelight:block.skillet.sizzle", center(pos, 0.1), BLOCKS, 0.4, 1.0);
+        }
+    }
+    let (down, up) = if flipped { (b, a) } else { (a, b) };
+    let mut flip = flipped;
+    // Left alone, the food turns itself two seconds after its side is done.
+    if down >= half + 40 && up < half {
+        flip = !flipped;
+        e.nbt.insert(key("FlipAt"), Tag::Int(time as i32));
+    }
+    if a >= half && b >= half {
+        e.items[0] = Some(ItemStack { count: (food.count * result.count.max(1)).min(64), ..result });
+        a = 0;
+        b = 0;
+        flip = false;
+        game.native_play_sound_in_place("farmersdelight:block.skillet.add_food", center(pos, 0.1), BLOCKS, 0.7, 0.8);
+    }
+    e.nbt.insert(key("SideA"), Tag::Int(a));
+    e.nbt.insert(key("SideB"), Tag::Int(b));
+    e.nbt.insert(key("Flipped"), Tag::Int(i32::from(flip)));
+    e.nbt.insert(key("Total"), Tag::Int(total));
+    e.nbt.insert(key("Hot"), Tag::Int(i32::from(hot)));
+    // Clients see the food, the sides in quarters, and the turns.
+    let quarter = |v: i32| (v * 4 / half).min(4);
+    let sig = (quarter(a) << 8) ^ (quarter(b) << 12) ^ (i32::from(flip) << 16) ^ (i32::from(hot) << 17) ^ (food.count as i32) ^ ((food.item.len() as i32) << 20);
+    if get(e, "Sig") != sig || e.items[0].as_ref().is_some_and(|i| i.item != food.item) {
+        e.nbt.insert(key("Sig"), Tag::Int(sig));
+        game.native_block_entity_sync(pos);
+    }
+}
+
 /// A placed stove starts lit; a pot sets its tray over a fire.
 pub(super) fn placed(game: &mut Game<'_>, pos: [i32; 3], state: BlockStateId) {
     if game.remote.is_some() {
@@ -519,6 +779,7 @@ pub(super) fn tick(game: &mut Game<'_>, pos: [i32; 3], entity: &mut ModBlockEnti
     match entity.id.as_str() {
         STOVE => stove_tick(game, pos, entity),
         POT => pot_tick(game, pos, entity),
+        SKILLET => skillet_tick(game, pos, entity),
         _ => {}
     }
 }
@@ -672,6 +933,10 @@ fn pot_tick(game: &mut Game<'_>, pos: [i32; 3], e: &mut ModBlockEntity) {
     }
     e.nbt.insert(key("CookTime"), Tag::Int(cook));
     e.data = vec![cook, total, i32::from(hot)];
+    // How far the meal has come, in fifths, and whether the pot is over heat: what clients draw.
+    let stage = if total > 0 { (cook * 5 / total).clamp(0, 4) } else { -1 };
+    e.nbt.insert(key("Stage"), Tag::Int(stage));
+    e.nbt.insert(key("Hot"), Tag::Int(i32::from(hot)));
     // Clients see the pot's contents (Hands-On Delight draws them): sent again when they change.
     let sig = pot_signature(e);
     if !matches!(e.nbt.get(&key("Sig")), Some(Tag::Int(s)) if *s == sig) {
@@ -696,8 +961,10 @@ fn pot_signature(e: &ModBlockEntity) -> i32 {
             None => mix(&[0]),
         }
     }
-    if let Some(Tag::Int(stars)) = e.nbt.get(&key("Stars")) {
-        mix(&stars.to_le_bytes());
+    for k in ["Stars", "Stage", "Hot", "StirAt"] {
+        if let Some(Tag::Int(v)) = e.nbt.get(&key(k)) {
+            mix(&v.to_le_bytes());
+        }
     }
     h as i32
 }
@@ -705,7 +972,10 @@ fn pot_signature(e: &ModBlockEntity) -> i32 {
 /// A round of stirring (Hands-On Delight), `quality` 0 to 100: the pot cooks faster, and steady
 /// wide rounds fill its stars (one for every three, up to three).
 pub(super) fn stirred(game: &mut Game<'_>, pos: [i32; 3], quality: u8) {
+    // When it was last stirred, in seconds of game time: other players see the spoon go round.
+    let now = (game.world.game_time / 20) as i32;
     game.native_with_mod_block_entity(pos, |m| {
+        m.nbt.insert(key("StirAt"), Tag::Int(now));
         let get = |m: &ModBlockEntity, k: &str| match m.nbt.get(&key(k)) {
             Some(Tag::Int(v)) => *v,
             _ => 0,
@@ -722,23 +992,71 @@ pub(super) fn stirred(game: &mut Game<'_>, pos: [i32; 3], quality: u8) {
 
 /// What a client draws: the board's and the stove's items.
 pub(super) fn update_tag(entity: &ModBlockEntity, tag: &mut Option<Compound>) {
-    if tag.is_some() || !(entity.id == BOARD || entity.id == STOVE || entity.id == POT) {
+    if tag.is_some() || !(entity.id == BOARD || entity.id == STOVE || entity.id == POT || entity.id == SKILLET) {
         return;
     }
     let mut c = Compound::default();
     let shown = if entity.id == POT { &entity.items[..entity.items.len().min(MEAL + 1)] } else { &entity.items[..] };
     c.insert(key("Items"), horizon_items::item_nbt::encode_items(shown));
+    if entity.id == SKILLET {
+        for k in ["SideA", "SideB", "Flipped", "FlipAt", "Total", "Hot"] {
+            let v = match entity.nbt.get(&key(k)) {
+                Some(Tag::Int(v)) => *v,
+                _ => 0,
+            };
+            c.insert(key(k), Tag::Int(v));
+        }
+    }
     if entity.id == POT {
-        let stars = match entity.nbt.get(&key("Stars")) {
-            Some(Tag::Int(s)) => *s,
-            _ => 0,
-        };
-        c.insert(key("Stars"), Tag::Int(stars));
+        for k in ["Stars", "Stage", "Hot", "StirAt"] {
+            let v = match entity.nbt.get(&key(k)) {
+                Some(Tag::Int(v)) => *v,
+                _ => 0,
+            };
+            c.insert(key(k), Tag::Int(v));
+        }
     }
     *tag = Some(c);
 }
 
+/// The pot's spoon, a model of its own so that it can move (its block model is an open pot).
+pub(super) const SPOON_MODEL: &str = "farmersdelight:block/cooking_pot_spoon";
+
+/// A pot whose spoon another mod draws this frame (Hands-On Delight's stirring): set in its own
+/// `native_block_entity_submit`, which runs before this one.
+pub(super) static SPOON_AWAY: std::sync::Mutex<Option<[i32; 3]>> = std::sync::Mutex::new(None);
+
+pub(super) fn standalone_models(models: &mut Vec<String>) {
+    models.push(SPOON_MODEL.to_owned());
+}
+
+/// `facing`'s turn of the block model (north unturned), about +y.
+pub(super) fn facing_turn(game: &Game<'_>, state: BlockStateId) -> f32 {
+    match game.native_block_state_property(state, "facing") {
+        Some("east") => -90.0,
+        Some("south") => 180.0,
+        Some("west") => 90.0,
+        _ => 0.0,
+    }
+}
+
 pub(super) fn submit(game: &Game<'_>, pos: [i32; 3], block: &str, state: BlockStateId, entity: &ModBlockEntity, draw: &mut BlockEntityDraw) {
+    if block == POT {
+        let away = SPOON_AWAY.lock().map(|mut a| a.take() == Some(pos)).unwrap_or(false);
+        if !away {
+            // At rest, leaning against the rim as the closed pot's model has it.
+            draw.push();
+            draw.rotate_about([0.0, 1.0, 0.0], facing_turn(game, state), [0.5, 0.5, 0.5]);
+            draw.rotate_about([0.0, 0.0, 1.0], -22.5, [0.5, 0.1875, 0.5]);
+            game.native_draw_model(draw, SPOON_MODEL, 0xFF_FFFF);
+            draw.pop();
+        }
+        return;
+    }
+    if block == SKILLET {
+        skillet_draw(game, entity, draw);
+        return;
+    }
     let count = match block {
         BOARD => 1,
         STOVE => STOVE_SLOTS,
@@ -749,12 +1067,7 @@ pub(super) fn submit(game: &Game<'_>, pos: [i32; 3], block: &str, state: BlockSt
         return;
     }
     // The block model turns with `facing` (north unturned), and so do its items.
-    let turn = match game.native_block_state_property(state, "facing") {
-        Some("east") => -90.0,
-        Some("south") => 180.0,
-        Some("west") => 90.0,
-        _ => 0.0,
-    };
+    let turn = facing_turn(game, state);
     let seed = pos[0].wrapping_mul(31).wrapping_add(pos[1].wrapping_mul(17)).wrapping_add(pos[2]);
     draw.push();
     draw.rotate_about([0.0, 1.0, 0.0], turn, [0.5, 0.5, 0.5]);
@@ -782,6 +1095,34 @@ pub(super) fn submit(game: &Game<'_>, pos: [i32; 3], block: &str, state: BlockSt
         draw.pop();
     }
     draw.pop();
+}
+
+/// The skillet's food lying in the pan, a few of the stack shown; tossed, it turns over in the air.
+fn skillet_draw(game: &Game<'_>, entity: &ModBlockEntity, draw: &mut BlockEntityDraw) {
+    let items = horizon_items::item_nbt::decode_items(entity.nbt.get(&key("Items")), 1);
+    let Some(Some(food)) = items.first() else { return };
+    let flip_at = match entity.nbt.get(&key("FlipAt")) {
+        Some(Tag::Int(v)) => *v,
+        _ => i32::MIN,
+    };
+    let since = (draw.game_time as i32).wrapping_sub(flip_at) as f32 + draw.partial;
+    let toss = (0.0..12.0).contains(&since).then(|| since / 12.0);
+    const SPOTS: [[f32; 2]; 4] = [[0.36, 0.38], [0.64, 0.42], [0.4, 0.64], [0.62, 0.66]];
+    let shown = (food.count as usize).clamp(1, 4);
+    for (i, [x, z]) in SPOTS.iter().take(shown).enumerate() {
+        draw.push();
+        let (lift, turn) = match toss {
+            Some(t) => (0.6 * 4.0 * t * (1.0 - t), 180.0 * t),
+            None => (0.0, 0.0),
+        };
+        // A little higher each, so pieces that overlap don't flicker through each other.
+        draw.translate([*x, 0.0625 + 0.012 + i as f32 * 0.008 + lift, *z]);
+        draw.rotate_about([0.0, 1.0, 0.0], 25.0 + i as f32 * 70.0, [0.0, 0.0, 0.0]);
+        draw.rotate_about([1.0, 0.0, 0.0], 90.0 + turn, [0.0, 0.0, 0.0]);
+        draw.scale([0.42, 0.42, 0.42]);
+        game.native_draw_item(draw, food, DisplayContext::Fixed, None, 40 + i as i32);
+        draw.pop();
+    }
 }
 
 pub(super) fn screen(block: &str, screen: &mut Option<NativeScreen>) {

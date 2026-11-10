@@ -132,3 +132,12 @@ helper = "player-tick.rs"
 bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
 ]
+
+[[injection]]
+id = "standalone"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_standalone_models"
+helper = "standalone.rs"
+bindings = [
+  { name = "models", ty = "&mut Vec<String>", value = "&mut *models" },
+]
