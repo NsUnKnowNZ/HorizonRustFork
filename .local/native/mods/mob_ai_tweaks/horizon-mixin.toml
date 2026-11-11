@@ -1,11 +1,19 @@
-# Mob AI Tweaks (Bawnorton, MIT) for Horizon: a few of Better OneBlock's
-# general_config.txt settings, on the world's own side.
-#   animals_panic_in_groups=true, animals_panic_spread_radius=16
-#   creepers_delay_explosion_when_hit=true
-#   squid_ink_inflicts_debuffs=true, radius 8, 100 ticks
+# Mob AI Tweaks (MIT) for Horizon: a part of its changes, on the world's own side, from the
+# pack's general_config.txt and the list on its page. Its reworked boss fights and mob attacks
+# are not here; these are the changes that are rules:
+#   animals panic in groups (16 blocks); a hit puts a lit creeper's fuse back; a hurt squid's
+#   ink blinds what is within 8 blocks for 5 s (a glow squid's makes mobs glow);
+#   vexes and phantoms take three times a projectile's damage; iron golems and shulkers more
+#   from a pickaxe, silverfish from a shovel; a wither below half its health takes half an
+#   arrow's damage; an elder guardian none of a blast, and it has 150 health and 8 more armour;
+#   elder guardians and ravagers show a boss bar; bosses are announced when summoned and when
+#   defeated, and a wither leaves far more experience; a skeleton the wither effect kills rises
+#   as a wither skeleton; a snow golem has 10 armour; some zombies carry a baby zombie; a
+#   wandering trader blinds who strikes it; the dragon's blow sets on fire; pets and villagers
+#   mend slowly; chickens shed a feather now and then.
 [mod]
 id = "mob_ai_tweaks"
-version = "0.1.0"
+version = "0.2.0"
 priority = 100
 
 [[module]]
@@ -21,3 +29,51 @@ hook_version = 1
 kind = "HEAD"
 helper = "tick.rs"
 bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]
+
+[[injection]]
+id = "damage"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_living_incoming_damage"
+helper = "damage.rs"
+bindings = [
+  { name = "entity", ty = "i32", value = "entity" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "damage_type", ty = "&str", value = "damage_type" },
+  { name = "causing", ty = "i32", value = "causing" },
+  { name = "amount", ty = "&mut f32", value = "&mut *amount" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "spawned"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mob_spawned"
+helper = "spawned.rs"
+bindings = [
+  { name = "dimension", ty = "&str", value = "dimension" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "pos", ty = "[f64; 3]", value = "pos" },
+  { name = "natural", ty = "bool", value = "natural" },
+]
+
+[[injection]]
+id = "died"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_living_death"
+helper = "died.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "entity", ty = "u32", value = "entity" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "damage_type", ty = "&str", value = "damage_type" },
+]
+
+[[injection]]
+id = "level"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_level_tick_post"
+helper = "level.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+]

@@ -1,0 +1,32 @@
+$log = "$env:TEMP\horizon-native-test.log"
+function Golem($pack, $tag) {
+  "=== pack: $pack"
+  $env:HORIZON_SHADER_PACK = $pack
+  C launch --world NativeTest --wait --offscreen
+  for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = "Normal" }
+  C wait 20
+  C respawn
+  C wait 20
+  Platform
+  C command "difficulty peaceful"
+  C command "kill @e[type=!player]"
+  C command "summon minecraft:iron_golem 204.5 150 204.5 {NoAI:1b}"
+  C command "summon minecraft:iron_golem 207.5 150 204.5"
+  C command "summon minecraft:villager 201.5 150 204.5 {NoAI:1b}"
+  C command "tp @s 204.5 150 209.5 180 5"
+  C wait 40
+  C screenshot "$shots\golem-$tag-1.png"
+  C command "data get entity @e[type=iron_golem,limit=1,sort=nearest] Pos"
+  C command "data get entity @e[type=iron_golem,limit=1,sort=furthest] Pos"
+  C command "data get entity @e[type=iron_golem,limit=1,sort=furthest] OnGround"
+  C command "tp @s 210.5 150.2 204.5 90 0"
+  C wait 20
+  C screenshot "$shots\golem-$tag-2.png"
+  C command "kill @e[type=!player]"
+  C quit
+  Start-Sleep 6
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+}
+Golem 'none' 'none'
+$env:HORIZON_SHADER_PACK = $null

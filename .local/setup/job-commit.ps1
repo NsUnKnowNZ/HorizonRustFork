@@ -14,71 +14,42 @@ Copy-Item horizon-mods.txt server-oneblock\horizon-mods.txt -Force
 (Get-Content server-oneblock\horizon-mods.txt) | Where-Object { $_ -notmatch "^mod.(beb|ambientsounds|sounds):" } | Set-Content server-oneblock\horizon-mods.txt
 "server mods synced"
 if (Test-Path .git\index.lock) { Remove-Item .git\index.lock -Force }
-& rustfmt --edition 2024 crates/horizon-client/src/game/lan_entities.rs crates/horizon-client/src/game/native_world_draw.rs crates/horizon-client/src/game/commands/data.rs crates/horizon-shaders/src/post.rs crates/horizon-client-render/src/gfx.rs 2>&1 | Select-Object -First 8 | ForEach-Object { "$_" }
-"rustfmt exit $LASTEXITCODE"
-git add -u -- crates 2>&1 | ForEach-Object { "$_" }
-git diff --cached --stat 2>&1 | Select-Object -Last 12 | ForEach-Object { "$_" }
-$msg = @"
-Shader packs: see-through text, text displays and mod draws; display data
-
-Three things were missing or wrong under a shader pack, and two about
-display entities with or without one.
-
-- See-through text (a name tag's copy through walls, a text display with
-  see_through) was drawn by Horizon into its own picture with no depth,
-  and the pack's programs then drew over it wherever nothing had written
-  depth: it never showed under any pack. It is now drawn over the pack's
-  picture, before the hand.
-- Translucent entity parts drawn by a program that does not blend keep
-  the cutout test at 0.1. Bliss turns gbuffers_entities_translucent off
-  by default and falls back to gbuffers_entities, whose output alpha
-  packs the lightmap beside the texel's alpha, so the test at 0 passed
-  every texel: text displays were solid boxes of their colour.
-- A native mod's world draws go to the pack's block-entity program
-  instead of Horizon's own draw, which a pack with packed gbuffers
-  (Bliss, Photon) never showed; text, shadows and the other special
-  layers stay Horizon's.
-- A text display's ``score`` text pieces show the score, resolved when
-  its data is sent (Display.TextDisplay resolves its text for the
-  entity).
-- ``data modify entity`` on a text, block or item display applies; it
-  failed for every kept entity but a marker.
-
-Tested offscreen with screenshots under Bliss, BSL, Complementary
-Reimagined, Photon and no pack: a text display, a see-through one with
-a score piece recoloured by data modify, and Cinematic Interactions'
-items on a crafting table.
-
-Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV
-"@
-[IO.File]::WriteAllText("$PWD\.local\setup\commit-msg.txt", $msg)
-git commit -F .local\setup\commit-msg.txt 2>&1 | Select-Object -First 6 | ForEach-Object { "$_" }
 git add -u -- .local 2>&1 | ForEach-Object { "$_" }
-git add -f .local/setup/job-commit.ps1 .local/setup/make-friend-zip.ps1 .local/setup/body-zip.txt .local/native/mods/cinematic_interactions .local/setup/body-obnew.txt .local/setup/body-shpack.txt .local/setup/body-dbg.txt .local/setup/body-dbg2.txt .local/setup/body-hand.txt 2>&1 | ForEach-Object { "$_" }
+git add -f .local/setup/job-commit.ps1 .local/native/mods/cinematic_interactions .local/native/mods/sihywtcamd .local/native/mods/mob_ai_tweaks .local/setup/body-sih.txt .local/setup/body-sih2.txt .local/setup/body-hand2.txt .local/setup/body-hand3.txt .local/setup/body-golem.txt 2>&1 | ForEach-Object { "$_" }
 git diff --cached --stat 2>&1 | Select-Object -Last 30 | ForEach-Object { "$_" }
 $msg = @"
-Cinematic Interactions: the player's arm in the scene; OneBlock's displays
+Cinematic Interactions: a glide to a crafting table froze the game; more of So I Heard and Mob AI Tweaks
 
-Cinematic Interactions (from its public description; none of its code):
-the player's own arm, with their skin, reaches into every scene but the
-lectern's. The hand follows the pointer over the station, holds the
-stack picked up, presses down on a click, and takes the hammer's handle
-at the anvil, whose blow shakes the view. What it lets go of drops the
-last of the way onto the table. The icon on the pointer and the icons
-flying to the station give way to the hand while it is out.
+Cinematic Interactions: a click on a crafting table from another
+station's scene (a furnace's, an anvil's) froze the game for good. The
+glide read the table's side through the client's state while its caller
+held that state. It reads the caller's copy now. Tested under BSL: from
+the anvil's scene, a click on the table beside it glides over and the
+game goes on.
 
-OneBlock: the converter turns ``text set value '{json}'`` into a text
-compound (1.21.5's form), so the pack's hint and its upgrade countdown
-keep their text when the pack updates them.
+So I Heard (0.2), from the list on its page: a creeper takes no blast
+and lights up instead, and its own blast leaves those near it slow to
+dig and weak; a blaze's and a magma cube's hit set on fire; an
+endermite's bite moves the player as a chorus fruit does (not seen in a
+test yet); a slime in the Nether's lava becomes a magma cube and a magma
+cube in the Overworld's water a slime; a wither at half its health calls
+three or four wither skeletons, bursts and keeps the weather stormy;
+zombies call for help more and a grown one may be a caller, a runner, a
+tank or an unstoppable one; skeletons, wither skeletons, drowned,
+zombified piglins and pillagers may carry other weapons; a blaze follows
+from half as far; silverfish and endermites are quicker.
 
-The game folder for friends: make-friend-zip.ps1 zips the clean game
-folder without the worlds, the player's own files, the shader packs and
-bin\resources (Minecraft's assets). "Horizon OneBlock.exe" then starts
-the game with the resources that player prepared themselves: the folder
-named in horizon-resources.txt, a Horizon source folder near the game
-folder, or the Horizon launcher's; with none it opens a note that says
-what to do. --find-resources only writes down which it would use.
+Mob AI Tweaks (0.2), the rules of its list (its reworked fights are not
+here): vexes and phantoms take three times a projectile's damage; iron
+golems, shulkers and silverfish more from the right tool; a wither below
+half its health half an arrow's; an elder guardian has 150 health, 8
+more armour and takes no blast; elder guardians and ravagers show a boss
+bar; bosses are announced; a wither leaves far more experience; a
+skeleton the wither effect kills rises as a wither skeleton; a snow
+golem has 10 armour; some zombies carry a baby zombie; a wandering
+trader blinds who strikes it; the dragon's blow sets on fire; pets and
+villagers mend slowly; chickens shed feathers; a glow squid's ink makes
+mobs glow.
 
 Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01PvVsmM7bCrac8CAckUphGV

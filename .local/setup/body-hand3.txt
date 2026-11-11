@@ -1,0 +1,141 @@
+$log = "$env:TEMP\horizon-native-test.log"
+function Hand($pack, $tag) {
+  "=== pack: $pack"
+  $env:HORIZON_SHADER_PACK = $pack
+  C launch --world NativeTest --wait --offscreen
+  for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = "Normal" }
+  C wait 20
+  C respawn
+  C wait 20
+  Platform
+  C command "difficulty peaceful"
+  C command "gamemode survival"
+  C command "kill @e[type=!player]"
+  C command "clear @s"
+  C command "setblock 204 150 205 minecraft:crafting_table"
+  C command "setblock 206 150 205 minecraft:anvil"
+  C command "item replace entity @s hotbar.0 with minecraft:oak_planks 8"
+  C command "item replace entity @s hotbar.1 with minecraft:diamond 3"
+  C command "item replace entity @s hotbar.2 with minecraft:iron_sword 1"
+  C command "experience add @s 30 levels"
+  C command "tp @s 204.5 150 207.3 180 35"
+  C wait 10
+  C look-at-block 204 150 205 south
+  C mouse right click
+  C wait 30
+  $l = Select-String -Path $log -Pattern 'cinematic_interactions\] scene at panel (-?\d+) (-?\d+) .* cells (.*)$' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $px=[int]$g[1].Value; $py=[int]$g[2].Value
+  $cells = @($g[3].Value.Trim().Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { [int]$_ })
+  C click-at ($px + 13) ($py + 71)
+  C click-at $cells[0] $cells[1] right
+  C wait 12
+  C screenshot "$shots\hand-$tag-1.png"
+  C click-at $cells[8] $cells[9] right
+  C wait 2
+  C screenshot "$shots\hand-$tag-2.png"
+  C click-at $cells[4] $cells[5] right
+  C wait 12
+  C screenshot "$shots\hand-$tag-3.png"
+  C click-at $cells[12] $cells[13] right
+  C wait 12
+  C screenshot "$shots\hand-$tag-4.png"
+  C click-at ($px + 13 + 18) ($py + 71)
+  C wait 12
+  C screenshot "$shots\hand-$tag-5.png"
+  C key e tap
+  C wait 20
+  "--- anvil: the hand takes the hammer; furnace: the hand at the fuel"
+  C command "clear @s"
+  C command "setblock 206 150 205 minecraft:anvil[facing=north]"
+  C command "setblock 208 150 205 minecraft:furnace[facing=south]"
+  C command "item replace entity @s hotbar.0 with minecraft:iron_sword[damage=200]"
+  C command "item replace entity @s hotbar.1 with minecraft:iron_ingot 3"
+  C command "item replace entity @s hotbar.2 with minecraft:coal 8"
+  C command "tp @s 206.5 150 207.3 180 35"
+  C wait 10
+  C look-at-block 206 150 205 south
+  C mouse right click
+  C wait 30
+  $l = Select-String -Path $log -Pattern 'cinematic_interactions\] station (\w+) at panel (-?\d+) (-?\d+) result (-?\d+) (-?\d+) spots(.*)$' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $px=[int]$g[2].Value; $py=[int]$g[3].Value; $rx=[int]$g[4].Value; $ry=[int]$g[5].Value
+  $sp = @($g[6].Value.Trim().Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { [int]$_ })
+  C click-at ($px + 13) ($py + 71)
+  C wait 8
+  C click-at $sp[0] $sp[1]
+  C click-at ($px + 13 + 18) ($py + 71)
+  C click-at $sp[2] $sp[3]
+  C wait 12
+  C screenshot "$shots\hand-$tag-6.png"
+  C click-at $rx $ry
+  C wait 4
+  C screenshot "$shots\hand-$tag-7.png"
+  C wait 4
+  C screenshot "$shots\hand-$tag-8.png"
+  C wait 15
+  "--- from the anvil, a click on the crafting table beside it glides over (this froze the game)"
+  $before = @(Select-String -Path $log -Pattern 'scene at panel').Count
+  C click-at 150 352
+  C wait 30
+  C screenshot "$shots\hand-$tag-glide.png"
+  $after = @(Select-String -Path $log -Pattern 'scene at panel').Count
+  "glide: table scenes logged before $before, after $after"
+  C status | Out-Null
+  C key e tap
+  C wait 20
+  C command "tp @s 208.5 150 207.3 180 35"
+  C wait 10
+  C look-at-block 208 150 205 south
+  C mouse right click
+  C wait 30
+  $l = Select-String -Path $log -Pattern 'cinematic_interactions\] station (\w+) at panel (-?\d+) (-?\d+) result (-?\d+) (-?\d+) spots(.*)$' | Select-Object -Last 1
+  $g = $l.Matches[0].Groups
+  $px=[int]$g[2].Value; $py=[int]$g[3].Value
+  $sp = @($g[6].Value.Trim().Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries) | ForEach-Object { [int]$_ })
+  C click-at ($px + 13 + 36) ($py + 71)
+  C click-at $sp[2] $sp[3] right
+  C wait 12
+  C screenshot "$shots\hand-$tag-9.png"
+  C key e tap
+  C wait 20
+  C quit
+  Start-Sleep 6
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+  Copy-Item $log "$shots\hand-$tag.log" -Force
+}
+Hand 'BSL_v10.1.8.zip' 'bsl'
+$env:HORIZON_SHADER_PACK = $null
+
+function Golem($pack, $tag) {
+  "=== pack: $pack"
+  $env:HORIZON_SHADER_PACK = $pack
+  C launch --world NativeTest --wait --offscreen
+  for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = "Normal" }
+  C wait 20
+  C respawn
+  C wait 20
+  Platform
+  C command "difficulty peaceful"
+  C command "kill @e[type=!player]"
+  C command "summon minecraft:iron_golem 204.5 150 204.5 {NoAI:1b}"
+  C command "summon minecraft:iron_golem 207.5 150 204.5"
+  C command "summon minecraft:villager 201.5 150 204.5 {NoAI:1b}"
+  C command "tp @s 204.5 150 209.5 180 5"
+  C wait 40
+  C screenshot "$shots\golem-$tag-1.png"
+  C command "data get entity @e[type=iron_golem,limit=1,sort=nearest] Pos"
+  C command "data get entity @e[type=iron_golem,limit=1,sort=furthest] Pos"
+  C command "data get entity @e[type=iron_golem,limit=1,sort=furthest] OnGround"
+  C command "tp @s 210.5 150.2 204.5 90 0"
+  C wait 20
+  C screenshot "$shots\golem-$tag-2.png"
+  C command "kill @e[type=!player]"
+  C quit
+  Start-Sleep 6
+  Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+}
+Golem 'none' 'none'
+$env:HORIZON_SHADER_PACK = $null

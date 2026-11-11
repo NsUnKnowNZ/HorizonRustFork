@@ -1,17 +1,26 @@
-# So I Heard You Want To Customize Mob Difficulty (galatynf, "Difficulty" in the pack) for
-# Horizon, written from its options' documented behaviour, a part of them (its defaults on):
-#  - husks take no fire damage;
-#  - arthropods (spiders, cave spiders, silverfish, endermites, bees) take no fall damage;
-#  - evokers stop arrows;
-#  - undead heal by the damage they deal;
-#  - an enderman's hit can blind (a third of the time, 5 seconds);
-#  - ghasts spawn with 20 health, evokers with 30, withers with 360; zombies (husks, drowned,
-#    zombie villagers, zombified piglins) with more knockback resistance and a speed that
-#    varies a little; half the vindicators a little faster.
+# So I Heard You Were Talking Crap About Minecraft's Difficulty ("Difficulty" in the pack) for
+# Horizon, written from the list of changes on its page, a part of them (where the page gives no
+# number, one is chosen here):
+#  - a blaze follows from half as far;
+#  - husks take no fire damage; arthropods no fall damage, and silverfish and endermites are
+#    quicker; evokers stop arrows and have 30 health; ghasts 20; half the vindicators are faster;
+#  - undead heal by the damage they deal; zombies are sturdier, call for help more, vary in
+#    speed, and a grown one may be a caller, a runner, a tank or an unstoppable one;
+#  - some skeletons carry spectral arrows; wither skeletons an iron sword, or a bow of flame;
+#    drowned a trident more often; some zombified piglins a golden axe; some pillagers a
+#    piercing crossbow; a slime the world spawns may be a size bigger;
+#  - a creeper takes no blast and lights up instead; its own blast leaves those near it slow to
+#    dig and weak, longer the nearer they were;
+#  - a blaze's and a magma cube's hit set on fire (the cube's longer the bigger it is); an
+#    enderman's can blind; an endermite's moves the player as a chorus fruit does;
+#  - a slime in the Nether's lava becomes a magma cube, a magma cube in the Overworld's water a
+#    slime;
+#  - a wither has 360 health and, once at half of it, calls three or four wither skeletons and
+#    bursts as it did when it was born; the weather is stormy while it lives.
 # Server side: in single player, on a LAN host and on a dedicated server.
 [mod]
 id = "sihywtcamd"
-version = "0.1.0"
+version = "0.2.0"
 priority = 100
 
 [[module]]
@@ -26,6 +35,7 @@ kind = "HEAD"
 target = "horizon_client::game::native_hooks::Game<'_>::native_living_incoming_damage"
 helper = "damage.rs"
 bindings = [
+  { name = "entity", ty = "i32", value = "entity" },
   { name = "kind", ty = "&str", value = "kind" },
   { name = "damage_type", ty = "&str", value = "damage_type" },
   { name = "causing", ty = "i32", value = "causing" },
@@ -52,4 +62,5 @@ bindings = [
   { name = "dimension", ty = "&str", value = "dimension" },
   { name = "kind", ty = "&str", value = "kind" },
   { name = "pos", ty = "[f64; 3]", value = "pos" },
+  { name = "natural", ty = "bool", value = "natural" },
 ]

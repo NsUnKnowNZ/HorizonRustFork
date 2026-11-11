@@ -1,0 +1,82 @@
+$log = "$env:TEMP\horizon-native-test.log"
+$env:HORIZON_SHADER_PACK = 'none'
+C launch --world NativeTest --wait --offscreen
+for ($i = 0; $i -lt 120; $i++) { $r = & $ctl --socket "$env:TEMP\horizon-native-test.json" --timeout 10 status 2>&1 | Out-String; if ($r -match '"joined":true|"chunks"') { break }; Start-Sleep 5 }
+Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = "Normal" }
+C wait 20
+Platform
+C command "difficulty normal"
+C command "time set 18000"
+C command "kill @e[type=!player]"
+C command "effect clear @s"
+C command "tp @s 204.5 150 209.5 180 0"
+"--- follow range, zombie sturdiness, wither skeleton's weapon"
+C command "summon minecraft:zombie 196.5 150 196.5 {NoAI:1b}"
+C command "summon minecraft:blaze 198.5 150 196.5 {NoAI:1b}"
+C command "summon minecraft:wither_skeleton 200.5 150 196.5 {NoAI:1b}"
+C command "summon minecraft:silverfish 202.5 150 196.5 {NoAI:1b}"
+C wait 10
+C command "attribute @e[type=zombie,limit=1] minecraft:follow_range get"
+C command "attribute @e[type=zombie,limit=1] minecraft:knockback_resistance get"
+C command "attribute @e[type=blaze,limit=1] minecraft:follow_range get"
+C command "attribute @e[type=silverfish,limit=1] minecraft:movement_speed get"
+C command "data get entity @e[type=wither_skeleton,limit=1] equipment"
+C command "kill @e[type=!player]"
+"--- a creeper by a TNT blast lights up"
+C command "summon minecraft:creeper 196.5 150 196.5 {NoAI:1b}"
+C command "summon minecraft:tnt 198.5 150 196.5 {fuse:10}"
+C wait 16
+C command "data get entity @e[type=creeper,limit=1] ignited"
+C command "data get entity @e[type=creeper,limit=1] Health"
+C wait 60
+C command "execute if entity @e[type=creeper]"
+C command "kill @e[type=!player]"
+"--- a creeper's blast: slow to dig and weak"
+C command "gamemode survival"
+C command "summon minecraft:creeper 204.5 150 204.9 {NoAI:1b,ignited:1b,Fuse:10}"
+C wait 30
+C command "data get entity @s active_effects"
+C command "data get entity @s Health"
+C command "effect clear @s"
+C command "kill @e[type=!player]"
+"--- a magma cube sets on fire"
+C command "data get entity @s Fire"
+C command "summon minecraft:magma_cube 204.5 150 209.5 {Size:1}"
+C wait 30
+C command "data get entity @s Fire"
+C command "data get entity @s Health"
+C command "kill @e[type=!player]"
+C wait 100
+"--- an endermite's bite moves the player"
+C command "data get entity @s Pos"
+C command "summon minecraft:endermite 204.5 150 209.0"
+C wait 60
+C command "data get entity @s Pos"
+C command "kill @e[type=!player]"
+C command "gamemode creative"
+C command "tp @s 204.5 150 209.5 180 0"
+"--- a magma cube in water becomes a slime"
+C command "setblock 195 150 195 minecraft:water"
+C command "summon minecraft:magma_cube 195.5 150.2 195.5 {Size:1,NoAI:1b}"
+C wait 50
+C command "execute if entity @e[type=slime]"
+C command "execute if entity @e[type=magma_cube]"
+C command "kill @e[type=!player]"
+C command "setblock 195 150 195 minecraft:air"
+"--- a wither at half health"
+C command "summon minecraft:wither 204.5 152 180.5 {NoAI:1b}"
+C wait 10
+C command "attribute @e[type=wither,limit=1] minecraft:max_health get"
+C command "data merge entity @e[type=wither,limit=1] {Health:150f}"
+C wait 20
+C command "execute if entity @e[type=wither_skeleton]"
+C command "data get entity @e[type=wither,limit=1] Tags"
+C command "data get entity @e[type=wither,limit=1] Health"
+C screenshot "$shots\sih-wither.png"
+C command "kill @e[type=!player]"
+C command "weather clear"
+C quit
+Start-Sleep 6
+Get-CimInstance Win32_Process -Filter "Name='horizon-client.exe'" | Where-Object { $_.CommandLine -like "*horizon-native-test*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Copy-Item $log "$shots\sih.log" -Force
+$env:HORIZON_SHADER_PACK = $null

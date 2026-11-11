@@ -1531,7 +1531,14 @@ fn glide(c: &mut Client, game: &Game<'_>, npos: [i32; 3], pose: Pose) {
     let Some(kind) = station_at(game, npos) else { return };
     let Some(s) = c.scene.as_ref() else { return };
     let (old_pos, old_kind) = (s.pos, s.kind);
-    let facing = open_facing(game, kind, npos, s.to.1);
+    // A table's side is read from the client's own copy: `open_facing` would ask for the
+    // client again, which this caller already holds.
+    let facing = if kind == Kind::Table {
+        let (stored, items) = client_grid(&c.tables, npos);
+        if items.iter().any(Option::is_some) { stored } else { facing_of(s.to.1) }
+    } else {
+        open_facing(game, kind, npos, s.to.1)
+    };
     // A lectern with no book is not worked here.
     if kind == Kind::Lectern && game.native_block_state_property(game.world.block(npos[0], npos[1], npos[2]), "has_book") != Some("true") {
         return;
